@@ -16,6 +16,7 @@ Rust crate `lycore`：以本地 JSON-RPC 2.0 服务形式运行的核心进程�
 | `licence.status` | 占位 | 返回 not implemented |
 | `media.probe` | 已实现 | 调用 ffprobe 解析媒体信息 |
 | `encoder.detect` | 已实现 | 检测 H.264 编码器可用性并给出推荐顺序 |
+| `render.plan` | 已实现 | 将时间线拆分为场景，计算确定性 sceneKey 并检测缓存命中 |
 | `render.start` | 占位 | 返回 not implemented |
 
 ### core.hello
@@ -89,6 +90,37 @@ Rust crate `lycore`：以本地 JSON-RPC 2.0 服务形式运行的核心进程�
 ```
 
 `recommended` 为可用编码器按偏好排序（硬件优先，`libx264` 作为软件兜底在末尾）；无可用编码器时为空数组且 `best` 为 `null`。未编译进 ffmpeg 的编码器 `listed:false`、`available:false`。失败的 `reason` 取自试编码 stderr 中最有信息量的一行。
+
+### render.plan
+
+参数：`{"timeline": {"tracks":[...]}, "output": {"width":1920,"height":1080,"fps":30,"encoder":"libx264"}, "cacheDir": "<缓存目录>", "hashContent": false（可选）}`
+
+`timeline` 即本地服务存储的四轨模型（`video` / `subtitle` / `narration` / `music`，clip 字段 `start_ms`、`duration_ms`、`src_in_ms`、`src_out_ms`、`asset_ref`、`asset_kind`、`volume`、`text`、`style`；轨道有 `volume`、`muted`）。`output` 也可放在 `timeline.output`。参数缺失或无效返回 -32602。
+
+`result`：`{"rendererVersion","durationMs","scenes":[{"index","kind":"video|gap","clipId","startMs","durationMs","sceneKey","cacheHit","cachePath"}],"toRender":[场景下标],"music":[...],"missingAssets":[...]}`。
+
+#### 场景划分
+
+- 每个视频 clip 一个场景；视频轨空隙（含第一个 clip 之前、以及最后一个视频 clip 之后到字幕/旁白/音乐末尾）为 `gap` 场景（黑画面 + 静音，仍可承载字幕与旁白）。
+- `durationMs` = 所有轨道 clip 结束时间的最大值；空时间线为 0、无场景。
+- 视频 clip 重叠时（正常情况下模型不允许），后一个 clip 的起点被截到前一个的终点，`src_in` 相应后移。
+- clip 按 (`start_ms`, `duration_ms`, `id`) 排序，因此输入顺序不影响结果。
+- `toRender` 为未命中缓存的场景下标；同一 sceneKey 只列第一个（相同场景只需渲染一次）。命中判断：`<cacheDir>/<sceneKey>.mp4` 是否为文件。
+
+#### sceneKey 与规范化 JSON 规则
+
+`sceneKey = sha256( canonical_json(payload) )`，小写十六进制 64 位。规则：
+
+1. 编码为 UTF-8，无任何空白；对象键按字典序递归排序；数组保持顺序（字幕/旁白按开始时间排序）。
+2. 键中不出现浮点数：音量换算为整数“万分比”（`round(volume*10000)`，已乘入轨道音量，轨道静音为 0）；帧率为整数 `fpsMilli`（`round(fps*1000)`）；时间均为整数毫秒。
+3. 所有时间用**场景相对时间**（字幕/旁白相对场景起点），因此整体平移一个场景不会改变其 key；仅场景时长变化才会改变。
+4. `style` 若为 JSON 字符串则先解析为对象再规范化（字符串与对象写法等价）；无法解析时按原字符串。缺失值为 `null`。
+5. payload 内容：`rendererVersion`（常量 `RENDERER_VERSION`，当前 `r1`，渲染结果可能变化时必须递增）、`kind`、`durMs`、`output`（宽、高、`fpsMilli`、编码器）、`video`（源文件标识、`assetKind`、`srcInMs`/`srcOutMs`（已按重叠裁剪）、音量）、`subtitles`（与场景重叠的字幕片段：相对起止、文本、样式）、`narration`（与场景重叠的旁白：相对起点、时长、源文件标识、源内偏移、音量）。
+6. 源文件标识：默认 `{path,size,mtimeMs}`；`hashContent:true` 时为 `{sha256}`（仅内容，路径与 mtime 不参与）；文件不存在为 `{path,missing:true}`，同时列入 `missingAssets`（仍返回计划）。
+
+#### 音乐轨的处理（决定）
+
+音乐轨**不参与任何场景 key**：场景缓存只含画面 + 字幕 + 视频原声 + 旁白；音乐在最终合成阶段整体混音，计划通过 `music` 返回（起止、素材、源内偏移、已乘轨道音量的 `gain`）。因此修改音乐只需重做最终混音，不会使任何场景缓存失效。编码器与分辨率/帧率属于输出设置，改动会使所有场景 key 变化。
 
 ## 开发与测试
 

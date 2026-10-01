@@ -95,6 +95,39 @@ const child = spawn(bin, ['--pipe', endpoint, '--log-dir', logDir], {
     await assert.rejects(c.call(m, { path: 'clip.mp4', ffmpegDir: emptyDir }), (e) =>
       e.code === -32020 && e.data.recoverable === true && e.data.action === 'reinstall' && /reinstall/.test(e.message));
   }
+  // render.plan: scenes, keys, cache hits
+  {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lycore-plan-'));
+    const cache = path.join(dir, 'cache');
+    fs.mkdirSync(cache);
+    for (const n of ['a.mp4', 'b.mp4']) fs.writeFileSync(path.join(dir, n), n);
+    const tl = { tracks: [
+      { kind: 'video', clips: [
+        { id: 'v1', start_ms: 0, duration_ms: 3000, src_in_ms: 0, src_out_ms: 3000, asset_ref: path.join(dir, 'a.mp4'), volume: 1 },
+        { id: 'v2', start_ms: 4000, duration_ms: 2000, src_in_ms: 0, src_out_ms: 2000, asset_ref: path.join(dir, 'b.mp4'), volume: 1 } ] },
+      { kind: 'subtitle', clips: [{ id: 's1', start_ms: 100, duration_ms: 500, text: 'hi', style: null }] },
+      { kind: 'narration', clips: [] },
+      { kind: 'music', clips: [] },
+    ] };
+    const output = { width: 1280, height: 720, fps: 30, encoder: 'libx264' };
+    const p1 = await c.renderPlan({ timeline: tl, output, cacheDir: cache });
+    assert.strictEqual(p1.durationMs, 6000);
+    assert.deepStrictEqual(p1.scenes.map((s) => s.kind), ['video', 'gap', 'video']);
+    assert.deepStrictEqual(p1.toRender, [0, 1, 2]);
+    assert.ok(p1.scenes.every((s) => /^[0-9a-f]{64}$/.test(s.sceneKey) && !s.cacheHit));
+    fs.writeFileSync(path.join(cache, p1.scenes[0].sceneKey + '.mp4'), 'x');
+    tl.tracks[1].clips[0].text = 'changed';
+    const p2 = await c.renderPlan({ timeline: tl, output, cacheDir: cache });
+    assert.notStrictEqual(p2.scenes[0].sceneKey, p1.scenes[0].sceneKey);
+    assert.strictEqual(p2.scenes[0].cacheHit, false);
+    assert.strictEqual(p2.scenes[2].sceneKey, p1.scenes[2].sceneKey);
+    tl.tracks[1].clips[0].text = 'hi';
+    const p3 = await c.renderPlan({ timeline: tl, output, cacheDir: cache });
+    assert.deepStrictEqual(p3.scenes.map((s) => s.cacheHit), [true, false, false]);
+    assert.deepStrictEqual(p3.toRender, [1, 2]);
+    await assert.rejects(c.renderPlan({ timeline: tl }), (e) => e.code === -32602);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
   c.close();
 
   await new Promise((r) => setTimeout(r, 300));
