@@ -51,6 +51,8 @@ function connect(endpoint, { timeoutMs = 5000 } = {}) {
           });
         },
         hello(apiVersions = [1]) { return this.call('core.hello', { apiVersions }); },
+        /** Plan a render: { timeline, output:{width,height,fps,encoder}, cacheDir, hashContent? } */
+        renderPlan(params) { return this.call('render.plan', params); },
         close() { sock.end(); },
       });
     });
