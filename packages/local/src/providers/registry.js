@@ -3,7 +3,7 @@ const { CAPABILITIES, PHASE1_PROVIDERS } = require('./capabilities');
 const { ProviderError, ERROR_CODES } = require('./errors');
 
 /**
- * Adapter shape: { id, label, capabilities: { 'text.stream': fn, ... } }.
+ * Adapter shape: { id, label, capabilities: { 'text.stream': fn, ... }, probes?: { 'text.stream': fn, ... } }.
  * Adapters outside PHASE1_PROVIDERS may be registered but are never listed or resolvable.
  */
 function createRegistry(phase1 = PHASE1_PROVIDERS) {
@@ -30,6 +30,18 @@ function createRegistry(phase1 = PHASE1_PROVIDERS) {
         throw new ProviderError(ERROR_CODES.PROVIDER_NOT_AVAILABLE, String(id));
       }
       return a;
+    },
+    /**
+     * Connectivity test for one capability (C05): resolves { ok, costly } or rejects with a
+     * ProviderError whose code tells key / model / balance problems apart.
+     */
+    probe(providerId, capability, opts) {
+      const a = this.get(providerId);
+      const fn = a.probes && a.probes[capability];
+      if (typeof fn !== 'function') {
+        return Promise.reject(new ProviderError(ERROR_CODES.CAPABILITY_NOT_SUPPORTED, `${providerId}:${capability} 无连通测试`));
+      }
+      return Promise.resolve().then(() => fn(opts || {}));
     },
     /** Call by capability: registry.call('bailian', 'image.generate', req) */
     call(providerId, capability, req) {

@@ -23,6 +23,8 @@ function createProviders(cfg = {}) {
       ? (providerId, req) => registry.call(providerId, cap, req)
       : (providerId, req) => Promise.resolve().then(() => registry.call(providerId, cap, req));
   }
+  /** probe('bailian', 'image.generate', {model}) -> {ok, costly}; see registry.probe. */
+  facade.probe = (providerId, capability, opts) => Promise.resolve().then(() => registry.probe(providerId, capability, opts));
   return facade;
 }
 

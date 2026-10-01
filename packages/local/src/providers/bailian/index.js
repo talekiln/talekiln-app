@@ -326,8 +326,49 @@ function createBailianAdapter(cfg = {}) {
     return null;
   }
 
+  // ---- C05 connectivity probes: zero or near-zero cost, each verified against the real service ----
+  // Resolve to { ok: true, costly: boolean } or reject with a ProviderError (key / model / balance ...).
+  // UNVERIFIED: whether an account in arrears is rejected before parameter validation; if not,
+  // image and video probes can pass for such an account and the first real call reports it.
+  const probes = {
+    // One-token chat: confirms key and that the chosen model is enabled (≈0.0001 元).
+    async 'text.stream'({ model, signal } = {}) {
+      const res = await request(CHAT_PATH, { body: { model: model || 'qwen-plus', messages: [{ role: 'user', content: '1' }], max_tokens: 1 }, signal });
+      if (!res.ok) await readJson(res);
+      return { ok: true, costly: true };
+    },
+    // Deliberately invalid size: the service checks key and model first, then rejects the size
+    // with 400 InvalidParameter without generating anything.
+    async 'image.generate'({ model, signal } = {}) {
+      const body = { model: model || 'wan2.6-t2i', input: { messages: [{ role: 'user', content: [{ text: '1' }] }] }, parameters: { size: '1*1' } };
+      return expectRejection(await request(IMAGE_PATH, { body, signal }), (st, d) => st === 400 && d && d.code === 'InvalidParameter');
+    },
+    // Without the async header the service answers 403 "does not support synchronous calls" after
+    // checking key and model, so no task is created. (Bad parameters WITH the header do create a task.)
+    async 'video.submit'({ model, signal } = {}) {
+      const body = { model: model || 'wan2.6-t2v', input: { prompt: '1' } };
+      return expectRejection(await request(VIDEO_PATH, { body, signal }), (st, d) => st === 403 && d && /synchronous/i.test(d.message || ''));
+    },
+    // One character of speech (≈0.0002 元).
+    async 'tts.synthesize'({ model, voice, signal } = {}) {
+      await ttsSynthesize({ model, voice, text: '好', signal });
+      return { ok: true, costly: true };
+    },
+  };
+  probes['video.poll'] = probes['video.submit'];
+
+  async function expectRejection(res, isExpected) {
+    const raw = await res.text();
+    let data = null;
+    try { data = JSON.parse(raw); } catch (_) { /* ignore */ }
+    if (isExpected(res.status, data)) return { ok: true, costly: false };
+    if (!res.ok) throw mapError(res.status, data || raw);
+    throw new ProviderError(ERROR_CODES.BAD_RESPONSE, '探测请求意外成功', { provider: 'bailian' });
+  }
+
   return {
     id: 'bailian',
+    probes,
     label: '阿里云百炼',
     capabilities: {
       'text.stream': textStream,

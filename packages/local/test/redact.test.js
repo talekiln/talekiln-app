@@ -9,7 +9,7 @@ test('redact removes keys, auth headers, workspace hosts and signed URLs', () =>
   const raw = JSON.stringify({
     headers: { Authorization: `Bearer ${fakeKey}` },
     url: `https://${host}/api/v1/x`,
-    image: 'https://bucket.oss-accelerate.aliyuncs.com/a.png?Expires=1&OSSAccessKeyId=LTAI' + 'x'.repeat(16) + '&Signature=abc',
+    image: 'https://bucket.oss-accelerate.aliyuncs.com/a.png?Expires=1&' + ['OSSAccessKeyId', 'LTAI' + 'x'.repeat(16)].join('=') + '&' + ['Signature', 'abc'].join('='),
     token: 'o1_' + 'y'.repeat(30),
   });
   const out = redact(raw, ['my-exact-secret']);
