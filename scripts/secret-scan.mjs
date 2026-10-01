@@ -10,6 +10,8 @@ const PATTERNS = [
   ['私钥', /-----BEGIN (RSA |EC |OPENSSH |)PRIVATE KEY-----/],
   ['长 Bearer 令牌', /Bearer\s+[A-Za-z0-9._-]{24,}/],
   ['百炼 CLI 安装令牌', /\bo1_[A-Za-z0-9_-]{30,}/],
+  ['JWT（许可证/登录令牌）', /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/],
+  ['证书/签名口令赋值', /\b(CSC_KEY_PASSWORD|WIN_CSC_KEY_PASSWORD|CSC_LINK)\s*[:=]\s*['"]?[A-Za-z0-9+/=_-]{8,}/],
   ['带签名的下载链接', /[?&](Signature|X-Amz-Signature|OSSAccessKeyId)=/],
   ['百炼工作空间域名', /\bws-[a-z0-9]{12,}\.[a-z0-9-]+\.maas\.aliyuncs\.com/i],
 ];
