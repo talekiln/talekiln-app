@@ -38,7 +38,10 @@
             <el-icon><Upload /></el-icon>导入项目
           </el-button>
           <input ref="importFileInput" type="file" accept=".zip" style="display:none" @change="onImportFile" />
-          <el-button type="primary" class="btn-new" @click="goNewProject">
+          <el-button type="primary" class="btn-new" @click="$router.push('/new-project')">
+            <el-icon><Plus /></el-icon>从故事生成分镜
+          </el-button>
+          <el-button class="btn-new" @click="goNewProject">
             <el-icon><Plus /></el-icon>新建项目
           </el-button>
         </div>
