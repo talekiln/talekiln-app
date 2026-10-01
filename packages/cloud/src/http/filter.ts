@@ -7,7 +7,9 @@ const STATUS: Record<ErrorCode, number> = {
   invalid_invite: 400, email_taken: 409, invalid_credentials: 401, invalid_token: 401,
   token_reuse: 401, forbidden: 403, device_required: 400, device_revoked: 403, not_found: 404,
   account_disabled: 403, rate_limited: 429, payload_too_large: 413, bad_request: 400,
+  device_limit: 403, conflict: 409, provider_unavailable: 503, invalid_signature: 401,
 };
+export const errorStatus = (code: ErrorCode) => STATUS[code];
 
 @Catch()
 export class ErrorFilter implements ExceptionFilter {
