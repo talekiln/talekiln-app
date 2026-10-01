@@ -3,7 +3,7 @@
 const G = require('../graph');
 const U = require('./util');
 const { applyTx } = require('../ops');
-const { addShotOps, deleteShot } = require('./shot');
+const { addShotOps, deleteShot, setShotField } = require('./shot');
 const { insertLine, deleteLine } = require('./script');
 
 const isPos = (p) => p && typeof p.x === 'number' && typeof p.y === 'number' && Number.isFinite(p.x) && Number.isFinite(p.y);
@@ -12,6 +12,25 @@ function moveNode(g, nodeId, pos, opts) {
   U.need(g, nodeId);
   if (!isPos(pos)) throw U.intentError('moveNode: pos must be {x,y} numbers');
   return U.mkTx('moveNode', [{ op: 'setLayout', node: nodeId, pos: { x: pos.x, y: pos.y } }], opts);
+}
+
+/**
+ * 画布属性面板：改节点的一个参数。只允许该节点类型白名单里的顶层参数并校验取值（graph.NODE_PARAM_RULES）；
+ * segments / music / subtitle_overrides 有各自的时间线意图，不能从这里改。可选参数（reference_hashes、tail_frame_hash、atmosphere）用 null 清除。
+ * 值没变 = 空事务。镜头 duration_ms 走 setShotField（片段随之联动）。
+ */
+function setNodeParam(g, nodeId, path, value, opts) {
+  const n = U.need(g, nodeId);
+  const p = Array.isArray(path) ? path : typeof path === 'string' ? path.split('.') : null;
+  if (!p || p.length !== 1 || typeof p[0] !== 'string' || !p[0]) throw U.intentError('setNodeParam: path must be a single top-level param name');
+  const rules = G.NODE_PARAM_RULES[n.type] || {};
+  if (!Object.prototype.hasOwnProperty.call(rules, p[0])) throw U.intentError(`setNodeParam: ${n.type} has no editable param ${p[0]}`);
+  if (n.type === 'shot' && p[0] === 'duration_ms') {
+    const err = rules.duration_ms.check(value);
+    if (err) throw U.intentError(`shot.duration_ms ${err}`);
+    return { ...setShotField(g, nodeId, { duration_ms: value }, opts), label: 'setNodeParam' };
+  }
+  return U.mkTx('setNodeParam', U.paramOps(g, nodeId, p[0], value), opts);
 }
 
 /** 批量移动（拖动多选），一个事务 = 一步撤销。 */
@@ -108,4 +127,4 @@ function deleteNode(g, nodeId, opts) {
   return U.mkTx('deleteNode', [{ op: 'removeNode', id: nodeId }], opts);
 }
 
-module.exports = { moveNode, moveNodes, connectNodes, disconnectNodes, addNodeAt, deleteNode };
+module.exports = { moveNode, setNodeParam, moveNodes, connectNodes, disconnectNodes, addNodeAt, deleteNode };

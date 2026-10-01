@@ -3,7 +3,8 @@
 const { createRegistry } = require('./registry');
 const { createBailianAdapter } = require('./bailian');
 const { createArkAdapter } = require('./ark');
-const { CAPABILITIES, PHASE1_PROVIDERS } = require('./capabilities');
+const { CAPABILITIES } = require('./capabilities');
+const enablement = require('./enablement');
 const { ProviderError, ERROR_CODES } = require('./errors');
 
 /**
@@ -12,8 +13,9 @@ const { ProviderError, ERROR_CODES } = require('./errors');
  */
 function createProviders(cfg = {}) {
   const registry = createRegistry();
-  if (cfg.bailian) registry.register(createBailianAdapter(cfg.bailian));
-  if (cfg.ark) registry.register(createArkAdapter(cfg.ark));
+  // Adapters are only built for enabled providers; hidden ones stay in the repo untouched.
+  if (cfg.bailian && enablement.isEnabled('bailian')) registry.register(createBailianAdapter(cfg.bailian));
+  if (cfg.ark && enablement.isEnabled('ark')) registry.register(createArkAdapter(cfg.ark));
   const facade = { registry };
   for (const cap of CAPABILITIES) {
     const [ns, fn] = cap.split('.');
@@ -28,4 +30,4 @@ function createProviders(cfg = {}) {
   return facade;
 }
 
-module.exports = { createProviders, createRegistry, CAPABILITIES, PHASE1_PROVIDERS, ProviderError, ERROR_CODES };
+module.exports = { createProviders, createRegistry, CAPABILITIES, enablement, ProviderError, ERROR_CODES };

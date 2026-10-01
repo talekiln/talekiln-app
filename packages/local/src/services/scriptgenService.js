@@ -5,6 +5,7 @@ const scriptgen = require('../scriptgen');
 const dramaService = require('./dramaService');
 const storyboardService = require('./storyboardService');
 const aiConfigService = require('./aiConfigService');
+const enablement = require('../providers/enablement');
 
 const ASPECT_RATIOS = ['9:16', '16:9', '1:1'];
 
@@ -52,8 +53,7 @@ function resolveProvider(db, preferred) {
   const rows = aiConfigService.listConfigsInternal(db, 'text').filter((c) => c.is_active && c.api_key);
   const kindOf = (c) => {
     const h = `${c.provider} ${c.base_url}`.toLowerCase();
-    if (/bailian|dashscope|aliyun/.test(h)) return 'bailian';
-    if (/ark|volc|doubao/.test(h)) return 'ark';
+    for (const m of enablement.listEnabledMeta()) if (m.textHint.test(h)) return m.id;
     return null;
   };
   const row = rows.find((c) => kindOf(c) && (!preferred || kindOf(c) === preferred));
@@ -61,6 +61,23 @@ function resolveProvider(db, preferred) {
   const kind = kindOf(row);
   const model = Array.isArray(row.model) ? row.model[0] : row.model;
   return { kind, cfg: { [kind]: { apiKey: row.api_key, ...(row.base_url ? { baseUrl: row.base_url } : {}) } }, model: row.default_model || model };
+}
+
+/** Save the storyboard's characters into `characters` (+ episode_characters) so the library and reference locks see them. */
+function persistCharacters(db, dramaId, episodeId, storyboard, now) {
+  const ins = db.prepare('INSERT INTO characters (drama_id, name, role, description, appearance, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+  const link = db.prepare('INSERT OR IGNORE INTO episode_characters (episode_id, character_id) VALUES (?, ?)');
+  const seen = new Set();
+  const ids = [];
+  (storyboard.characters || []).forEach((c, i) => {
+    const name = String((c && c.name) || '').trim();
+    if (!name || seen.has(name)) return;
+    seen.add(name);
+    const id = Number(ins.run(dramaId, name, c.role || null, c.description || null, c.appearance || null, i, now, now).lastInsertRowid);
+    link.run(episodeId, id);
+    ids.push(id);
+  });
+  return ids;
 }
 
 function persist(db, log, req, storyboard) {
@@ -80,36 +97,35 @@ function persist(db, log, req, storyboard) {
     for (const shot of storyboard.shots) {
       storyboardService.createStoryboard(db, log, { episode_id: episodeId, ...shotToRow(shot, storyboard) });
     }
-    return { drama_id: drama.id, episode_id: episodeId };
+    const characterIds = persistCharacters(db, drama.id, episodeId, storyboard, now);
+    // 每个生成的项目一开始就有项目图（script_line / shot / group 节点）；同一个 SQLite 事务，失败整体回滚
+    const graph = require('../kernel/legacy').importLegacy(db, episodeId);
+    return { drama_id: drama.id, episode_id: episodeId, character_ids: characterIds, graph: { created: graph.created, shots: graph.shots, lines: graph.lines, groups: graph.groups } };
   });
   return run();
 }
 
-async function createProjectFromStory(db, log, body) {
+/** deps (tests): { resolveProvider, createProviders } */
+async function createProjectFromStory(db, log, body, deps = {}) {
   const v = validateRequest(body);
   if (!v.ok) { const e = new Error(v.errors.join('；')); e.status = 400; throw e; }
-  const prov = resolveProvider(db, v.value.provider);
+  const prov = (deps.resolveProvider || resolveProvider)(db, v.value.provider);
   if (!prov) {
-    const e = new Error('未找到可用的文本模型配置（百炼或方舟），请先在 AI 配置中添加');
+    const e = new Error(`未找到可用的文本模型配置（${enablement.enabledLabels()}），请先在 AI 配置中添加`);
     e.status = 400; e.code = 'NO_TEXT_PROVIDER'; throw e;
   }
-  const providers = createProviders(prov.cfg);
+  const providers = (deps.createProviders || createProviders)(prov.cfg);
   const r = await scriptgen.generateStoryboard(providers, { ...v.value, provider: prov.kind, model: v.value.model || prov.model });
   const ids = persist(db, log, v.value, r.storyboard);
   return { ...ids, attempts: r.attempts, usage: r.usage };
 }
 
-/** Reorder: ids in desired order -> storyboard_number 1..n (must cover the whole episode). */
+/**
+ * Reorder: ids in desired order (must cover the whole episode).
+ * 顺序属于项目图（场景组内 children），经内核提交，storyboard_number 由物化重排为 1..n；跨段落移动的镜头并入新位置的段落。
+ */
 function reorderStoryboards(db, episodeId, ids) {
-  const rows = db.prepare('SELECT id FROM storyboards WHERE episode_id = ? AND deleted_at IS NULL').all(Number(episodeId));
-  const have = new Set(rows.map((r) => r.id));
-  const want = (ids || []).map(Number);
-  if (want.length !== have.size || new Set(want).size !== want.length || want.some((i) => !have.has(i))) {
-    const e = new Error('ids 必须恰好包含该剧集的全部分镜'); e.status = 400; throw e;
-  }
-  const upd = db.prepare('UPDATE storyboards SET storyboard_number = ?, updated_at = ? WHERE id = ?');
-  const now = new Date().toISOString();
-  db.transaction(() => want.forEach((id, i) => upd.run(i + 1, now, id)))();
+  require('../kernel/compat').reorderStoryboards(db, episodeId, ids);
 }
 
 module.exports = { shotToRow, validateRequest, resolveProvider, createProjectFromStory, reorderStoryboards, ASPECT_RATIOS };

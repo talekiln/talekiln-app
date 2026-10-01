@@ -5,6 +5,13 @@ on:
       capabilities:
         description: 'text,image,tts,video（video 会产生较高费用）'
         default: 'text,image,tts'
+      run_e2e:
+        description: '另外跑全流程端到端（故事到导出 mp4，3 镜，会产生费用）'
+        type: boolean
+        default: false
+      e2e_max_spend_rmb:
+        description: '端到端花费硬上限（元，按价格表估算，超出即中止）'
+        default: '5'
 jobs:
   live:
     runs-on: ubuntu-latest
@@ -27,4 +34,35 @@ jobs:
         with:
           name: bailian-live-result
           path: packages/local/bailian-live-result.json
+          if-no-files-found: ignore
+  # 全流程端到端：只在手动勾选 run_e2e 时运行。Key 只从仓库 Secret 读取，脚本不会把它写入文件或日志。
+  e2e:
+    if: ${{ inputs.run_e2e }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install ffmpeg (needs libass for subtitles)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Build lycore
+        working-directory: packages/core
+        run: cargo build --release
+      - name: Run end-to-end (spends money, capped)
+        env:
+          BAILIAN_API_KEY: ${{ secrets.BAILIAN_API_KEY }}
+          BAILIAN_BASE_URL: ${{ secrets.BAILIAN_BASE_URL }}
+          E2E_MAX_SPEND_RMB: ${{ inputs.e2e_max_spend_rmb }}
+          E2E_OUT_DIR: ${{ github.workspace }}/bailian-e2e-out
+        run: node scripts/bailian-e2e.mjs --require-key
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bailian-e2e-result
+          path: bailian-e2e-out
           if-no-files-found: ignore

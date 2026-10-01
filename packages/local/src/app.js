@@ -10,6 +10,7 @@ const { setupRouter } = require('./routes/index.js');
 const { createAiTaskStore, createAiTaskQueue, createWorker, createDownloader, withDownloads, queueOptionsFromConfig, buildQueueProviders } = require('./queue');
 const { createSpendService, createEstimator } = require('./spend');
 const { createCloud } = require('./cloud');
+const { createGenerationService } = require('./generation');
 const { localTokenGuard } = require('./utils/localToken');
 
 function createAiQueue({ config, db, log, storageRoot, providers, onTaskFinished, cloud }) {
@@ -39,7 +40,9 @@ function createApp(opts = {}) {
   // 密钥存储由主进程注入；未注入则不可用（拒绝保存 key，绝不降级为明文）
   const secrets = require('./secrets');
   if (opts.secretStore) secrets.setSecretStore(opts.secretStore);
-  const config = loadConfig();
+  const config = opts.config ? { ...loadConfig(), ...opts.config } : loadConfig(); // opts.config：顶层键覆盖（测试/脚本调快轮询）
+  // 对外开放的服务商：config.yaml providers.enabled（默认仅百炼）；测试可用 opts.enabledProviders 覆盖
+  require('./providers/enablement').configureEnabled(opts.enabledProviders || config);
   const db = getDb(config.database);
   const { runMigrationsAndEnsure } = require('./db/migrate.js');
   runMigrationsAndEnsure(db);
@@ -101,10 +104,24 @@ function createApp(opts = {}) {
 
   // 持久化 AI 任务队列 + worker（由 server.js / 桌面主进程调用 aiQueue.worker.start()）
   const cloud = opts.cloud || createCloud({ config, db, log: logger });
-  const aiQueue = createAiQueue({ cloud, config, db, log, storageRoot, providers: opts.queueProviders || buildQueueProviders({ db, storageDir: storageRoot }), onTaskFinished: opts.onTaskFinished });
+  let generation = null; // I1：任务成功后写回数据内核（在 aiQueue 之后创建，所以这里用闭包取）
+  const aiQueue = createAiQueue({
+    cloud, config, db, log, storageRoot,
+    providers: opts.queueProviders || buildQueueProviders({ db, storageDir: storageRoot, listConfigs: opts.listConfigs }),
+    onTaskFinished: (t) => {
+      if (generation) { try { generation.onTaskFinished(t); } catch (e) { log.error && log.error('generation finish', { error: e && e.message }); } }
+      if (opts.onTaskFinished) opts.onTaskFinished(t);
+    },
+  });
 
   const coreProvider = opts.getCore ? null : require('./export/coreProvider').createCoreProvider({ endpoint: process.env.LYCORE_ENDPOINT });
-  app.use('/api/v1', setupRouter(config, db, log, aiQueue, cloud, { storageRoot, exporter: opts.exporter, getCore: opts.getCore || (coreProvider && coreProvider.getCore) }));
+  const getCore = opts.getCore || (coreProvider && coreProvider.getCore);
+  generation = opts.generation || createGenerationService({
+    db, store: aiQueue.store, worker: aiQueue.worker, spend: aiQueue.spend, storageRoot, getCore, listConfigs: opts.listConfigs, log,
+    catalogModels: () => { try { return cloud.catalog.getCatalog().models || []; } catch (_) { return []; } },
+  });
+  generation.recoverFinished().catch((e) => log.error && log.error('generation recover', { error: e && e.message }));
+  app.use('/api/v1', setupRouter(config, db, log, aiQueue, cloud, { storageRoot, exporter: opts.exporter, getCore, generation }));
 
   // 前端静态资源（sxy：web/dist）；Electron 打包时可设 WEB_DIST_PATH
   const webDist = process.env.WEB_DIST_PATH || path.join(process.cwd(), '..', 'frontweb', 'dist');

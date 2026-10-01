@@ -119,6 +119,23 @@ describe('kernel REST', () => {
     const canvas = (await call('GET', `/episodes/${ep}/views/canvas`)).body.data.data;
     assert.deepEqual(canvas.nodes.find((n) => n.id === s0).layout, { x: 10, y: 20 });
 
+    // 画布属性面板：setNodeParam（白名单 + 校验，带标签的事务，旧表同步）
+    const vid = kernel.partsOfShot(g, s0).video;
+    const np = await intent('canvas', 'setNodeParam', { node_id: vid, path: ['seed'], value: 4242 });
+    assert.equal(np.status, 200);
+    assert.equal(np.body.data.applied, true);
+    assert.equal((await graph()).nodes[vid].params.seed, 4242);
+    const tail = await intent('canvas', 'setNodeParam', { node_id: vid, path: ['tail_frame_hash'], value: 'tail:1' });
+    assert.equal(tail.status, 200);
+    const clear = await intent('canvas', 'setNodeParam', { node_id: vid, path: ['tail_frame_hash'], value: null });
+    assert.equal(clear.status, 200);
+    assert.ok(!('tail_frame_hash' in (await graph()).nodes[vid].params));
+    for (const args of [{ node_id: vid, path: ['nope'], value: 1 }, { node_id: vid, path: ['seed'], value: 'x' }, { node_id: vid, path: ['seed'] }, { node_id: kernel.composeId(g), path: ['segments'], value: [] }]) {
+      const bad = await intent('canvas', 'setNodeParam', args);
+      assert.equal(bad.status, 400, JSON.stringify(args));
+      assert.equal(bad.body.error.code, 'INTENT');
+    }
+
     const before = kernel.shotOrder(g);
     const sh = await intent('shot', 'reorderShots', { group_id: g.group_order[g.group_order.length - 1], ids: kernel.orderOf(g, 'shot').slice().reverse().filter((id) => kernel.groupOf(g, id) === g.group_order[g.group_order.length - 1]) });
     assert.equal(sh.status, 200);
@@ -182,7 +199,7 @@ describe('kernel REST', () => {
   it('intent errors: unknown view/intent (not whitelisted), missing args, kernel INTENT, graph validation', async () => {
     const g = await graph();
     const s0 = kernel.shotOrder(g)[0];
-    for (const [view, name] of [['nope', 'x'], ['shot', 'nope'], ['shot', 'setVoice'], ['shot', 'recordGeneration'], ['canvas', 'moveNodes'], ['shot', '__proto__'], ['shot', 'constructor']]) {
+    for (const [view, name] of [['nope', 'x'], ['shot', 'nope'], ['shot', 'setVoice'], ['shot', 'recordGeneration'], ['shot', 'setShotReferences'], ['canvas', 'moveNodes'], ['shot', '__proto__'], ['shot', 'constructor']]) {
       const r = await intent(view, name, {});
       assert.equal(r.status, 400, `${view}.${name}`);
       assert.equal(r.body.error.code, 'INTENT');
@@ -218,7 +235,7 @@ describe('kernel REST', () => {
       script: ['rewriteLine', 'insertLine', 'deleteLine', 'splitLine', 'mergeLines', 'reorderLines'],
       shot: ['setShotField', 'splitShot', 'mergeShots', 'reorderShots', 'moveShotToGroup', 'addShot', 'deleteShot', 'regenerateShot'],
       timeline: ['trimSegment', 'moveSegment', 'splitSegment', 'deleteSegment', 'setTransition', 'addMusic'],
-      canvas: ['moveNode', 'connectNodes', 'disconnectNodes', 'addNodeAt', 'deleteNode'],
+      canvas: ['moveNode', 'setNodeParam', 'connectNodes', 'disconnectNodes', 'addNodeAt', 'deleteNode'],
     };
     for (const v of Object.keys(spec)) assert.deepEqual(Object.keys(kernelRoutes.INTENTS[v]).sort(), [...spec[v]].sort(), v);
     assert.deepEqual(Object.keys(kernelRoutes.INTENTS).sort(), Object.keys(spec).sort());

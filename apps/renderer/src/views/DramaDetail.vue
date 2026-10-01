@@ -108,6 +108,9 @@
               </span>
               <span v-if="ep.status" class="ep-stat ep-stat--status" :class="'ep-status--' + ep.status">{{ epStatusLabel(ep.status) }}</span>
             </div>
+            <div class="episode-views" @click.stop>
+              <el-button size="small" plain type="primary" data-test="open-views" @click="openViews(ep.id)">剧本 / 分镜 / 时间线 / 画布</el-button>
+            </div>
             <div class="episode-enter">
               <el-icon class="episode-enter-icon"><VideoPlay /></el-icon>
               进入制作
@@ -922,6 +925,10 @@ function goCanvasMode() {
   router.push(`/film/${dramaId}/canvas`)
 }
 
+function openViews(epId) {
+  router.push({ path: `/episodes/${epId}/script`, query: { drama: String(dramaId) } })
+}
+
 function goEpisode(epId) {
   router.push(`/film/${dramaId}?episode=${epId}`)
 }
@@ -1351,7 +1358,8 @@ html.light .section-title { color: #18181b; }
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(139, 92, 246, 0.15);
 }
 .episode-card:hover::before { opacity: 1; }
-.episode-card:hover .episode-enter {
+.episode-card:hover .episode-views { margin-top: 8px; }
+.episode-enter {
   color: var(--el-color-primary);
   opacity: 1;
 }

@@ -44,7 +44,11 @@ describe('scriptgenService.validateRequest', () => {
 describe('scriptgenService.reorderStoryboards', () => {
   function openDb() {
     const db = new Database(path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sgen-')), 't.db'));
-    db.exec(fs.readFileSync(path.join(__dirname, '..', 'migrations', '01_init.sql'), 'utf8'));
+    // 顺序现在属于项目图：重排经内核提交并物化，所以需要时间线与项目图表和一个剧集
+    for (const f of ['01_init.sql', '24_timelines.sql', '26_music_library_and_mix.sql', '27_project_graphs.sql']) {
+      db.exec(fs.readFileSync(path.join(__dirname, '..', 'migrations', f), 'utf8'));
+    }
+    db.prepare("INSERT INTO episodes (id, drama_id, script_content) VALUES (1, 1, '')").run();
     const ins = db.prepare('INSERT INTO storyboards (episode_id, storyboard_number) VALUES (1, ?)');
     [1, 2, 3].forEach((n) => ins.run(n));
     return db;

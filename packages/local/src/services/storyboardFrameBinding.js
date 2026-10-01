@@ -22,6 +22,10 @@ function bindStoryboardFrameImage(db, storyboardId, frameType, imageGenId, image
       `UPDATE storyboards SET last_frame_image_url = ?, last_frame_local_path = ?, last_frame_image_id = ?, updated_at = ?
        WHERE id = ? AND deleted_at IS NULL`
     ).run(url, lp, igId, now, sid);
+    try { // 尾帧是 video 节点的生成输入（进 cacheKey）：同步进图，让该镜头的视频立刻变“过期”
+      const row = db.prepare('SELECT episode_id FROM storyboards WHERE id = ?').get(sid);
+      if (row && row.episode_id) require('../kernel/inputs').syncReferences(db, [row.episode_id]);
+    } catch (_) {}
     try { require('../logger').info?.('[绑定] 尾帧图片已正确绑定到 storyboards.last_frame_*（不会污染主图或历史）', { storyboard_id: sid, image_gen_id: igId }); } catch (_) {}
     return;
   }

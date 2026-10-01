@@ -51,6 +51,8 @@ const INTENTS = {
   },
   canvas: {
     moveNode: (g, a, o) => { need(a, 'node_id'); return I.canvas.moveNode(g, a.node_id, pos(a), o); },
+    // 属性面板改参数：白名单与取值校验在内核（NODE_PARAM_RULES）；value 可以是 null（清除可选参数），所以只检查 undefined
+    setNodeParam: (g, a, o) => { need(a, 'node_id', 'path'); if (a.value === undefined) throw new KernelError('INTENT', 'missing arg: value'); return I.canvas.setNodeParam(g, a.node_id, a.path, a.value, o); },
     connectNodes: (g, a, o) => { need(a, 'from_id', 'to_id'); return I.canvas.connectNodes(g, a.from_id, a.to_id, { port: a.port }, o); },
     disconnectNodes: (g, a, o) => I.canvas.disconnectNodes(g, { edge_id: a.edge_id, from: a.from_id, to: a.to_id, port: a.port }, o),
     addNodeAt: (g, a, o) => { need(a, 'type'); const { type, ...rest } = a; return I.canvas.addNodeAt(g, type, rest, o); },

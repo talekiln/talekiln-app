@@ -6,8 +6,8 @@
         <el-button v-if="step !== 'done'" text data-test="skip" @click="skip">跳过，稍后在 AI 配置中设置</el-button>
       </div>
 
-      <el-steps :active="stepIndex(step)" finish-status="success" align-center class="steps">
-        <el-step v-for="s in STEPS" :key="s" :title="STEP_LABELS[s]" />
+      <el-steps :active="stepIndex(step, steps)" finish-status="success" align-center class="steps">
+        <el-step v-for="s in steps" :key="s" :title="STEP_LABELS[s]" />
       </el-steps>
 
       <div v-if="loading" class="card loading" v-loading="true" />
@@ -23,7 +23,7 @@
             <li>现在不想配也行，随时可以在“AI 配置”里补。</li>
           </ul>
           <div class="actions">
-            <el-button type="primary" size="large" data-test="start" @click="go('provider')">开始配置</el-button>
+            <el-button type="primary" size="large" data-test="start" @click="go(nextStep('welcome', steps))">开始配置</el-button>
             <el-button size="large" :loading="sampleLoading" data-test="try-sample" @click="trySample">先看示例项目</el-button>
           </div>
         </template>
@@ -31,10 +31,10 @@
         <!-- 选择服务商 -->
         <template v-else-if="step === 'provider'">
           <h2>选择服务商</h2>
-          <p class="lead">先选一家。以后可以在 AI 配置里再加另一家。</p>
+          <p class="lead">先选一家。以后可以在 AI 配置里再加别家。</p>
           <div class="providers">
             <button
-              v-for="p in PROVIDERS"
+              v-for="p in providerList"
               :key="p.id"
               type="button"
               class="provider"
@@ -77,7 +77,7 @@
             <el-alert v-if="errorMsg" :title="errorMsg" type="error" show-icon :closable="false" class="error" data-test="error" />
             <el-alert v-if="status.config_id" title="已保存过一个 Key，重新粘贴会覆盖它。" type="info" show-icon :closable="false" class="error" />
             <div class="actions">
-              <el-button size="large" :disabled="saving" @click="go('provider')">上一步</el-button>
+              <el-button size="large" :disabled="saving" @click="go(prevStep('key', steps))">上一步</el-button>
               <el-button type="primary" size="large" :loading="saving" native-type="submit" data-test="save-key">保存并测试</el-button>
             </div>
           </el-form>
@@ -120,7 +120,8 @@ import { ElMessage } from 'element-plus'
 import { aiAPI } from '@/api/ai'
 import { onboardingAPI } from '@/api/onboarding'
 import {
-  PROVIDERS, STEPS, STEP_LABELS, buildConfigBody, getProvider, openKeyReferral, resumeStep, stepIndex, validateKeyInput,
+  STEP_LABELS, buildConfigBody, getProvider, impliedProvider, nextStep, openKeyReferral, prevStep, resumeStep, stepIndex,
+  stepsFor, validateKeyInput, visibleProviders,
 } from '@/utils/onboarding'
 import { seedSampleLocation } from '@/utils/sample'
 
@@ -138,6 +139,9 @@ const errorMsg = ref('')
 const sampleLoading = ref(false)
 
 const current = computed(() => getProvider(provider.value))
+// 只开放一个服务商时去掉选择步骤并隐含选定（config.yaml providers.enabled）
+const steps = computed(() => stepsFor(status.value))
+const providerList = computed(() => visibleProviders(status.value))
 
 /** 进度写到服务端，刷新或重开后可继续；写失败不影响当前页面。 */
 async function persist(patch) {
@@ -148,6 +152,7 @@ async function persist(patch) {
 
 function go(next) {
   errorMsg.value = ''
+  if (!provider.value) provider.value = impliedProvider(status.value)
   step.value = next
   persist({ step: next, provider: provider.value })
 }
@@ -227,7 +232,7 @@ async function trySample() {
 onMounted(async () => {
   try {
     status.value = await onboardingAPI.status()
-    provider.value = status.value.provider
+    provider.value = status.value.provider || impliedProvider(status.value)
     const s = resumeStep(status.value)
     // 已配好 Key 且不在测试/完成步骤：不再显示向导
     if (status.value.has_key && !['test', 'done'].includes(s)) { router.replace('/'); return }

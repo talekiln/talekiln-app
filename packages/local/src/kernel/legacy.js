@@ -217,6 +217,12 @@ function deriveStatus(existing, hasAsset) {
   return existing === 'completed' || !existing ? 'pending' : existing;
 }
 
+/** 节点采用版本的资产引用（kind 匹配时），否则 null。 */
+function adoptedRef(graph, nodeId, kind) {
+  const v = nodeId && kernel.adoptedVersion(graph, nodeId);
+  return v && v.asset && v.asset.ref && (!kind || v.asset.kind === kind) ? v.asset.ref : null;
+}
+
 function shotRows(graph) {
   const { storyboards } = kernel.toLegacyRows(graph);
   const groupIndex = new Map();
@@ -226,11 +232,15 @@ function shotRows(graph) {
     const by = (kind) => lines.filter((p) => p.kind === kind).map((p) => p.text).join('\n');
     const parts = kernel.partsOfShot(graph, r.shot_id);
     const hasAsset = !!((parts.video && kernel.adoptedVersion(graph, parts.video)) || (parts.image && kernel.adoptedVersion(graph, parts.image)));
+    const ia = parts.image && kernel.adoptedVersion(graph, parts.image);
+    const imageRef = ia && ia.asset && ia.asset.ref ? String(ia.asset.ref) : null;
     return {
       ...r,
+      image_ref: imageRef,
       segment_index: groupIndex.get(r.scene_group_id), segment_title: r.scene_title || '',
       dialogue: by('dialogue'), narration: by('narration'), action: by('action'),
       has_asset: hasAsset,
+      narration_audio: (kernel.adoptedVersion(graph, parts.narration) || {}).source === 'legacy-import' ? null : adoptedRef(graph, parts.narration, 'audio'),
     };
   });
 }
@@ -264,6 +274,7 @@ function writeStoryboards(db, ep, graph) {
       id = Number(info.lastInsertRowid);
       mapSet.run(ep, r.shot_id, id);
       binds[r.shot_id] = id;
+      if (r.narration_audio) db.prepare('UPDATE storyboards SET narration_audio_local_path = ? WHERE id = ?').run(r.narration_audio, id);
     } else {
       if (r.legacy_id !== id) binds[r.shot_id] = id; // 节点没有（或指向已不存在的行）：绑定到复用的行
       mapSet.run(ep, r.shot_id, id);
@@ -274,6 +285,17 @@ function writeStoryboards(db, ep, graph) {
       }
       // video_url：图里没有采用视频时不清空（旧生成流程还会直接写这一列，见报告“绕过内核的旧写路径”）
       if (r.video_url && existing.video_url !== r.video_url) { sets.push('video_url = ?'); vals.push(r.video_url); }
+      // narration_audio_local_path：与 video_url 同理，只增不清（旁白音频由配音写回，图里采用的音频引用 -> 旧列）
+      if (r.narration_audio && existing.narration_audio_local_path !== r.narration_audio) { sets.push('narration_audio_local_path = ?'); vals.push(r.narration_audio); }
+      // 首帧图：采用的图片落到旧表的 local_path（存储目录内的相对路径）或 image_url（网络地址）；同样只增不清
+      if (r.image_ref) {
+        const rel = r.image_ref.startsWith('/static/') ? r.image_ref.slice('/static/'.length) : r.image_ref;
+        const remote = /^(https?:|data:)/i.test(rel);
+        if (remote ? existing.image_url !== rel : existing.local_path !== rel) {
+          sets.push(remote ? 'image_url = ?' : 'local_path = ?'); vals.push(rel);
+          if (remote && existing.local_path) sets.push('local_path = NULL'); // 页面优先读 local_path，旧值会盖住新图
+        }
+      }
       const status = deriveStatus(existing.status, r.has_asset);
       if (status !== existing.status) { sets.push('status = ?'); vals.push(status); }
       if (existing.deleted_at != null) sets.push('deleted_at = NULL');
@@ -331,4 +353,4 @@ function materialize(db, episodeId, graph) {
   })();
 }
 
-module.exports = { importLegacy, materialize, buildGraphFromRows, deriveStatus };
+module.exports = { importLegacy, materialize, buildGraphFromRows, deriveStatus, shotLines, shotParams, clipId, splitLines, SPEAKER_RE };

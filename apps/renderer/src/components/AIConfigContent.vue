@@ -19,18 +19,17 @@
                 导入配置
               </el-button>
               <input ref="importFileRef" type="file" accept=".json" style="display:none" @change="importConfigs" />
-              <el-button type="success" plain @click="openOneKeyVolc">
+              <el-button v-if="oneKeyVisible(enabledProviders, 'ark')" type="success" plain @click="openOneKeyVolc">
                 <el-icon><MagicStick /></el-icon>
                 一键配置火山
               </el-button>
-              <el-button type="success" plain @click="openOneKeyAgnes">
+              <el-button v-if="oneKeyVisible(enabledProviders, 'agnes')" type="success" plain @click="openOneKeyAgnes">
                 <el-icon><MagicStick /></el-icon>
                 一键配置 Agnes
               </el-button>
-              <el-button type="info" plain @click="openOneKeyTongyi">
+              <el-button v-if="oneKeyVisible(enabledProviders, 'bailian')" type="success" plain @click="openOneKeyTongyi">
                 <el-icon><MagicStick /></el-icon>
-                一键配置通义
-                <span class="one-key-not-recommended">不推荐</span>
+                一键配置百炼
               </el-button>
             </div>
             <div class="actions-right">
@@ -289,7 +288,7 @@
                   <div class="cfg-tip-content">
                     从下拉选择预设厂商，会自动填入 Base URL 和模型列表。<br>
                     也可直接输入自定义厂商名（需手动填写其他字段）。<br>
-                    <b>推荐</b>：通义千问 / 火山引擎，国内访问稳定。
+                    当前开放的服务商：{{ providerLabels(enabledProviders) }}。
                   </div>
                 </template>
                 <el-icon class="tip-icon"><QuestionFilled /></el-icon>
@@ -1099,6 +1098,8 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, MagicStick, QuestionFilled, Download, Upload, Delete, ChatDotRound, Picture, Film, VideoCamera, Key, Microphone, Folder } from '@element-plus/icons-vue'
 import { aiAPI } from '@/api/ai'
+import { onboardingAPI } from '@/api/onboarding'
+import { filterPresetProviders, oneKeyVisible, providerLabels } from '@/utils/providerEnablement'
 import { generationSettingsAPI } from '@/api/prompts'
 import { openKeyPage } from '@/utils/referral'
 import PromptEditor from '@/components/PromptEditor.vue'
@@ -1287,6 +1288,8 @@ const testError = ref('')
 const oneKeyTongyiVisible = ref(false)
 const oneKeyTongyiKey = ref('')
 const oneKeyTongyiSaving = ref(false)
+// 已开放服务商（config.yaml providers.enabled）；拉取失败按默认只开放百炼
+const enabledProviders = ref(null)
 const oneKeyVolcVisible = ref(false)
 const oneKeyVolcKey = ref('')
 const oneKeyVolcSaving = ref(false)
@@ -1458,7 +1461,7 @@ const availableProviderOptions = computed(() => {
   const st = form.value.service_type || 'text'
   const listByType = providerConfigs[st] || []
   const current = form.value.provider
-  let result = [...listByType]
+  let result = filterPresetProviders(listByType, enabledProviders.value)
   if (editingId.value && current && current !== CUSTOM_PROVIDER_SENTINEL && !listByType.some((p) => p.id === current)) {
     result = [{ id: current, name: current + ' (当前)', models: [] }, ...result]
   }
@@ -2220,6 +2223,7 @@ async function loadVendorLock() {
 }
 
 onMounted(() => {
+  onboardingAPI.providers().then((l) => { enabledProviders.value = l }).catch(() => {})
   loadVendorLock()
   loadList()
   loadGenerationSettings()
