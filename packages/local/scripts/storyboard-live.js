@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { createProviders } = require('../src/providers');
 const { generateStoryboard } = require('../src/scriptgen');
+const { redact } = require('./lib/redact');
 
 const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : def; };
@@ -44,7 +45,7 @@ const samples = JSON.parse(fs.readFileSync(path.join(fxDir, 'samples.json'), 'ut
     }
     if (record) {
       fs.mkdirSync(path.join(fxDir, 'recorded'), { recursive: true });
-      fs.writeFileSync(path.join(fxDir, 'recorded', `${s.id}.json`), JSON.stringify({ sampleId: s.id, model, attempts: raw }, null, 2));
+      fs.writeFileSync(path.join(fxDir, 'recorded', `${s.id}.json`), redact(JSON.stringify({ sampleId: s.id, model, attempts: raw }, null, 2), [apiKey, process.env.BAILIAN_BASE_URL]));
     }
   }));
   rows.sort((a, b) => a.id.localeCompare(b.id));
