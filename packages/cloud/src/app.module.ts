@@ -1,6 +1,6 @@
 import { Module, type OnApplicationShutdown, Inject, Injectable, type Provider } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
-import { AuthController, DeviceController, HealthController, LicenceController } from './http/controllers';
+import { AuthController, CatalogController, DeviceController, HealthController, LicenceController, ReferralController } from './http/controllers';
 import { AdminAuthController, AdminController, PublicController } from './http/admin.controllers';
 import { AccessGuard, AdminGuard } from './http/guard';
 import { createPrismaRepositories } from './domain/prisma.repositories';
@@ -9,6 +9,8 @@ import { AdminAuthService } from './services/admin-auth.service';
 import { AdminService } from './services/admin.service';
 import { AuthService } from './services/auth.service';
 import { CONFIG, loadConfig, type AppConfig } from './services/config';
+import { CatalogService, loadCatalogFromEnv } from './services/catalog.service';
+import { ReferralService, loadReferralConfig } from './services/referral.service';
 import { DeviceService } from './services/device.service';
 import { FeedbackService } from './services/feedback.service';
 import { LicenceService } from './services/licence.service';
@@ -48,7 +50,7 @@ export function createAppModule(opts: ModuleOptions = {}) {
   @Module({
     controllers: [
       HealthController, AuthController, DeviceController, LicenceController,
-      AdminAuthController, AdminController, PublicController,
+      AdminAuthController, AdminController, PublicController, CatalogController, ReferralController,
     ],
     providers: [
       ...infra,
@@ -61,6 +63,8 @@ export function createAppModule(opts: ModuleOptions = {}) {
       { provide: AdminService, useFactory: (r: Repositories, c: AppConfig) => new AdminService(r, c), inject: [REPOS, CONFIG] },
       { provide: StatsService, useFactory: (r: Repositories) => new StatsService(r), inject: [REPOS] },
       { provide: FeedbackService, useFactory: (r: Repositories, c: AppConfig) => new FeedbackService(r, c), inject: [REPOS, CONFIG] },
+      { provide: CatalogService, useFactory: (c: AppConfig) => new CatalogService(c, loadCatalogFromEnv()), inject: [CONFIG] },
+      { provide: ReferralService, useFactory: (r: Repositories) => new ReferralService(loadReferralConfig(), r.referralClicks), inject: [REPOS] },
       AccessGuard,
       AdminGuard,
     ],

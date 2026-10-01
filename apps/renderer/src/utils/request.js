@@ -24,7 +24,8 @@ request.interceptors.response.use(
     // 提取后端实际错误信息（优先 API 返回的 message，而非 axios 通用 "status code 500"）
     // 文案来自统一错误码表（含建议操作），见 utils/errorToast.js
     const parsed = parseApiError(error)
-    ElMessage.error(toastText(error))
+    // 调用方自己展示错误（如登录页内联提示）时可传 { silentError: true }
+    if (!error.config?.silentError) ElMessage.error(toastText(error))
     // 将真实错误信息写回 message，使组件 catch 块可直接用 e.message 获取可读内容
     if (error.response?.data && parsed.message) error.message = parsed.message
     error.code = parsed.code || error.code

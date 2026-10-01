@@ -98,13 +98,20 @@ curl localhost:3000/health
 ### 反馈 `POST /feedback`
 `{ message(<=4000), contact?, taskId?, installId?, appVersion?, diagnostic?(zip 的 base64) }`。诊断包解码后上限 `MAX_DIAGNOSTIC_BYTES`（默认 1.5MB，超出 413；必须以 zip 魔数开头）；请求体上限 2.5MB（其余路径 100KB）；每 IP 每 10 分钟 `FEEDBACK_RATE_LIMIT` 条（默认 5，超出 429）。文字会再做一遍服务端脱敏。当前诊断包直接存数据库 `bytea`（原方案是 OSS 临时凭证直传，量大后再换）。
 
+### `GET /catalog[?since=<version>]`
+公开。返回 `{ version, kid, signature, issued_at, catalog: { providers, models, prices, announcements } }`。`version` 为目录规范化 JSON 的 sha256 前缀，`signature` 是对 `version` 的 ES256 JWS（与许可证同一密钥，公钥见 JWKS），客户端先校验哈希再验签。`since` 等于当前版本时只回 `{ version, unchanged: true }`。默认价格为示例价；用 `CATALOG_FILE`（JSON 路径）覆盖。
+
+### `GET /r/:code[?src=]`
+推广跳转：记录点击（`ReferralClick`）后 302 到配置中的目标。目标仅来自配置（默认各平台密钥页，`REFERRAL_LINKS` JSON `{code: url}` 覆盖），必须是 https、无内嵌凭据、主机在白名单（默认三个平台主机 + `REFERRAL_ALLOWED_HOSTS` 逗号分隔追加），配置不合规则启动失败；未知码返回 404，没有开放重定向。
+
 ## 数据库
 
-Schema：`prisma/schema.prisma`；迁移已检入 `prisma/migrations/`（`pnpm prisma migrate deploy` 应用）。表：`Account`、`InviteCode`、`Device`、`RefreshToken`、`Setting`、`TelemetryEvent`、`Feedback`。
+Schema：`prisma/schema.prisma`；迁移已检入 `prisma/migrations/`（`pnpm prisma migrate deploy` 应用）。表：`Account`、`InviteCode`、`Device`、`RefreshToken`、`Setting`、`TelemetryEvent`、`Feedback`、`ReferralClick`。
 
 ## 已知限制 / 后续
 
 - 限流为单实例内存实现；用户登录接口尚未限流；未实现邮箱验证、找回密码。
+- `/r/:code` 未做限流，点击统计可被刷。
 - 统计概览在应用内聚合 `since(day)` 的事件行（≤90 天），数据量大后应改为数据库聚合/预汇总。
 - 邀请码激活为"先建账号、原子抢码、失败回滚账号"，不是单事务；极端崩溃下可能留下无邀请码关联的账号。
 - Prisma 仓储与迁移 SQL 需要真实 PostgreSQL 做集成验证（单元测试覆盖的是内存仓储上的同一套服务逻辑）。

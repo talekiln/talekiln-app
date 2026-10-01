@@ -57,3 +57,7 @@ ai_queue:
   poll_min_ms: 2000
   poll_max_ms: 30000
   jitter_ratio: 0.2
+# 云端（账号/许可证/目录/推广跳转）。base_url 留占位表示未配置；也可用环境变量 TALEKILN_CLOUD_URL 覆盖
+cloud:
+  base_url: https://cloud.talekiln.example
+  require_login: false

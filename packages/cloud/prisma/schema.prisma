@@ -101,3 +101,12 @@ model Feedback {
 
   @@index([createdAt])
 }
+
+model ReferralClick {
+  id        String   @id @default(uuid())
+  code      String
+  src       String?
+  createdAt DateTime @default(now())
+
+  @@index([code, createdAt])
+}

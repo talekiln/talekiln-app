@@ -90,5 +90,9 @@ export function createPrismaRepositories(db: PrismaClient): Repositories {
         return r ? { ...r, diagnostic: r.diagnostic ? Buffer.from(r.diagnostic) : null } : null;
       },
     },
+    referralClicks: {
+      create: (c) => db.referralClick.create({ data: c }),
+      countByCode: (code) => db.referralClick.count({ where: { code } }),
+    },
   };
 }
