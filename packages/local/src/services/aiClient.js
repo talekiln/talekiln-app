@@ -207,7 +207,7 @@ function postJSONStream(url, headers, body, silenceTimeoutMs = 60000, onProgress
 
 // 使用前端设置的「默认」与「优先级」：listConfigs 已按 is_default DESC, priority DESC 排序
 function getDefaultConfig(db, serviceType) {
-  const configs = aiConfigService.listConfigs(db, serviceType);
+  const configs = aiConfigService.listConfigsInternal(db, serviceType);
   const active = configs.filter((c) => c.is_active);
   if (active.length === 0) return null;
   const defaultOne = active.find((c) => c.is_default);
@@ -215,7 +215,7 @@ function getDefaultConfig(db, serviceType) {
 }
 
 function getConfigForModel(db, serviceType, modelName) {
-  const configs = aiConfigService.listConfigs(db, serviceType);
+  const configs = aiConfigService.listConfigsInternal(db, serviceType);
   for (const config of configs) {
     if (!config.is_active) continue;
     const models = Array.isArray(config.model) ? config.model : [config.model];
@@ -246,7 +246,7 @@ function getConfigFromModelMap(db, sceneKey) {
   try {
     const row = db.prepare('SELECT * FROM ai_model_map WHERE key = ?').get(sceneKey);
     if (!row) return null;
-    const configs = aiConfigService.listConfigs(db, row.service_type || 'text');
+    const configs = aiConfigService.listConfigsInternal(db, row.service_type || 'text');
     let config = null;
     if (row.config_id) {
       config = configs.find((c) => c.id === row.config_id && c.is_active) || null;

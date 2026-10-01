@@ -8,11 +8,17 @@ const { loadConfig } = require('./config/index.js');
 const logger = require('./logger.js');
 const { setupRouter } = require('./routes/index.js');
 
-function createApp() {
+function createApp(opts = {}) {
+  // 密钥存储由主进程注入；未注入则不可用（拒绝保存 key，绝不降级为明文）
+  const secrets = require('./secrets');
+  if (opts.secretStore) secrets.setSecretStore(opts.secretStore);
   const config = loadConfig();
   const db = getDb(config.database);
   const { runMigrationsAndEnsure } = require('./db/migrate.js');
   runMigrationsAndEnsure(db);
+
+  // 旧版明文 api_key 加密迁移（在 vendor_lock 之前，使其能读到旧 key）
+  require('./services/aiConfigService').migratePlaintextApiKeys(db, logger);
 
   // 厂商锁定模式：在迁移完成后同步 vendor_lock 配置
   const { applyVendorLock } = require('./services/aiConfigService');

@@ -1,6 +1,10 @@
 const aiConfigService = require('../services/aiConfigService');
 const response = require('../response');
 
+function unavailable(res) {
+  response.error(res, 503, 'SECRET_STORE_UNAVAILABLE', '系统密钥加密不可用，无法保存 API Key');
+}
+
 function list(db) {
   return (req, res) => {
     const list = aiConfigService.listConfigs(db, req.query.service_type);
@@ -44,6 +48,7 @@ function create(db, log, cfg) {
       });
       response.created(res, config);
     } catch (err) {
+      if (err.code === 'SECRET_STORE_UNAVAILABLE') return unavailable(res);
       log.errorw('Create AI config failed', { error: err.message });
       response.internalError(res, '创建失败');
     }
@@ -65,7 +70,13 @@ function update(db, log, cfg) {
       body = allowed;
     }
 
-    const config = aiConfigService.updateConfig(db, log, id, body);
+    let config;
+    try {
+      config = aiConfigService.updateConfig(db, log, id, body);
+    } catch (err) {
+      if (err.code === 'SECRET_STORE_UNAVAILABLE') return unavailable(res);
+      throw err;
+    }
     if (!config) return response.notFound(res, '配置不存在');
     response.success(res, config);
   };
@@ -97,6 +108,7 @@ function bulkUpdateKey(db, log, cfg) {
       const count = aiConfigService.bulkUpdateApiKey(db, log, api_key.trim());
       response.success(res, { updated: count, message: `已更新 ${count} 条配置的 API Key` });
     } catch (err) {
+      if (err.code === 'SECRET_STORE_UNAVAILABLE') return unavailable(res);
       log.error('Bulk update api_key failed', { error: err.message });
       response.internalError(res, '批量换Key失败');
     }
