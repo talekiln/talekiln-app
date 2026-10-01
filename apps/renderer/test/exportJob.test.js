@@ -2,8 +2,10 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   isFinal, encoderOptions, validateForm, buildStartRequest, stageLabel, progressStatus, errorText,
-  formatElapsed, formatPercent, createJobPoller, FALLBACK_RESOLUTIONS
+  formatElapsed, formatPercent, createJobPoller, FALLBACK_RESOLUTIONS,
+  FALLBACK_PLATFORM_PRESETS, sizeTable, presetOf, presetHint, validateMediaForm, buildMediaRequest, mediaResultText, MEDIA_TARGETS
 } from '../src/utils/exportJob.js'
+import { createRequire } from 'node:module'
 
 const ENCODERS = [
   { name: 'h264_nvenc', listed: true, available: false, reason: 'Cannot load libcuda' },
@@ -126,4 +128,49 @@ test('restarting the poller drops the old job', async () => {
   assert.equal(t.pending(), 1)
   await t.run()
   assert.deepEqual(seen, ['a', 'b', 'b'])
+})
+
+test('平台预设兜底与后端 exporters/presets.js 一致（防漂移）', () => {
+  const { PLATFORM_PRESETS } = createRequire(import.meta.url)('../../../packages/local/src/export/exporters/presets.js')
+  assert.deepEqual(FALLBACK_PLATFORM_PRESETS, PLATFORM_PRESETS)
+})
+
+test('预设：合并尺寸表后 buildStartRequest 取预设宽高；presetOf / presetHint', () => {
+  const sizes = sizeTable(FALLBACK_RESOLUTIONS, FALLBACK_PLATFORM_PRESETS)
+  assert.equal(sizes.length, 8)
+  const r = buildStartRequest({ resolution: 'shipinhao-3x4', fps: 30, encoder: 'auto', output_path: 'D:\\a.mp4' }, sizes, 3)
+  assert.deepEqual([r.width, r.height], [1080, 1440])
+  assert.equal(presetOf(FALLBACK_PLATFORM_PRESETS, '1080p'), null)
+  assert.match(presetHint(presetOf(FALLBACK_PLATFORM_PRESETS, 'douyin-9x16')), /8000 kbps/)
+  assert.equal(presetHint(null), '')
+})
+
+test('validateMediaForm：文件夹必填且为绝对路径（含中文空格可通过）', () => {
+  const ok = { resolution: '1080p', media_dir: 'D:\\导出 文件夹' }
+  assert.equal(validateMediaForm(ok), '')
+  assert.equal(validateMediaForm({ ...ok, media_dir: '/Users/张三/导出 一' }), '')
+  assert.match(validateMediaForm({ ...ok, media_dir: '' }), /文件夹/)
+  assert.match(validateMediaForm({ ...ok, media_dir: 'out' }), /绝对路径/)
+  assert.match(validateMediaForm({ ...ok, resolution: '' }), /尺寸/)
+})
+
+test('buildMediaRequest：剪映走 jianying；Premiere 与 FCPXML 走 fcpxml 并带 format', () => {
+  const sizes = sizeTable(FALLBACK_RESOLUTIONS, FALLBACK_PLATFORM_PRESETS)
+  const form = { resolution: 'douyin-9x16', fps: '30', media_dir: ' D:\\导出 ', media_name: ' 第一集 ' }
+  const j = buildMediaRequest(form, sizes, '5', 'jianying')
+  assert.equal(j.kind, 'jianying')
+  assert.deepEqual(j.body, { episode_id: 5, output_dir: 'D:\\导出', width: 1080, height: 1920, fps: 30, name: '第一集' })
+  const p = buildMediaRequest({ ...form, media_name: '' }, sizes, 5, 'xmeml', { dry_run: true })
+  assert.equal(p.kind, 'fcpxml')
+  assert.equal(p.body.format, 'xmeml')
+  assert.equal(p.body.dry_run, true)
+  assert.equal('name' in p.body, false)
+  assert.equal(buildMediaRequest(form, sizes, 5, 'fcpxml').body.format, 'fcpxml')
+  assert.deepEqual(MEDIA_TARGETS.map((t) => t.value), ['jianying', 'xmeml', 'fcpxml'])
+})
+
+test('mediaResultText', () => {
+  assert.equal(mediaResultText(null), '')
+  assert.equal(mediaResultText({ written: true, output_dir: 'D:\\x', stats: { video_segments: 4, subtitle_segments: 6 } }), '已导出：D:\\x · 视频 4 段 · 字幕 6 条')
+  assert.match(mediaResultText({ written: false, output_dir: 'x', stats: { video_clips: 2, subtitle_cues: 1 } }), /未写文件.*视频 2 段 · 字幕 1 条/)
 })
