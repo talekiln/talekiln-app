@@ -369,6 +369,15 @@ function setupRouter(cfg, db, log, aiQueue) {
     r.post('/spend/estimate', spendRoutes.estimate);
   }
 
+  // ---------- diagnostics / feedback (H03) ----------
+  {
+    const diag = require('./diagnostics')({
+      store: aiQueue && aiQueue.store, log, versions: { app: require('../../package.json').version },
+    });
+    r.get('/diagnostics/bundle', diag.exportBundle);
+    r.post('/diagnostics/feedback', diag.sendFeedback);
+  }
+
   return r;
 }
 
