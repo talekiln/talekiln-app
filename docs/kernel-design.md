@@ -102,3 +102,23 @@ Node { id, type, params, legacy_id? }
 - 三个现有页面（D05 工作台、F03 编辑器、D03 分镜表）改为只调意图层：内核验收通过后再做。
 - 多人协作、画布 UI（React Flow 版）、导演模式：二期之后。
 - 拆分镜头后复用已生成视频：不做。
+
+## 9. K1 实现备注（`packages/kernel` 中对规格歧义的取舍）
+
+- **依赖**：零第三方依赖；`sha256` 用 node 内置 `crypto.createHash`（纯计算，不算 IO）。
+- **组内顺序**：`group.children` 同时放 `script_line` 与 `shot`，两类各自的顺序 = 该数组按类型过滤后的子序列（仍是“一份顺序”）。校验：每个 `script_line` 和每个 `shot` 在且仅在一个组里。
+- **narration 的输入**：规格写“来自 script_line”，实现为只存一条 `shot → narration` 的 `binds` 边（表示归属，不进 cacheKey），配音的行输入由绑定镜头的 `derives` 边推导并计入 key。这样“镜头含哪些行”只存一处，改画面提示词不会让配音过期。`compose` 的输入边为 `video/narration` 的 `feeds` 边。
+- **端口表**：`shot.lines`（多）、`image.shot`、`video.image`、`video.shot`、`narration.shot`、`compose.video`（多）、`compose.narration`（多）；输出端口恒为 `out`；端口规则本身是分层 DAG，环检测作为纵深防御保留。
+- **“生成类”节点**：`image/video/narration/compose`。过期 = 无采用版本或采用版本的 cacheKey ≠ 当前 key，所以新建图里它们全是过期（状态 `none`）。`node_version` 取每个节点类型的实现版本常量 `NODE_TYPE_VERSION`。
+- **invalidated / revalidated**：只统计事务前后都存在的生成类节点；新建、删除的节点不计入。
+- **segments**：存于 `compose.params.segments`，数组内跨镜头的相对顺序无意义，时间线顺序 = 镜头顺序，同一镜头内按数组顺序；`transition` 表示“进入该片段的转场”。校验要求有 compose 时每个镜头至少一个片段，且 `0 <= in < out <= shot.duration_ms`。
+- **镜头对白/字幕/配音文字**：只取 `kind` 为 `narration` / `dialogue` 的行，按剧本顺序以换行拼接；`action`、`scene_heading` 不进对白（`action` 进旧表 `action` 列）。
+- **时间线字幕**：每个镜头一条字幕（与 F02 `assembleFromStoryboard` 同），起点 = 该镜头第一个片段起点，时长覆盖到最后一个片段终点；`subtitle_overrides` 以镜头里第一个有声行的 id 为键取样式。时间线视图的轨道 id、片段 id 是确定性的（`track_<kind>`、片段用 segment id、`sub_<shot>`、`nar_<shot>`），转场放在视频片段的 `style.transition`。
+- **时长联动**：`setShotField(duration_ms)` 同事务内让片段跟随：未裁剪的整段延长，被裁过的片段裁到新时长内；`mergeShots` 的合并时长 = 两者之和。
+- **splitShot**：行按剧本顺序，前 `atLineIndex` 行留在原镜头；新镜头克隆参数与生成节点参数（含种子），无采用版本；新镜头得到一个整段片段，原镜头片段不动；没有按行数拆时长。
+- **时间线 deleteSegment**：删到某镜头的最后一个片段 = 删除整个镜头（四个视图一起消失，行保留）；`moveSegment` 目标在另一镜头时整个镜头连同全部片段移动（可跨组）。
+- **画布**：`compose` 不允许从画布删除；`connectNodes` 对单连接端口替换旧边，连同一条边是空事务；未给坐标的新节点不写 `layout`，画布视图用确定性自动布局补显示位置（`layout_auto: true`，不写回图）。
+- **removeNode 级联**：移除节点同时清理其边、`layout`、`versions`、`adopted` 与组成员，逆 op（`restoreNode`）原样放回；`applyTx` 返回的 `inverse` 即撤销用的 op 序列，一个 tx 一个撤销步。
+- **幂等与历史**：`applyTx` 为纯函数，`opts.applied`（Set）里已有的 `tx_id` 为空操作；`History` 在撤销时把 `tx_id` 移出生效集合、重做时放回。事务可带非规格字段 `meta`（如新建节点 id），应用时忽略。
+- **视图 `params`**：视图里输出的 params 是键排序副本，保证快照重载（规范 JSON）前后视图逐字节相同。
+- **未做（留给后续任务）**：持久化（`project_graphs` / `graph_ops`）、REST、`importLegacy` / `materialize`、`conformance/` 完整套件（`packages/kernel/test/` 里目前是各模块单测与随机属性测试）。
