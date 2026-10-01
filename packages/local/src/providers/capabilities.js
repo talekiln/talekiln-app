@@ -9,7 +9,7 @@
  *  video.submit({model?, prompt, imageUrl?, firstFrameUrl?, lastFrameUrl?, referenceUrls?, duration?, resolution?, signal?})
  *      -> Promise<{taskId}>
  *  video.poll({taskId, signal?})
- *      -> Promise<{status:'pending'|'running'|'succeeded'|'failed', videoUrl?, error?: ProviderError}>
+ *      -> Promise<{status:'pending'|'running'|'succeeded'|'failed', videoUrl?, usage?, actualPrompt?, error?: ProviderError}>
  *  tts.synthesize({model?, text, voice?, format?, sampleRate?, rate?, pitch?, volume?, wordTimestamps?, signal?})
  *      -> Promise<{audio: Buffer, format, words?: {text, startMs, endMs}[], usage?}>
  *      words: per-character timing from audio start, present when wordTimestamps is true.
