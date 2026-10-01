@@ -1,0 +1,15 @@
+Encoders:
+ V..... = Video
+ A..... = Audio
+ S..... = Subtitle
+ .F.... = Frame-level multithreading
+ ..S... = Slice-level multithreading
+ ...X.. = Codec is experimental
+ ....B. = Supports draw_horiz_band
+ .....D = Supports direct rendering method 1
+ ------
+ V....D h264_videotoolbox    VideoToolbox H.264 Encoder (codec h264)
+ V....D hevc_videotoolbox    VideoToolbox H.265 Encoder (codec hevc)
+ V....D mpeg4                MPEG-4 part 2
+ A....D aac                  AAC (Advanced Audio Coding)
+ A....D aac_at               aac (AudioToolbox) (codec aac)

@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "electron .",
     "test": "node --test test/*.test.js",
-    "dist:win": "node ../../scripts/pack-desktop.mjs --win"
+    "dist:win": "node ../../scripts/pack-desktop.mjs --win",
+    "dist:mac": "node ../../scripts/pack-desktop.mjs --mac"
   },
   "dependencies": {
     "@talekiln/local": "workspace:*",
@@ -30,6 +31,7 @@
       "main.js",
       "lifecycle.js",
       "core-runtime.js",
+      "platform.js",
       "updater.js",
       "updater-logic.js",
       "update-config.json",
@@ -74,7 +76,26 @@
       "**/node_modules/better-sqlite3/**",
       "**/node_modules/sharp/**",
       "**/node_modules/@img/**"
-    ]
+    ],
+    "mac": {
+      "category": "public.app-category.video",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "binaries": [
+        "Contents/Resources/lycore/lycore",
+        "Contents/Resources/lycore/ffmpeg/ffmpeg",
+        "Contents/Resources/lycore/ffmpeg/ffprobe"
+      ]
+    },
+    "dmg": {
+      "sign": false
+    }
   },
   "private": true
 }

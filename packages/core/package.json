@@ -6,7 +6,7 @@
   "main": "client/index.js",
   "scripts": {
     "build": "cargo build --release",
-    "test": "cargo test && cargo build && node client/test.js && node client/supervisor.test.js && node client/supervisor.integration.test.js && node client/ffmpeg-provision.test.js"
+    "test": "cargo test && cargo build && node client/test.js && node client/supervisor.test.js && node client/supervisor.integration.test.js && node client/signals.integration.test.js && node client/ffmpeg-provision.test.js"
   },
   "files": [
     "client/index.js",

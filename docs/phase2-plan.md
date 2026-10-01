@@ -53,3 +53,7 @@
 | P2-D 体验 | 命令面板、Premiere 键位预设、版本历史界面 | 真机与 macOS 未测 |
 
 下一批：P2-C 登录（短信、微信扫码，模拟实现）、P2-H 后台扩展、P2-F macOS CI、画布完整版（等本地会话做完节点增删）；P2-A 项目文件夹迁移等本地会话的改动合并后再开。
+
+## P2-F macOS（Linux 侧，分支 p2f）
+
+代码审查修复、`package-macos` CI 作业（未签名 + 签名公证骨架）、ffmpeg 分平台清单（macOS 条目 TODO）与文档已做，见 `docs/phase2-macos.md`。全部未在真实 macOS 上验证；必验清单与 Apple 账号流程都在该文档里。

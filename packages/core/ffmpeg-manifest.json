@@ -12,6 +12,18 @@
         { "name": "ffprobe.exe", "path": "TODO/win32-x64/ffprobe.exe", "sha256": "TODO_SHA256_FFPROBE_WIN32_X64", "size": null }
       ]
     },
+    "darwin-arm64": {
+      "files": [
+        { "name": "ffmpeg", "path": "TODO/darwin-arm64/ffmpeg", "sha256": "TODO_SHA256_FFMPEG_DARWIN_ARM64", "size": null },
+        { "name": "ffprobe", "path": "TODO/darwin-arm64/ffprobe", "sha256": "TODO_SHA256_FFPROBE_DARWIN_ARM64", "size": null }
+      ]
+    },
+    "darwin-x64": {
+      "files": [
+        { "name": "ffmpeg", "path": "TODO/darwin-x64/ffmpeg", "sha256": "TODO_SHA256_FFMPEG_DARWIN_X64", "size": null },
+        { "name": "ffprobe", "path": "TODO/darwin-x64/ffprobe", "sha256": "TODO_SHA256_FFPROBE_DARWIN_X64", "size": null }
+      ]
+    },
     "linux-x64": {
       "files": [
         { "name": "ffmpeg", "path": "TODO/linux-x64/ffmpeg", "sha256": "TODO_SHA256_FFMPEG_LINUX_X64", "size": null },
