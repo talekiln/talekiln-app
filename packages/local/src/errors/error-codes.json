@@ -374,6 +374,26 @@
       "scope": "local",
       "message": "写入导出文件失败",
       "action": "检查目标磁盘空间和写入权限，或换一个文件夹"
+    },
+    "device_limit": {
+      "scope": "cloud",
+      "message": "设备数已达套餐上限",
+      "action": "到账号设置里移除不用的设备，或升级套餐"
+    },
+    "conflict": {
+      "scope": "cloud",
+      "message": "操作冲突，状态已变化",
+      "action": "刷新后重试"
+    },
+    "provider_unavailable": {
+      "scope": "cloud",
+      "message": "该支付渠道暂不可用",
+      "action": "换一种支付方式或稍后再试"
+    },
+    "invalid_signature": {
+      "scope": "cloud",
+      "message": "支付回调签名无效",
+      "action": "无需处理；如反复出现请联系管理员"
     }
   }
 }
