@@ -1,0 +1,46 @@
+{
+  "id": "edge-narration",
+  "origin": "hand-written",
+  "note": "边界：纯旁白、没有任何对白，每个镜头一行，三个场景各三镜头（手写，非 AI 输出）",
+  "scenes": [
+    {
+      "title": "春",
+      "lines": [
+        { "kind": "narration", "speaker": "", "text": "冰面裂开了第一道缝。" },
+        { "kind": "narration", "speaker": "", "text": "溪水开始说话。" },
+        { "kind": "narration", "speaker": "", "text": "柳枝先绿了。" }
+      ],
+      "shots": [
+        { "title": "冰裂", "duration_ms": 3000, "legacy_id": 2201, "lines": [0] },
+        { "title": "溪水", "duration_ms": 3000, "legacy_id": 2202, "lines": [1] },
+        { "title": "柳枝", "duration_ms": 3000, "legacy_id": 2203, "lines": [2] }
+      ]
+    },
+    {
+      "title": "夏",
+      "lines": [
+        { "kind": "narration", "speaker": "", "text": "蝉声压住了整个午后。" },
+        { "kind": "narration", "speaker": "", "text": "西瓜在井水里冰着。" },
+        { "kind": "narration", "speaker": "", "text": "一场雷雨来得又急又短。" }
+      ],
+      "shots": [
+        { "title": "蝉", "duration_ms": 2500, "legacy_id": 2204, "lines": [0] },
+        { "title": "西瓜", "duration_ms": 2500, "legacy_id": 2205, "lines": [1] },
+        { "title": "雷雨", "duration_ms": 4000, "legacy_id": 2206, "lines": [2] }
+      ]
+    },
+    {
+      "title": "秋",
+      "lines": [
+        { "kind": "narration", "speaker": "", "text": "稻田黄了。" },
+        { "kind": "narration", "speaker": "", "text": "晒场上铺满了金色。" },
+        { "kind": "narration", "speaker": "", "text": "炊烟一直升到天上。" }
+      ],
+      "shots": [
+        { "title": "稻田", "duration_ms": 2000, "legacy_id": 2207, "lines": [0] },
+        { "title": "晒场", "duration_ms": 2000, "legacy_id": 2208, "lines": [1] },
+        { "title": "炊烟", "duration_ms": 5000, "legacy_id": 2209, "lines": [2] }
+      ]
+    }
+  ]
+}

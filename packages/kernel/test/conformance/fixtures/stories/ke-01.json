@@ -1,0 +1,98 @@
+{
+  "id": "ke-01",
+  "origin": "recorded-real",
+  "source": "packages/local/test/fixtures/scriptgen/recorded/ke-01.json (scriptgen samples, model qwen-plus)",
+  "templateId": "knowledge-explainer",
+  "durationSec": 45,
+  "aspectRatio": "9:16",
+  "story": "为什么天空是蓝色的？讲清楚瑞利散射：短波长的蓝光更容易被空气分子散射，傍晚阳光穿过更厚的大气，蓝光被散射掉，所以夕阳偏红。",
+  "storyboard": {
+    "title": "为什么天空是蓝色的？",
+    "logline": "用瑞利散射原理解释天空蓝与夕阳红的成因。",
+    "characters": [],
+    "scenes": [
+      {
+        "id": "s1",
+        "name": "白天晴空",
+        "description": "纯色浅蓝天背景，简洁扁平风格，阳光从左上角斜射，空气分子微粒可见"
+      },
+      {
+        "id": "s2",
+        "name": "大气层剖面示意图",
+        "description": "垂直剖面图：太阳光从顶部入射，穿过不同厚度大气层，标注‘空气分子’微小球体"
+      },
+      {
+        "id": "s3",
+        "name": "傍晚低角度光照",
+        "description": "地平线构图，橙红色夕阳悬于远处，大量蓝光被滤除，路径中散射粒子增多"
+      }
+    ],
+    "shots": [
+      {
+        "sceneId": "s1",
+        "characterIds": [],
+        "visual": "湛蓝天空中，一束白光太阳光射入，其中蓝光向四周明显散射成细密光点，其他颜色（红、黄）直线穿透",
+        "camera": "全景，静态构图",
+        "dialogue": {
+          "speaker": "narrator",
+          "text": "为什么天空是蓝色的？"
+        },
+        "durationSec": 6,
+        "imagePrompt": "flat illustration, 9:16 aspect ratio, light blue gradient sky background, a bright white sunbeam entering from top-left corner, numerous tiny blue light dots scattering outward in all directions around air molecules (small transparent spheres), red and yellow light rays continuing straight downward, clean vector style, soft lighting, pastel color palette",
+        "videoPrompt": "blue light dots gently pulse and spread outward from air molecules while white beam enters"
+      },
+      {
+        "sceneId": "s2",
+        "characterIds": [],
+        "visual": "垂直剖面图：上部为太空深蓝，中部为淡蓝大气层，含均匀分布的透明小球（空气分子）；白光入射后，短波蓝光剧烈散射呈扇形扩散，长波红光几乎直行",
+        "camera": "medium close-up, centered on atmospheric layer",
+        "dialogue": {
+          "speaker": "narrator",
+          "text": "空气分子对光的散射遵循瑞利定律——波长越短，散射越强。"
+        },
+        "durationSec": 10,
+        "imagePrompt": "flat illustration, 9:16 aspect ratio, vertical cross-section of Earth's atmosphere: top is dark space blue, middle is soft sky-blue band filled with evenly spaced tiny transparent spheres (air molecules), a white sunlight ray enters from top center, splitting visually into strong fan-shaped blue scatter pattern and faint straight red/yellow rays passing through, labeled 'λ short → strong scatter' and 'λ long → weak scatter' in small sans-serif font, clean infographic style, mint and azure color scheme",
+        "videoPrompt": "blue scatter fan expands smoothly while red light rays remain steady and linear"
+      },
+      {
+        "sceneId": "s2",
+        "characterIds": [],
+        "visual": "同一剖面图，但阳光以极低角度斜穿更厚大气层，路径上更多空气分子，蓝光几乎全部散射殆尽，只剩红光直达观察者视线",
+        "camera": "same framing, slight zoom-in on light path",
+        "dialogue": {
+          "speaker": "narrator",
+          "text": "傍晚时，阳光斜穿更厚的大气，蓝光被反复散射到别处，剩下红光直达我们眼睛。"
+        },
+        "durationSec": 9,
+        "imagePrompt": "flat illustration, 9:16 aspect ratio, same vertical atmospheric cross-section as previous shot but sunlight ray now enters at shallow angle from top-right, traveling longer path through dense lower atmosphere filled with more transparent spheres, almost no blue light reaches bottom — only warm red-orange ray reaches viewer position at base, scattered blue dots concentrated far above and sideways, subtle glow effect on red ray, clean infographic style, coral and lavender accents",
+        "videoPrompt": "red-orange ray glows steadily while blue scatter points fade outward along extended path"
+      },
+      {
+        "sceneId": "s3",
+        "characterIds": [],
+        "visual": "简洁地平线构图：左侧地面剪影，右侧巨大暖色夕阳，天空由橙渐变至紫，上方残留少量高散射蓝光粒子",
+        "camera": "wide shot, static",
+        "dialogue": {
+          "speaker": "narrator",
+          "text": "所以——天空蓝，因为蓝光爱‘乱跑’；夕阳红，因为蓝光已被‘送走’。"
+        },
+        "durationSec": 10,
+        "imagePrompt": "flat illustration, 9:16 aspect ratio, horizon line divides composition: bottom third is dark silhouetted land, top two-thirds show gradient sky from peach-orange near sunset to soft violet upward, large glowing orange-red sun on right edge, sparse tiny blue light dots visible only in upper sky region, no text, serene and balanced composition, airy pastel palette",
+        "videoPrompt": "sunset glows softly while faint blue dots shimmer subtly in upper sky"
+      },
+      {
+        "sceneId": "s1",
+        "characterIds": [],
+        "visual": "回归蓝天画面，中央浮现半透明文字框：‘瑞利散射 × 波长反比’，背景蓝光粒子微微浮动",
+        "camera": "close-up on center, gentle scale pulse",
+        "dialogue": {
+          "speaker": "narrator",
+          "text": "这就是瑞利散射的魔力。"
+        },
+        "durationSec": 10,
+        "imagePrompt": "flat illustration, 9:16 aspect ratio, same light blue sky background as first shot, soft floating blue light particles throughout, centered semi-transparent white rounded rectangle containing clean text '瑞利散射 ∝ 1/λ⁴' in modern sans-serif, no shadow, gentle ambient glow, mint and sky-blue color scheme, infographic clarity",
+        "videoPrompt": "text box pulses gently once while blue particles drift slowly"
+      }
+    ]
+  }
+}
