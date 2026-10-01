@@ -128,8 +128,36 @@ function createAiTaskStore(db, { now = () => Date.now(), onDurableCommit } = {})
     return db.prepare(`SELECT COUNT(*) n FROM ai_tasks WHERE provider=? AND state IN (${ph})`).get(provider, ...ACTIVE).n;
   }
 
+  function list({ state, provider, limit = 50, offset = 0 } = {}) {
+    const where = [];
+    const args = [];
+    if (state) { const st = String(state).split(',').filter(Boolean); where.push(`state IN (${st.map(() => '?').join(',')})`); args.push(...st); }
+    if (provider) { where.push('provider = ?'); args.push(provider); }
+    const w = where.length ? ` WHERE ${where.join(' AND ')}` : '';
+    const total = db.prepare(`SELECT COUNT(*) n FROM ai_tasks${w}`).get(...args).n;
+    const lim = Math.min(200, Math.max(1, Number(limit) || 50));
+    const items = db.prepare(`SELECT * FROM ai_tasks${w} ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?`).all(...args, lim, Math.max(0, Number(offset) || 0));
+    return { items, total };
+  }
+
+  /**
+   * failed -> queued (no vendor id: a fresh submit) or failed -> submitted (vendor id known:
+   * poll/download again, never a second vendor submit).
+   */
+  function retry(id) {
+    const row = get(id);
+    if (!row || row.state !== STATES.FAILED) return false;
+    const base = { error_code: null, error_message: null, completed_at: null, next_attempt_at: null, poll_attempts: 0, updated_at: now() };
+    const info = row.vendor_task_id
+      ? db.prepare(`UPDATE ai_tasks SET state='submitted', error_code=@error_code, error_message=@error_message, completed_at=@completed_at,
+          next_attempt_at=@next_attempt_at, poll_attempts=@poll_attempts, updated_at=@updated_at WHERE id=@id AND state='failed'`).run({ ...base, id })
+      : db.prepare(`UPDATE ai_tasks SET state='queued', submit_started_at=NULL, attempts=0, error_code=@error_code, error_message=@error_message,
+          completed_at=@completed_at, next_attempt_at=@next_attempt_at, poll_attempts=@poll_attempts, updated_at=@updated_at WHERE id=@id AND state='failed'`).run({ ...base, id });
+    return info.changes === 1;
+  }
+
   return {
-    get, getByKey, enqueue, claim, markSubmitStarted, recordVendorId, requeue, transition,
+    list, retry, get, getByKey, enqueue, claim, markSubmitStarted, recordVendorId, requeue, transition,
     fail, succeed, cancel, listByState, countActive, durableWrite,
   };
 }

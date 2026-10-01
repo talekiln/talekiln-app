@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, session, shell, dialog, safeStorage } = require('electron');
+const { app, BrowserWindow, Menu, session, shell, dialog, safeStorage, Tray, Notification, nativeImage, powerMonitor } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const net = require('net');
@@ -32,6 +32,17 @@ const RENDERER_DIST = app.isPackaged
 const DATA_DIR = path.join(USERDATA_DIR, 'local');
 
 let serverInstance = null;
+let aiWorker = null;
+
+// 托盘 / 退出确认 / 完成通知 / 系统唤醒（逻辑在 lifecycle.js，Electron 对象注入）
+const lifecycle = require('./lifecycle').createLifecycle({
+  app, dialog, Notification, Tray, Menu, nativeImage, powerMonitor,
+  getWorker: () => aiWorker,
+  readableError: (code, msg) => {
+    try { return require(path.join(LOCAL_DIR, 'src', 'queue', 'taskView.js')).readableError(code, msg); } catch (_) { return msg; }
+  },
+  log: (m) => writeMainLog(m),
+});
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -67,7 +78,10 @@ async function startLocalService() {
     filePath: path.join(DATA_DIR, 'data', 'secrets.enc.json'),
   });
   if (!secretStore.isAvailable()) writeMainLog('safeStorage encryption unavailable: API keys cannot be saved');
-  const { app: expressApp } = createApp({ secretStore });
+  const { app: expressApp, aiQueue } = createApp({ secretStore, onTaskFinished: (t) => lifecycle.onTaskFinished(t) });
+  aiWorker = aiQueue.worker;
+  // 启动对账（恢复未完成任务，不会重复提交）后开始调度；失败不阻止应用启动
+  aiWorker.start().catch((e) => writeMainLog(`ai worker start failed: ${e && e.stack ? e.stack : e}`));
   const port = await freePort();
   return new Promise((resolve, reject) => {
     const server = require('http').createServer(expressApp);
@@ -135,7 +149,7 @@ function createWindow(port) {
   });
   win.webContents.on('did-fail-load', (_e, code, desc, url) => writeMainLog(`did-fail-load ${code} ${desc} ${url}`));
   win.loadURL(`http://127.0.0.1:${port}`);
-  win.on('closed', () => app.quit());
+  lifecycle.attachWindow(win);
   if (process.env.TALEKILN_DEVTOOLS === '1') win.webContents.openDevTools();
 }
 
@@ -143,7 +157,9 @@ app.whenReady().then(async () => {
   try {
     const port = await startLocalService();
     hardenSession(port);
+    lifecycle.setupTray();
     createWindow(port);
+    lifecycle.bindPower();
   } catch (err) {
     const stack = err && err.stack ? err.stack : String(err);
     writeMainLog(`startup failed\n${stack}`);
@@ -152,7 +168,9 @@ app.whenReady().then(async () => {
   }
 });
 
-app.on('before-quit', () => {
+app.on('before-quit', (e) => {
+  if (!lifecycle.onBeforeQuit(e)) return; // 有未完成任务：等待用户确认
+  if (aiWorker) { aiWorker.stop().catch(() => {}); aiWorker = null; }
   if (serverInstance) {
     serverInstance.close();
     serverInstance = null;
