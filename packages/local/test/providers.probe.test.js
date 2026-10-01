@@ -62,3 +62,37 @@ test('unknown provider or capability without a probe', async () => {
   delete p.registry.get('bailian').probes['tts.synthesize'];
   await assert.rejects(() => p.probe('bailian', 'tts.synthesize'), (e) => e.code === ERROR_CODES.CAPABILITY_NOT_SUPPORTED);
 });
+
+// ---- Ark (mock-only: no Ark key yet; response shapes follow the existing ark fixtures) ----------
+const mkArk = (fetch, extra) => createProviders({ ark: { apiKey: 'ak-test', fetch, ...extra } });
+const arkErr = (code, message) => JSON.stringify({ error: { code, message, type: 'BadRequest' } });
+
+test('ark probes: image invalid size counts as ok; key / model / balance errors stay distinct', async () => {
+  const f = mockFetch(400, arkErr('InvalidParameter', 'size is invalid'));
+  assert.deepEqual(await mkArk(f).probe('ark', 'image.generate'), { ok: true, costly: false });
+  assert.equal(f.calls[0].body.size, '1x1');
+  for (const [status, code, msg, want] of [
+    [401, 'AuthenticationError', 'The API key is invalid', ERROR_CODES.INVALID_API_KEY],
+    [404, 'ModelNotOpen', 'model not open', ERROR_CODES.MODEL_NOT_ENABLED],
+    [403, 'AccountOverdueError', 'account overdue', ERROR_CODES.INSUFFICIENT_BALANCE],
+  ]) {
+    await assert.rejects(() => mkArk(mockFetch(status, arkErr(code, msg))).probe('ark', 'image.generate'), (e) => e.code === want);
+  }
+});
+
+test('ark probes: text one-token chat, video lists tasks without creating one', async () => {
+  const t = mockFetch(200, '{"choices":[{"message":{"content":"1"}}]}');
+  assert.deepEqual(await mkArk(t).probe('ark', 'text.stream'), { ok: true, costly: true });
+  assert.match(t.calls[0].url, /\/chat\/completions$/);
+  assert.equal(t.calls[0].body.max_tokens, 1);
+  const v = mockFetch(200, '{"items":[],"total":0}');
+  assert.deepEqual(await mkArk(v).probe('ark', 'video.submit'), { ok: true, costly: false, modelChecked: false });
+  assert.equal(v.calls[0].init.method, 'GET');
+  await assert.rejects(() => mkArk(mockFetch(401, arkErr('AuthenticationError', 'invalid'))).probe('ark', 'video.submit'), (e) => e.code === ERROR_CODES.INVALID_API_KEY);
+});
+
+test('ark tts probe: missing speech credentials fail without a request', async () => {
+  const f = mockFetch(200, '{}');
+  await assert.rejects(() => mkArk(f).probe('ark', 'tts.synthesize'), (e) => e.code === ERROR_CODES.INVALID_API_KEY && /AppID/.test(e.message));
+  assert.equal(f.calls.length, 0);
+});

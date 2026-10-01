@@ -252,9 +252,46 @@ function createArkAdapter(cfg = {}) {
     return { audio: Buffer.from(data.data, 'base64'), format: fmt };
   }
 
+  // ---- C05 connectivity probes (same contract as bailian: resolve {ok, costly} or throw) ------
+  // UNVERIFIED: written without an Ark key. The image probe relies on Ark validating key and model
+  // before the size parameter (true for 百炼, assumed here); the video probe only lists tasks, so it
+  // checks the key but not whether the Seedance model is enabled (modelChecked: false).
+  const probes = {
+    // One-token chat (near zero cost).
+    async 'text.stream'({ model, signal } = {}) {
+      const body = { model: model || 'doubao-seed-1-6-250615', messages: [{ role: 'user', content: '1' }], max_tokens: 1 };
+      await readJson(await request('/chat/completions', { body, signal }));
+      return { ok: true, costly: true };
+    },
+    // Deliberately invalid size: expect 400 InvalidParameter with nothing generated.
+    async 'image.generate'({ model, signal } = {}) {
+      const body = { model: model || 'doubao-seedream-4-0-250828', prompt: '1', size: '1x1', response_format: 'url' };
+      const res = await request('/images/generations', { body, signal });
+      const raw = await res.text();
+      let data = null;
+      try { data = JSON.parse(raw); } catch (_) { /* ignore */ }
+      const e = !res.ok ? mapError(res.status, data || raw) : null;
+      if (e && e.code === ERROR_CODES.INVALID_PARAMS) return { ok: true, costly: false };
+      if (e) throw e;
+      throw new ProviderError(ERROR_CODES.BAD_RESPONSE, '探测请求意外成功', { provider: PROVIDER });
+    },
+    // List one task: confirms the key without creating anything.
+    async 'video.submit'({ signal } = {}) {
+      await readJson(await request('/contents/generations/tasks?page_num=1&page_size=1', { method: 'GET', signal }));
+      return { ok: true, costly: false, modelChecked: false };
+    },
+    // One character of speech (near zero cost); missing AppID / token fails without network.
+    async 'tts.synthesize'({ model, voice, signal } = {}) {
+      await ttsSynthesize({ model, voice, text: '好', signal });
+      return { ok: true, costly: true };
+    },
+  };
+  probes['video.poll'] = probes['video.submit'];
+
   return {
     id: PROVIDER,
     label: '火山方舟',
+    probes,
     capabilities: {
       'text.stream': textStream,
       'image.generate': imageGenerate,
