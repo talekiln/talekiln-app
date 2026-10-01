@@ -94,4 +94,4 @@ async function connectRetry(endpoint, tries = 50, delayMs = 100) {
 
 const { createSupervisor } = require('./supervisor');
 
-module.exports = { connect, connectRetry, RpcError, createSupervisor };
+module.exports = { connect, connectRetry, RpcError, createSupervisor, ...require('./ffmpeg-provision') };

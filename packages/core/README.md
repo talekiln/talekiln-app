@@ -205,4 +205,8 @@ await sup.stop();             // 关连接 -> SIGTERM（Windows 为终止进程�
 - 重启后 RPC 连接会重建，进行中的调用以 `connection closed` 失败，渲染任务需由上层按 `jobId` 重新发起。
 - 测试：`client/supervisor.test.js`（假子进程 + 假连接）、`client/supervisor.integration.test.js`（真实二进制，强杀后恢复）。
 
+## ffmpeg 供应
+
+`client/ffmpeg-provision.js`：`provision({ appDataDir, baseUrl? })` 把 LGPL 构建的 ffmpeg/ffprobe 下载到 `<appDataDir>/ffmpeg/<版本>/`，按 `ffmpeg-manifest.json` 里固定的 SHA-256 校验，支持断点续传，不一致即拒绝；返回目录用作 `LYCORE_FFMPEG_DIR`。默认下载地址是占位值，须由 `baseUrl` 或环境变量 `LYCORE_FFMPEG_BASE_URL` 配置；清单现为 TODO 占位，填入真实值前会直接拒绝。LGPL 合规与声明文本见 `docs/ffmpeg-lgpl.md`。测试：`client/ffmpeg-provision.test.js`。
+
 解析器的单元测试使用 `src/fixtures/` 下的 ffprobe/ffmpeg 输出样本。
