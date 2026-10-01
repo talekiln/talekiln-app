@@ -173,6 +173,7 @@ Node { id, type, params, legacy_id? }
 - 整集重建：`POST /episodes/:id/storyboards`（生成分镜，整体替换）、`scriptgen` 的 createProject、`dramaImport`/`novelImport`、`PUT /dramas/:id/episodes`（改 `script_content`）；
 - 时间线：`PUT /timelines/:id`、`POST /timelines/:id/clips`、`PATCH /timelines/:id/clips/:clip_id`、`POST /timelines/episode/:id/assemble`、`POST /timelines/:id/music`（F02/F05 编辑器）；
 - 生成结果落库：图片/视频/配音流程直接写 `storyboards.video_url / local_path / image_url / *_audio_local_path / status`，工作台 `adopt-video` 写 `adopted_video_id`。这些应改为 `recordGeneration`（新增版本并采用）；在此之前物化对 `video_url` 只增不清，不会抹掉旧流程写入的视频，但图里看不到它；
+  - **I1 已处理（图片/视频）**：经队列的出图/出视频任务成功后由 `generation/service.js` 在一次 commit 里 `addVersion + adoptVersion`（cacheKey 取建任务时的值），物化 `video_url / local_path / image_url / status`；旧的同步 `/videos`、`/images` 路由仍直接写旧列（界面默认不再调用，`generation.legacy_enabled` 默认关）。配音（narration）与工作台 `adopt-video` 仍未接。
 - `episodes.script_content` 不由物化写回（剧本行改动只在图里）。
 
 ### 10.6 已知取舍
