@@ -92,4 +92,6 @@ async function connectRetry(endpoint, tries = 50, delayMs = 100) {
   throw last;
 }
 
-module.exports = { connect, connectRetry, RpcError };
+const { createSupervisor } = require('./supervisor');
+
+module.exports = { connect, connectRetry, RpcError, createSupervisor };
