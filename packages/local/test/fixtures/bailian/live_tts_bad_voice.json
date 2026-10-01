@@ -1,0 +1,1 @@
+[{"header": {"task_id": "c5494ebc", "task_uuid": "2d876e41686a43c59f212bc2d5983b03", "event": "task-started", "attributes": {}}, "payload": {}}, {"header": {"task_id": "c5494ebc", "event": "task-failed", "error_code": "InvalidParameter", "error_message": "[cosyvoice:]Engine return error code: 418"}, "payload": {}}]
