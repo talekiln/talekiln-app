@@ -354,6 +354,8 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
   const kernelRoutes = require('./kernel')(db, log);
   r.get('/episodes/:id/graph', kernelRoutes.getGraph);
   r.get('/episodes/:id/views/:view', kernelRoutes.getView);
+  r.get('/episodes/:id/history', kernelRoutes.getHistory);
+  r.get('/episodes/:id/versions', kernelRoutes.getVersions);
   r.post('/episodes/:id/tx', kernelRoutes.postTx);
   r.post('/episodes/:id/intent', kernelRoutes.postIntent);
   r.post('/episodes/:id/undo', kernelRoutes.postUndo);

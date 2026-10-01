@@ -5,6 +5,8 @@
 
 export const SCOPE_TIMELINE = 'timeline'
 export const SCOPE_WORKBENCH = 'workbench'
+/** 全局动作（命令面板等）：任何页面都生效，所以与其它作用域的同一组合键也算冲突 */
+export const SCOPE_GLOBAL = 'global'
 export const STORAGE_KEY = 'talekiln.keymap.v1'
 
 /**
@@ -12,6 +14,7 @@ export const STORAGE_KEY = 'talekiln.keymap.v1'
  * Ctrl+滚轮缩放属于鼠标手势，不在此映射（由编辑器直接处理）。
  */
 export const ACTIONS = [
+  { id: 'palette.open', scope: SCOPE_GLOBAL, label: '打开命令面板', keys: ['Ctrl+K'] },
   { id: 'play.toggle', scope: SCOPE_TIMELINE, label: '播放 / 暂停', keys: ['Space'] },
   { id: 'clip.split', scope: SCOPE_TIMELINE, label: '切分片段', keys: ['S'] },
   { id: 'clip.delete', scope: SCOPE_TIMELINE, label: '删除片段', keys: ['Delete', 'Backspace'] },
@@ -112,15 +115,24 @@ export function buildKeymap(overrides = {}, actions = ACTIONS) {
  * 返回 [{ combo, scope, actions: [id,...] }]
  */
 export function findConflicts(keymap, actions = ACTIONS) {
-  const seen = new Map()
+  const byCombo = new Map()
   for (const a of actions) {
     for (const c of keymap[a.id] || []) {
-      const k = `${a.scope}\u0000${c}`
-      if (!seen.has(k)) seen.set(k, { combo: c, scope: a.scope, actions: [] })
-      seen.get(k).actions.push(a.id)
+      if (!byCombo.has(c)) byCombo.set(c, [])
+      byCombo.get(c).push(a)
     }
   }
-  return [...seen.values()].filter((x) => x.actions.length > 1)
+  const out = []
+  for (const [combo, list] of byCombo) {
+    if (list.length < 2) continue
+    const globals = list.filter((a) => a.scope === SCOPE_GLOBAL)
+    const scopes = [...new Set(list.filter((a) => a.scope !== SCOPE_GLOBAL).map((a) => a.scope))]
+    for (const scope of scopes.length ? scopes : [SCOPE_GLOBAL]) {
+      const hit = [...list.filter((a) => a.scope === scope), ...(scope === SCOPE_GLOBAL ? [] : globals)]
+      if (hit.length > 1) out.push({ combo, scope, actions: hit.map((a) => a.id) })
+    }
+  }
+  return out
 }
 
 /** 若给 actionId 绑定 combo，会与哪些动作冲突（同作用域、不含自身） */
@@ -128,7 +140,9 @@ export function conflictsFor(keymap, actionId, combo, actions = ACTIONS) {
   const c = normalizeCombo(combo)
   const self = actions.find((a) => a.id === actionId)
   if (!self || !c) return []
-  return actions.filter((a) => a.id !== actionId && a.scope === self.scope && (keymap[a.id] || []).includes(c)).map((a) => a.id)
+  return actions
+    .filter((a) => a.id !== actionId && (a.scope === self.scope || a.scope === SCOPE_GLOBAL || self.scope === SCOPE_GLOBAL) && (keymap[a.id] || []).includes(c))
+    .map((a) => a.id)
 }
 
 /** 由键盘事件（或组合键字符串）解析动作 id（限定作用域），无匹配返回 null */
@@ -141,7 +155,7 @@ export function resolveAction(keymap, e, scopes = [SCOPE_TIMELINE], actions = AC
   return null
 }
 
-/** 只保留与默认值不同的覆盖项，避免默认键位升级后被旧存储固化 */
+/** 只保留与默认值（actions 里的 keys，预设时为预设键位）不同的覆盖项，避免默认键位升级后被旧存储固化 */
 export function diffOverrides(keymap, actions = ACTIONS) {
   const out = {}
   for (const a of actions) {

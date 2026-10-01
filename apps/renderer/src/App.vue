@@ -1,6 +1,8 @@
 <template>
   <div class="app">
     <router-view />
+    <CommandPalette />
+    <VersionHistoryDrawer />
   </div>
 </template>
 
@@ -9,6 +11,8 @@ import { onBeforeUnmount, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAccountStore } from '@/stores/account'
 import { routeDecision } from '@/utils/account'
+import CommandPalette from '@/components/CommandPalette.vue'
+import VersionHistoryDrawer from '@/components/VersionHistoryDrawer.vue'
 
 // 后台定期同步登录/授权状态；会话失效或授权过期且开启门禁时回到登录页
 const router = useRouter()
