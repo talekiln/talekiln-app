@@ -4,6 +4,9 @@ export const imagesAPI = {
   list(params) {
     return request.get('/images', { params: params || {} })
   },
+  get(id) {
+    return request.get(`/images/${id}`)
+  },
   create(data) {
     return request.post('/images', data)
   },
