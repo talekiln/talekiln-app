@@ -1,0 +1,30 @@
+name: Bailian live check
+on:
+  workflow_dispatch:
+    inputs:
+      capabilities:
+        description: 'text,image,tts,video（video 会产生较高费用）'
+        default: 'text,image,tts'
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run live check
+        working-directory: packages/local
+        env:
+          BAILIAN_API_KEY: ${{ secrets.BAILIAN_API_KEY }}
+          BAILIAN_BASE_URL: ${{ secrets.BAILIAN_BASE_URL }}
+        run: node scripts/bailian-live.js "${{ inputs.capabilities }}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bailian-live-result
+          path: packages/local/bailian-live-result.json
+          if-no-files-found: ignore
