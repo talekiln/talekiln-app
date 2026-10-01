@@ -21,6 +21,7 @@ const assetRoutes = require('./assets');
 const audioRoutes = require('./audio');
 const promptOverridesRoutes = require('./promptOverrides');
 const sceneModelMapRoutes = require('./sceneModelMap');
+const timelineRoutes = require('./timelines');
 
 function setupRouter(cfg, db, log) {
   const r = express.Router();
@@ -316,6 +317,14 @@ function setupRouter(cfg, db, log) {
   r.get('/scene-model-map/:key', sceneModelMap.get);
   r.put('/scene-model-map/:key', sceneModelMap.update);
   r.delete('/scene-model-map/:key', sceneModelMap.delete);
+
+  // ---------- timelines ----------
+  const timelines = timelineRoutes(db, log);
+  r.get('/timelines/episode/:episode_id', timelines.getByEpisode);
+  r.post('/timelines/episode/:episode_id/assemble', timelines.assemble);
+  r.put('/timelines/:id', timelines.save);
+  r.post('/timelines/:id/clips', timelines.addClip);
+  r.patch('/timelines/:id/clips/:clip_id', timelines.patchClip);
 
   // 启动时将已有的覆盖加载到 promptI18n 内存缓存
   try {
