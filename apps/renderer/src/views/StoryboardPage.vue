@@ -14,6 +14,7 @@
         data-test="save-indicator"
         @click="saveState === 'error' && retry()"
       >{{ saveStateText(saveState) }}</el-tag>
+      <el-button plain @click="$router.push(`/project/${$route.params.dramaId}/library`)">角色与场景库</el-button>
       <el-button type="primary" plain :loading="adding" @click="addRow">
         <el-icon><Plus /></el-icon>添加镜头
       </el-button>
@@ -50,8 +51,9 @@
           <el-tag size="small" :type="row.status === 'completed' ? 'success' : row.status === 'failed' ? 'danger' : 'info'">{{ statusLabel(row.status) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="150" align="center">
+      <el-table-column label="操作" width="210" align="center">
         <template #default="{ row, $index }">
+          <el-button link type="primary" @click="$router.push(`/project/${$route.params.dramaId}/shot/${row.id}`)">工作台</el-button>
           <el-button link :disabled="$index === 0" title="上移" @click="move($index, $index - 1)"><el-icon><ArrowUp /></el-icon></el-button>
           <el-button link :disabled="$index === rows.length - 1" title="下移" @click="move($index, $index + 1)"><el-icon><ArrowDown /></el-icon></el-button>
           <el-button link type="danger" title="删除" @click="removeShot(row)"><el-icon><Delete /></el-icon></el-button>

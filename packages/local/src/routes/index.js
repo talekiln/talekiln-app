@@ -23,6 +23,7 @@ const promptOverridesRoutes = require('./promptOverrides');
 const sceneModelMapRoutes = require('./sceneModelMap');
 const timelineRoutes = require('./timelines');
 const scriptgenRoutes = require('./scriptgen');
+const workbenchRoutes = require('./workbench');
 
 function setupRouter(cfg, db, log, aiQueue) {
   const r = express.Router();
@@ -50,6 +51,7 @@ function setupRouter(cfg, db, log, aiQueue) {
   const audio = audioRoutes(db, log, cfg);
   const promptOverrides = promptOverridesRoutes.routes(db, log);
   const scriptgen = scriptgenRoutes(db, log);
+  const workbench = workbenchRoutes(db, log);
 
   // ---------- dramas ----------
   r.get('/dramas', drama.listDramas);
@@ -250,6 +252,13 @@ function setupRouter(cfg, db, log, aiQueue) {
   r.post('/images/upload', images.upload);
   r.get('/images/:id', images.get);
   r.delete('/images/:id', images.delete);
+
+  // ---------- reference locks / shot workbench ----------
+  r.get('/reference-locks', workbench.listLocks);
+  r.put('/reference-locks/:type/:id', workbench.setLock);
+  r.delete('/reference-locks/:type/:id', workbench.clearLock);
+  r.get('/storyboards/:id/video-candidates', workbench.candidates);
+  r.post('/storyboards/:id/adopt-video', workbench.adopt);
 
   // ---------- videos ----------
   r.get('/videos', videos.list);

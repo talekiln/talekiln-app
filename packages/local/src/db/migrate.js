@@ -132,6 +132,7 @@ function ensureAllColumns(database) {
 
   // --- storyboards ---
   ensureColumns(database, 'storyboards', [
+    { name: 'adopted_video_id', type: 'INTEGER' },
     { name: 'episode_id',        type: 'INTEGER DEFAULT 0' },
     { name: 'scene_id',          type: 'INTEGER' },
     { name: 'storyboard_number', type: 'INTEGER DEFAULT 0' },
