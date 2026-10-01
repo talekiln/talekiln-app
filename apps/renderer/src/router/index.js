@@ -82,6 +82,12 @@ const router = createRouter({
       meta: { title: '任务中心' }
     },
     {
+      path: '/spend',
+      name: 'spend',
+      component: () => import('@/views/SpendPage.vue'),
+      meta: { title: '花费统计' }
+    },
+    {
       path: '/media-library',
       name: 'media-library',
       component: () => import('@/views/MediaLibrary.vue'),
