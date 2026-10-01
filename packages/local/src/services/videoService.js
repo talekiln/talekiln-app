@@ -88,6 +88,7 @@ const { spawnSync } = require('child_process');
 const { randomUUID } = require('crypto');
 const videoClient = require('./videoClient');
 const taskService = require('./taskService');
+const referenceLockService = require('./referenceLockService');
 const storageLayout = require('./storageLayout');
 const { getFfmpegPath, hasLocalFfmpeg } = require('../utils/ffmpegPath');
 
@@ -241,7 +242,8 @@ async function finalizeSuccessfulVideo(db, log, videoGenId, row, rowForAspect, v
   }
   if (row.storyboard_id) {
     try {
-      db.prepare('UPDATE storyboards SET video_url = ?, local_path = ?, updated_at = ? WHERE id = ?').run(
+      // 已采用某候选后，新生成的候选不覆盖镜头当前视频（需手动采用）
+      db.prepare('UPDATE storyboards SET video_url = ?, local_path = ?, updated_at = ? WHERE id = ? AND adopted_video_id IS NULL').run(
         videoUrl, localPath, now, row.storyboard_id
       );
       log.info('Updated storyboard video' + (logLabel ? ` (${logLabel})` : ''), {
@@ -437,6 +439,31 @@ function resumeProcessingVideoGenerations(db, log) {
   }
 }
 
+/** 组装 callVideoApi 入参（纯函数，便于测试）。显式全能参考图时丢弃首尾帧；仅锁定参考图时保留首尾帧。 */
+function buildVideoRequestOpts(row, ctx) {
+  const omni = !!ctx.explicitOmni;
+  return {
+    prompt: row.prompt,
+    model: row.model,
+    duration: ctx.effectiveDuration,
+    aspect_ratio: ctx.aspectRatio,
+    resolution: row.resolution,
+    seed: row.seed,
+    camera_fixed: row.camera_fixed,
+    watermark: row.watermark,
+    provider: row.provider,
+    drama_id: row.drama_id,
+    storyboard_id: row.storyboard_id || undefined,
+    image_url: omni ? undefined : row.image_url,
+    first_frame_url: omni ? undefined : row.first_frame_url,
+    last_frame_url: omni ? undefined : row.last_frame_url,
+    reference_urls: ctx.reference_urls,
+    files_base_url: ctx.filesBaseUrl,
+    storage_local_path: ctx.storageLocalPath,
+    video_gen_id: ctx.videoGenId,
+  };
+}
+
 async function processVideoGeneration(db, log, videoGenId) {
   if (activeVideoPolls.has(videoGenId)) {
     log.info('Video generation already in progress, skip duplicate', { videoGenId });
@@ -465,13 +492,12 @@ async function processVideoGeneration(db, log, videoGenId) {
       if (row.task_id) taskService.updateTaskError(db, row.task_id, '未配置视频模型');
       return;
     }
-    let reference_urls = null;
-    if (row.reference_image_urls) {
-      try {
-        reference_urls = JSON.parse(row.reference_image_urls);
-        if (!Array.isArray(reference_urls)) reference_urls = null;
-      } catch (_) {}
-    }
+    // 镜头涉及的角色/场景若已「锁定」参考图，自动并入参考图（P1-07）
+    let lockedRefs = [];
+    try { lockedRefs = referenceLockService.collectLockedRefsForStoryboard(db, row.storyboard_id); } catch (_) {}
+    const refMerge = referenceLockService.mergeLockedReferences(row, lockedRefs);
+    const reference_urls = refMerge.reference_urls;
+    if (lockedRefs.length) log.info('已注入锁定参考图', { videoGenId, storyboard_id: row.storyboard_id, count: lockedRefs.length });
     // 优先使用分镜自身的镜头时长（storyboard.duration），其次用 video_generations.duration
     let effectiveDuration = row.duration || null;
     if (row.storyboard_id) {
@@ -499,7 +525,7 @@ async function processVideoGeneration(db, log, videoGenId) {
       } catch (_) {}
     }
     const rowForAspect = { ...row, aspect_ratio: aspectForVideo || row.aspect_ratio };
-    const hasOmniRefs = !!(reference_urls && reference_urls.length > 0);
+    const hasOmniRefs = refMerge.explicitOmni;
     if (row.task_id && hasOmniRefs) {
       taskService.updateTaskStatus(
         db,
@@ -509,26 +535,15 @@ async function processVideoGeneration(db, log, videoGenId) {
         `正在上传 ${reference_urls.length} 张参考图到图床…`
       );
     }
-    const result = await videoClient.callVideoApi(db, log, {
-      prompt: row.prompt,
-      model: row.model,
-      duration: effectiveDuration,
-      aspect_ratio: rowForAspect.aspect_ratio,
-      resolution: row.resolution,
-      seed: row.seed,
-      camera_fixed: row.camera_fixed,
-      watermark: row.watermark,
-      provider: row.provider,
-      drama_id: row.drama_id,
-      storyboard_id: row.storyboard_id || undefined,
-      image_url: hasOmniRefs ? undefined : row.image_url,
-      first_frame_url: hasOmniRefs ? undefined : row.first_frame_url,
-      last_frame_url: hasOmniRefs ? undefined : row.last_frame_url,
+    const result = await videoClient.callVideoApi(db, log, buildVideoRequestOpts(row, {
+      effectiveDuration,
+      aspectRatio: rowForAspect.aspect_ratio,
       reference_urls,
-      files_base_url: filesBaseUrl,
-      storage_local_path: storageLocalPath,
-      video_gen_id: videoGenId,
-    });
+      explicitOmni: hasOmniRefs,
+      filesBaseUrl,
+      storageLocalPath,
+      videoGenId,
+    }));
     const now2 = new Date().toISOString();
     if (result.error) {
       setVideoGenFailed(db, videoGenId, result.error, now2);
@@ -572,7 +587,33 @@ function deleteById(db, log, id) {
   return result.changes > 0;
 }
 
+/** 镜头的候选视频：最近 4 条（按创建顺序 V1..V4），含当前采用的视频 id。 */
+function listCandidates(db, storyboardId, limit = 4) {
+  const sb = db.prepare('SELECT adopted_video_id FROM storyboards WHERE id = ? AND deleted_at IS NULL').get(Number(storyboardId));
+  if (!sb) return null;
+  const rows = db.prepare(
+    'SELECT * FROM video_generations WHERE storyboard_id = ? AND deleted_at IS NULL ORDER BY id DESC LIMIT ?'
+  ).all(Number(storyboardId), limit).reverse();
+  return {
+    adopted_video_id: sb.adopted_video_id ?? null,
+    items: rows.map((r, i) => ({ ...rowToItem(r), slot: i + 1, label: 'V' + (i + 1), adopted: r.id === sb.adopted_video_id })),
+  };
+}
+
+/** 采用候选：写入 storyboards.adopted_video_id 并同步 video_url/local_path。 */
+function adoptCandidate(db, storyboardId, videoGenId) {
+  const row = db.prepare('SELECT * FROM video_generations WHERE id = ? AND deleted_at IS NULL').get(Number(videoGenId));
+  if (!row || Number(row.storyboard_id) !== Number(storyboardId)) return { ok: false, status: 404, error: '候选视频不存在' };
+  if (row.status !== 'completed' || !(row.video_url || row.local_path)) return { ok: false, status: 400, error: '候选视频尚未生成完成' };
+  db.prepare('UPDATE storyboards SET adopted_video_id = ?, video_url = ?, local_path = ?, updated_at = ? WHERE id = ?')
+    .run(row.id, row.video_url, row.local_path, new Date().toISOString(), Number(storyboardId));
+  return { ok: true, ...listCandidates(db, storyboardId) };
+}
+
 module.exports = {
+  buildVideoRequestOpts,
+  listCandidates,
+  adoptCandidate,
   list,
   getById,
   deleteById,
