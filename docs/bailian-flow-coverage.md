@@ -17,7 +17,7 @@
 
 Jay 在本机 Windows 用真 Key 跑 `scripts/bailian-e2e.mjs`（结果见 `windows-test-results/2026-10-01.md`）：故事->脚本分镜、角色参考图、带参考图的首帧图、CosyVoice 旁白（逐字时间戳 3/3）、文生视频（真实下载 5.77MB）、首帧生视频 x2、回写分镜、时间线+字幕、lycore 导出（final.mp4，15.02 秒）全部通过。估算花费 4.605 元（示例价，以百炼账单为准）。
 
-据此，下面各表里这几项已升级为“真实验证（Windows）”：真实 `video_url` 下载、首帧图带角色参考图的链路、导出（Windows 管道 + lycore，QSV 编码）。仍未验证：`data:` URI 作参考图/首帧、其他音色、`wan2.6-i2v-flash`/`wan2.6-r2v-flash`、桌面主进程拉起 lycore（脚本里是单独起的）、托盘/通知。注意这是脚本粘合出来的链路，界面按钮走的仍是旧路径（见上文）。
+据此，下面各表里这几项已升级为“真实验证（Windows）”：真实 `video_url` 下载、首帧图带角色参考图的链路、导出（Windows 管道 + lycore，QSV 编码）。仍未验证：`data:` URI 作参考图/首帧、其他音色、`wan2.6-i2v-flash`/`wan2.6-r2v-flash`、~~桌面主进程拉起 lycore~~（已接入，见 Task 1）、托盘/通知。注意这是脚本粘合出来的链路，界面按钮走的仍是旧路径（见上文）。
 
 ## 逐步骤覆盖表
 
@@ -32,7 +32,7 @@ Jay 在本机 Windows 用真 Key 跑 `scripts/bailian-e2e.mjs`（结果见 `wind
 | 7 | 字幕 | `subtitles/index.js`（`splitCues`：按逐字时间戳切分，吸附到整帧；SRT/ASS 输出）；时间线字幕轨 | 逐字时间戳来自真实 CosyVoice；字幕与语音误差 <= 1 帧（2 条真实配音） | 渲染端烧录字幕靠 lycore + libass，Linux 上用合成素材验证 | ~~应用里没有任何地方生成按词对齐的字幕~~（I2 已修：配音写回时把 splitCues 的字幕块存进旁白版本，timelineView 在旁白新鲜时按块出字幕，台词一改退回整镜文字字幕）。旧说明：`assembleFromStoryboard` 只按分镜 `dialogue` 文本生成覆盖整镜的字幕块。词级字幕要靠 `voiceShots` + `splitCues`，目前只有 e2e 脚本把它写进时间线。字幕样式（字体、位置）无界面 |
 | 8 | 时间线 | `timeline/service.js`（四轨模型、校验、`assembleFromStoryboard`、切分/裁剪）；`routes/timelines.js`；编辑器 `TimelineEditor.vue` | 无（纯本地逻辑，不涉及百炼） | 单测齐全；与真实 lycore 联测用的是合成素材，没用百炼产出的视频 | ~~装配时镜头时长取分镜的 `duration`~~（I2 已修：内核投影读视频采用版本 `metadata.duration_ms`，没有再退回目标时长；`timeline/kernelAssemble.js` 供旧装配路由改调）。旧说明：百炼视频固定约 5 秒，而分镜常是 6-10 秒，装配出来的片段会超出素材长度（e2e 脚本把 `duration` 改成 5 来规避）。`asset_ref` 必须是本地文件，百炼返回的网络地址要先下载，否则导出报“是网络地址”。编辑器缺波形、缩略图、旁白/音乐播放（F03 已知缺口） |
 | 9 | 背景音乐 | `music/`（音乐库：用户导入 + 程序合成的示例配乐）；`POST /timelines/:id/music`；混音（压低、响度）写入时间线 | **百炼没有音乐生成能力**，不存在百炼来源 | 导入、铺满、压低、响度在 Linux 真 lycore + ffmpeg 上验证 | 只能用户自己导入；示例配乐是占位。e2e 脚本不含音乐 |
-| 10 | 导出 | `export/service.js` -> lycore `render.start`（场景缓存、AIGC 水印与元数据）；`/export/*`；`ExportPage.vue` | 无（纯本地） | Linux 真 lycore + 真 ffmpeg 联测通过（合成素材）；本次新增的 e2e 模拟测试也用真 lycore 导出了 3 段素材拼出的成片 | **桌面主进程还没有启动 lycore，也没设 `LYCORE_ENDPOINT`，打包后的应用点导出会提示“渲染核心未启动”**（G06 已知缺口）。Windows 管道、硬件编码器、取消需 Windows 真机 |
+| 10 | 导出 | `export/service.js` -> lycore `render.start`（场景缓存、AIGC 水印与元数据）；`/export/*`；`ExportPage.vue` | 无（纯本地） | Linux 真 lycore + 真 ffmpeg 联测通过（合成素材）；本次新增的 e2e 模拟测试也用真 lycore 导出了 3 段素材拼出的成片 | 桌面主进程已拉起 lycore 并设置 `LYCORE_ENDPOINT`，ffmpeg 随包内置；打包版经接口实测导出成功。Windows 管道、硬件编码器、取消需 Windows 真机 |
 | 横切 | 花费守卫与估算 | `spend/index.js`；`/ai-tasks` 创建时 `check`，队列提交时再 `guardTask`；`SpendPage.vue` | 价格表里的模型名与真实验证过的模型一致 | 守卫的上限逻辑有完整单测 | 价格表是**示例价**。`spend_log.actual` 永远为空：任务结果里的用量（视频计费时长、配音字数）被丢弃，实测花费只能是估算。旧的同步出图/出视频不过守卫。界面没有“提交前花费确认”弹窗，`/spend/estimate` 没人调 |
 | 横切 | 错误映射 | `providers/bailian` 的 `mapError`；`providers/errors.js` | 无效 Key（含 WebSocket 握手无状态码，靠探测 `/models` 区分）、模型不存在、任务级失败 | 余额不足、模型未开通的错误字符串按公开文档匹配，当前 Key 无法触发 | — |
 | 横切 | 连通测试与向导 | `providers.probe`（C05，百炼已真实验证，图像、视频零费用）；向导 `Onboarding.vue` + `onboardingService` | 探测本身已真实验证 | 向导的“连通测试”调的是旧的 `aiConfigService.testConnection`，不是 `providers.probe`，所以真 Key 联通未验证 | 向导只创建一份文本配置；图像/视频/配音依赖队列的“同一 Key 复用”才能工作，旧路径仍需手动加配置 |
@@ -50,7 +50,7 @@ Jay 在本机 Windows 用真 Key 跑 `scripts/bailian-e2e.mjs`（结果见 `wind
 | 7 字幕 | 逐字时间戳切分（2 条真实配音） | libass 烧录（合成素材） | 应用内不生成词级字幕 |
 | 8 时间线 | — | 全部（本地逻辑） | 装配时长与视频实际时长不一致 |
 | 9 背景音乐 | — | 导入/混音 | 百炼无来源，只能用户导入 |
-| 10 导出 | Windows 真 lycore 导出 15 秒成片（e2e 脚本里单独起 lycore） | Linux 真 lycore | 桌面主进程还没启动 lycore |
+| 10 导出 | Windows 真 lycore 导出 15 秒成片（e2e 脚本里单独起 lycore） | Linux 真 lycore | 桌面主进程已启动 lycore（打包版接口实测导出通过） |
 
 ## 本次顺手修的小接线问题（均有测试）
 
@@ -70,5 +70,4 @@ Jay 在本机 Windows 用真 Key 跑 `scripts/bailian-e2e.mjs`（结果见 `wind
 - 调用 `voiceShots` + `splitCues`，把词级字幕和旁白音频写进分镜与时间线；装配时用视频实际时长。
 - 把任务结果里的用量写入 `spend_log.actual`。
 - 向导的连通测试改用 `providers.probe`。
-- 桌面主进程启动 lycore（G06）。
 - 真 Key 跑 `scripts/bailian-e2e.mjs`，验证真实视频下载、data URI 首帧、完整导出；跑完把本表“仅夹具”相应项更新为真实验证。

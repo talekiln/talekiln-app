@@ -29,6 +29,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@talekiln/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@talekiln/local':
         specifier: workspace:*
         version: link:../../packages/local

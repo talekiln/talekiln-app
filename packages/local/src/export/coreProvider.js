@@ -6,9 +6,14 @@ const path = require('path');
  * `endpoint` is the pipe / UDS path the desktop shell started lycore with (env LYCORE_ENDPOINT).
  * Returns null when no endpoint is configured, so routes can answer "core not started".
  */
+/** 打包后 @talekiln/core 是 node_modules 里的包；源码树里回退到相对路径。 */
+function loadCoreClient() {
+  try { return require('@talekiln/core'); } catch (_) { return require(path.join(__dirname, '..', '..', '..', 'core', 'client')); }
+}
+
 function createCoreProvider({ endpoint, connect } = {}) {
   if (!endpoint) return null;
-  const doConnect = connect || ((e) => require(path.join(__dirname, '..', '..', '..', 'core', 'client')).connectRetry(e));
+  const doConnect = connect || ((e) => loadCoreClient().connectRetry(e));
   let client = null;
   let pending = null;
 
