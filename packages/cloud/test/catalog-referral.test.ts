@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { compactVerify, importJWK } from 'jose';
-import { createMemoryRepositories } from '../src/domain/memory.repositories';
+import { makeRepos } from './helpers/repos';
 import { CatalogService, DEFAULT_CATALOG, canonicalJson, catalogVersion } from '../src/services/catalog.service';
 import { loadConfig } from '../src/services/config';
 import { LicenceService } from '../src/services/licence.service';
@@ -16,7 +16,7 @@ test('目录：版本是内容哈希，签名可用 JWKS 公钥验证，since �
   const r = await svc.get();
   assert.equal(r.version, catalogVersion(r.catalog));
   assert.equal(r.catalog!.prices.sample, true);
-  const jwk = new LicenceService(createMemoryRepositories(), cfg).jwks().keys[0];
+  const jwk = new LicenceService(await makeRepos(), cfg).jwks().keys[0];
   const { payload } = await compactVerify(r.signature!, await importJWK(jwk, 'ES256'));
   assert.equal(new TextDecoder().decode(payload), r.version);
   assert.deepEqual(await svc.get(r.version), { version: r.version, unchanged: true });
@@ -31,7 +31,7 @@ test('目录：内容变化则版本变化；键序不影响版本；非法目�
 });
 
 test('推广：已知码记录点击并返回配置目标；未知码 404；src 被清洗', async () => {
-  const repos = createMemoryRepositories();
+  const repos = await makeRepos();
   const svc = new ReferralService(loadReferralConfig(env()), repos.referralClicks);
   assert.equal(await svc.resolve('ARK', 'addkey'), 'https://console.volcengine.com/ark');
   assert.equal(await repos.referralClicks.countByCode('ark'), 1);
