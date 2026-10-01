@@ -66,6 +66,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
 
+      # 渲染核心 lycore 与 ffmpeg（LGPL，固定哈希）随安装包内置：resources/lycore/
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release
+        working-directory: packages/core
+      - run: node scripts/fetch-ffmpeg.mjs
+
       # 签名骨架：只有存在证书 Secrets 且不是 PR 时才签名；否则走未签名构建。
       # 机密只经 env 传给下面单个步骤，不 echo、不落盘。见 docs/release-signing.md
       - name: Detect signing secrets

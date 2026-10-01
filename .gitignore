@@ -27,3 +27,4 @@ build_edu
 node_modules
 .claude/worktrees/
 packages/local/data/
+apps/desktop/resources/

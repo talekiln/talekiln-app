@@ -1,0 +1,7 @@
+{
+  "_comment": "随安装包内置的 ffmpeg（LGPL 构建，独立进程调用，不链接）。BtbN 的 autobuild 版本会被定期清理；换版本时更新 url/version/sha256，并同步 docs/ffmpeg-lgpl.md 的声明与 sourceUrl。",
+  "version": "n8.1.3-9-g29e619e767",
+  "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n8.1.3-9-g29e619e767-win64-lgpl-8.1.zip",
+  "sha256": "4a7642b2264c03e8a0ce8a3825b933ee5580656f45695a086fe7e294045ffc0a",
+  "source": "https://github.com/BtbN/FFmpeg-Builds (build scripts); upstream https://ffmpeg.org/releases/"
+}
