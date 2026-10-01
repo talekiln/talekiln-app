@@ -2,7 +2,7 @@
   <div class="onboarding-page" data-test="onboarding">
     <div class="shell">
       <div class="top">
-        <h1 class="brand">本地短剧助手</h1>
+        <h1 class="brand">故事窑</h1>
         <el-button v-if="step !== 'done'" text data-test="skip" @click="skip">跳过，稍后在 AI 配置中设置</el-button>
       </div>
 

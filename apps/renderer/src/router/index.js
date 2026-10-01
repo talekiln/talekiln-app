@@ -146,7 +146,7 @@ const router = createRouter({
 let onboardingChecked = false
 router.beforeEach(async (to) => {
   if (to.meta.title) {
-    document.title = `${to.meta.title} - LocalMiniDrama`
+    document.title = `${to.meta.title} - 故事窑`
   }
   // 登录门禁：仅当本地配置 cloud.require_login 为 true 时生效；状态查不到（本地服务异常）不拦截
   const account = useAccountStore()

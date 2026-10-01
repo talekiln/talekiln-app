@@ -4,8 +4,8 @@
     <header class="header">
       <div class="header-inner">
         <h1 class="logo" @click="goList">
-          <span class="logo-main">本地短剧助手</span>
-          <span class="logo-sub">LocalMiniDrama</span>
+          <span class="logo-main">故事窑</span>
+          <span class="logo-sub">Talekiln</span>
         </h1>
         <span class="breadcrumb-sep">›</span>
         <span class="page-title">{{ dramaId ? (store.drama?.title || '项目') : '新建故事' }}</span>

@@ -3,8 +3,8 @@
     <header class="header">
       <div class="header-inner">
         <h1 class="logo">
-          <span class="logo-main">本地短剧助手</span>
-          <span class="logo-sub">LocalMiniDrama</span>
+          <span class="logo-main">故事窑</span>
+          <span class="logo-sub">Talekiln</span>
         </h1>
         <!-- 公共资源库（左侧，靛紫调） -->
         <div class="header-library">
