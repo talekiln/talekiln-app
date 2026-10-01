@@ -64,6 +64,31 @@ shred -u lic.pem   # 写入 .env 后销毁
 
 客户端需要对应的许可证公钥来校验离线许可证，配置位置见 `docs/auto-update.md` 和 `packages/core` 里 licence 相关说明；私钥一旦丢失或泄露，要换钥并让客户端更新公钥。
 
+## 2.5 大陆机房：Docker Hub 和 npm 都要走镜像
+
+大陆服务器通常连不上 `registry-1.docker.io`（报 `i/o timeout`），npm 官方源和 Prisma 引擎下载也可能很慢或失败。
+
+1. Docker 镜像加速（腾讯云服务器可用其内网镜像；镜像地址会变，以腾讯云当前文档为准，不通就换其他可用的镜像站）：
+
+```bash
+sudo mkdir -p /etc/docker
+sudo tee /etc/docker/daemon.json >/dev/null <<'EOF'
+{ "registry-mirrors": ["https://mirror.ccs.tencentyun.com"] }
+EOF
+sudo systemctl restart docker
+docker pull postgres:16-alpine     # 先单独验证能拉下来
+docker pull node:22-bookworm-slim
+```
+
+2. 构建时走 npm 与 Prisma 镜像：在 `packages/cloud/.env` 里加（只是公开镜像地址，不是密钥）：
+
+```
+NPM_REGISTRY=https://registry.npmmirror.com
+PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
+```
+
+3. 如果 Docker 镜像加速仍然拉不下来：在能访问外网的电脑上 `docker pull` 后 `docker save | gzip` 导出，传到服务器 `docker load`；或者改用服务器自带 apt 装 Postgres（`sudo apt-get install -y postgresql`），compose 里只跑 app，`DATABASE_URL` 指向本机。需要的话告诉我，我给出这种写法。
+
 ## 3. 启动并加 HTTPS
 
 `docker-compose.yml` 里 app 把 3000 端口映射到宿主机所有网卡。部署时改成只绑本机，让反向代理对外：把 `"3000:3000"` 改为 `"127.0.0.1:3000:3000"`。
