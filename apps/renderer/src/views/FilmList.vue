@@ -66,6 +66,17 @@
                   <el-icon><Upload /></el-icon>导入短剧项目
                 </el-button>
               </div>
+              <div class="action-card-example" data-test="sample-block">
+                <div class="example-hint">
+                  <el-icon class="example-hint-icon"><QuestionFilled /></el-icon>
+                  <span class="example-hint-text">还没配 Key？先试试内置示例，离线、不花钱</span>
+                </div>
+                <div class="example-list">
+                  <el-button size="small" class="example-btn" :loading="sampleLoading" data-test="try-sample" @click="onTrySample">
+                    <el-icon><FolderOpened /></el-icon>试试示例项目
+                  </el-button>
+                </div>
+              </div>
               <div v-if="exampleList.length > 0" class="action-card-example">
                 <div class="example-hint">
                   <el-icon class="example-hint-icon"><QuestionFilled /></el-icon>
@@ -361,6 +372,7 @@ import { propLibraryAPI } from '@/api/propLibrary'
 import AIConfigContent from '@/components/AIConfigContent.vue'
 import { uploadAPI } from '@/api/upload'
 import { aiAPI } from '@/api/ai'
+import { seedSampleLocation } from '@/utils/sample'
 import { imagesAPI } from '@/api/images'
 import { taskAPI } from '@/api/task'
 import { getStyleLabel } from '@/constants/styleOptions'
@@ -593,6 +605,17 @@ const exportingId = ref(null)
 const importing = ref(false)
 const importFileInput = ref(null)
 
+const sampleLoading = ref(false)
+async function onTrySample() {
+  sampleLoading.value = true
+  try {
+    router.push(await seedSampleLocation())
+  } catch (e) {
+    ElMessage.error(e.message || '载入示例失败')
+  } finally {
+    sampleLoading.value = false
+  }
+}
 const exampleList = ref([])
 const importingExample = ref(null)
 
