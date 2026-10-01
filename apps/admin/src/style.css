@@ -1,0 +1,17 @@
+html, body, #app { height: 100%; margin: 0; }
+body { font-family: -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #f5f7fa; }
+.page { padding: 20px 24px; }
+.page-title { margin: 0 0 16px; font-size: 18px; font-weight: 600; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 16px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.card { background: #fff; border-radius: 8px; padding: 14px 16px; box-shadow: 0 1px 3px rgba(0, 0, 0, .06); }
+.card .n { font-size: 24px; font-weight: 600; }
+.card .l { color: #909399; font-size: 13px; margin-top: 2px; }
+.section { background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0, 0, 0, .06); }
+.section h3 { margin: 0 0 12px; font-size: 15px; }
+.bar { height: 10px; border-radius: 5px; background: #409eff; min-width: 2px; }
+.bar.fail { background: #f56c6c; }
+.muted { color: #909399; font-size: 13px; }
+.mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
+.login-wrap { height: 100%; display: flex; align-items: center; justify-content: center; }
+.login-card { width: 360px; }

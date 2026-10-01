@@ -38,7 +38,7 @@ export class AuthService {
   async activate(input: { inviteCode: string; email: string; password: string; device?: DeviceInfo }): Promise<AuthResult> {
     const email = normEmail(input.email);
     const invite = await this.repos.invites.findByCode(input.inviteCode.trim());
-    if (!invite) throw new ServiceError('invalid_invite');
+    if (!invite || invite.revokedAt) throw new ServiceError('invalid_invite');
     if (await this.repos.accounts.findByEmail(email)) throw new ServiceError('email_taken');
     let account: Account;
     try {
@@ -62,6 +62,7 @@ export class AuthService {
     // 账号不存在时也做一次哈希比较，降低计时差异
     const ok = await bcrypt.compare(input.password, account?.passwordHash ?? (await this.dummyHash()));
     if (!account || !ok) throw new ServiceError('invalid_credentials');
+    if (account.disabledAt) throw new ServiceError('account_disabled');
     return this.start(account, input.device);
   }
 

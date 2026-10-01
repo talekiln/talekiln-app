@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, Inject, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { z } from 'zod';
-import { AccessGuard, requireAdmin, type AuthedRequest } from './guard';
+import { AccessGuard, type AuthedRequest } from './guard';
 import { AuthService } from '../services/auth.service';
 import { DeviceService } from '../services/device.service';
 import { LicenceService } from '../services/licence.service';
@@ -11,7 +11,6 @@ const password = z.string().min(8).max(200);
 const activateBody = z.object({ inviteCode: z.string().min(1).max(100), email, password, device: device.optional() });
 const loginBody = z.object({ email, password: z.string().min(1).max(200), device: device.optional() });
 const refreshBody = z.object({ refreshToken: z.string().min(1).max(500) });
-const inviteBody = z.object({ plan: z.string().max(50).optional(), expiresInDays: z.number().int().min(1).max(365).optional() });
 
 @Controller()
 export class HealthController {
@@ -52,20 +51,4 @@ export class LicenceController {
 
   @Get('.well-known/licence-jwks.json')
   jwks() { return this.licences.jwks(); }
-}
-
-@Controller('admin')
-@UseGuards(AccessGuard)
-export class AdminController {
-  constructor(@Inject(AuthService) private readonly auth: AuthService) {}
-
-  @Post('invites') async createInvite(@Req() req: AuthedRequest, @Body() b: unknown) {
-    const admin = requireAdmin(req);
-    const i = await this.auth.createInvite(admin.accountId, inviteBody.parse(b ?? {}));
-    return { code: i.code, plan: i.plan, expiresAt: i.expiresAt };
-  }
-  @Get('invites') async listInvites(@Req() req: AuthedRequest) {
-    requireAdmin(req);
-    return this.auth.listInvites();
-  }
 }
