@@ -225,17 +225,31 @@ pub fn plan(params: &Value) -> Result<Value, String> {
             })
             .collect();
         let mut narr_v: Vec<Value> = vec![];
+        let mut narr_d: Vec<Value> = vec![];
         for c in &narr {
             let Some((a, b)) = overlap(c) else { continue };
             let asset = c.raw.get("asset_ref").and_then(|x| x.as_str()).unwrap_or("");
             let (ident, ok) = file_identity(asset, hash_content);
             note_missing(asset, ok);
             let src_in = c.raw.get("src_in_ms").and_then(|x| x.as_i64()).unwrap_or(0) + (a - c.start);
+            let gain = vol_units(c.raw.get("volume")) * ngain / 10000;
+            narr_d.push(json!({
+                "relStartMs": a - s.start, "durMs": b - a, "assetRef": asset, "srcInMs": src_in, "gain": gain,
+            }));
             narr_v.push(json!({
                 "relStartMs": a - s.start, "durMs": b - a, "src": ident,
-                "srcInMs": src_in, "gain": vol_units(c.raw.get("volume")) * ngain / 10000,
+                "srcInMs": src_in, "gain": gain,
             }));
         }
+        // Render inputs (real paths); NOT part of the key.
+        let detail = json!({
+            "video": s.v.map(|(c, src_in)| json!({
+                "assetRef": c.raw.get("asset_ref").cloned().unwrap_or(Value::Null),
+                "assetKind": c.raw.get("asset_kind").cloned().unwrap_or(Value::Null),
+                "srcInMs": src_in, "srcOutMs": src_in + dur, "gain": vkey["gain"],
+            })).unwrap_or(Value::Null),
+            "subtitles": sub_v, "narration": narr_d,
+        });
         let payload = json!({
             "rendererVersion": RENDERER_VERSION, "kind": kind, "durMs": dur, "output": out_key,
             "video": vkey, "subtitles": sub_v, "narration": narr_v,
@@ -249,6 +263,7 @@ pub fn plan(params: &Value) -> Result<Value, String> {
         scenes.push(json!({
             "index": i, "kind": kind, "clipId": clip_id, "startMs": s.start, "durationMs": dur,
             "sceneKey": key, "cacheHit": hit, "cachePath": cache_path.to_string_lossy(),
+            "detail": detail,
         }));
     }
 
