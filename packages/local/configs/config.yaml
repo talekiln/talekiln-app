@@ -46,3 +46,14 @@ image_proxy:
   upload_timeout_seconds: 180
   upload_max_attempts: 2
   # upload_url: https://imageproxy.zhongzhuan.chat/api/upload
+# 持久化 AI 任务队列（worker）：按服务商并发上限、轮询/空闲间隔（毫秒）
+ai_queue:
+  limits:
+    default: 2
+    bailian: 3
+    ark: 3
+  idle_min_ms: 500
+  idle_max_ms: 5000
+  poll_min_ms: 2000
+  poll_max_ms: 30000
+  jitter_ratio: 0.2

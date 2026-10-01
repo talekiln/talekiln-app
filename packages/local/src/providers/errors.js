@@ -40,4 +40,4 @@ class ProviderError extends Error {
   }
 }
 
-module.exports = { ERROR_CODES, ProviderError };
+module.exports = { ERROR_CODES, ProviderError, READABLE };

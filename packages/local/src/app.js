@@ -7,6 +7,24 @@ const { getDb } = require('./db/index.js');
 const { loadConfig } = require('./config/index.js');
 const logger = require('./logger.js');
 const { setupRouter } = require('./routes/index.js');
+const { createAiTaskStore, createAiTaskQueue, createWorker, createDownloader, withDownloads, queueOptionsFromConfig } = require('./queue');
+
+function createAiQueue({ config, db, log, storageRoot, providers, onTaskFinished }) {
+  const store = createAiTaskStore(db);
+  const downloader = createDownloader({ storageDir: storageRoot });
+  const queue = createAiTaskQueue({
+    store,
+    providers: withDownloads(providers, downloader),
+    ...queueOptionsFromConfig(config),
+    hooks: { onRateLimit: (e) => log.warn && log.warn('ai queue rate limited', e) },
+  });
+  const worker = createWorker({
+    queue, store, config,
+    onTaskFinished,
+    onError: (e) => log.error && log.error('ai queue worker', { error: e && e.message }),
+  });
+  return { store, queue, worker, downloader };
+}
 
 function createApp(opts = {}) {
   // 密钥存储由主进程注入；未注入则不可用（拒绝保存 key，绝不降级为明文）
@@ -81,7 +99,10 @@ function createApp(opts = {}) {
     });
   });
 
-  app.use('/api/v1', setupRouter(config, db, log));
+  // 持久化 AI 任务队列 + worker（由 server.js / 桌面主进程调用 aiQueue.worker.start()）
+  const aiQueue = createAiQueue({ config, db, log, storageRoot, providers: opts.queueProviders || {}, onTaskFinished: opts.onTaskFinished });
+
+  app.use('/api/v1', setupRouter(config, db, log, aiQueue));
 
   // 前端静态资源（sxy：web/dist）；Electron 打包时可设 WEB_DIST_PATH
   const webDist = process.env.WEB_DIST_PATH || path.join(process.cwd(), '..', 'frontweb', 'dist');
@@ -129,7 +150,7 @@ function createApp(opts = {}) {
     }
   });
 
-  return { app, config, db };
+  return { app, config, db, aiQueue };
 }
 
 module.exports = { createApp };

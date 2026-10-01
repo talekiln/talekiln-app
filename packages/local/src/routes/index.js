@@ -23,7 +23,7 @@ const promptOverridesRoutes = require('./promptOverrides');
 const sceneModelMapRoutes = require('./sceneModelMap');
 const timelineRoutes = require('./timelines');
 
-function setupRouter(cfg, db, log) {
+function setupRouter(cfg, db, log, aiQueue) {
   const r = express.Router();
   const drama = dramaRoutes(db, cfg, log);
   const task = taskRoutes(db, log);
@@ -334,6 +334,15 @@ function setupRouter(cfg, db, log) {
     promptI18n.loadOverridesIntoCache(saved);
   } catch (e) {
     console.warn('Failed to load prompt overrides:', e.message);
+  }
+
+  // ---------- ai-tasks (task center) ----------
+  if (aiQueue && aiQueue.store) {
+    const aiTasks = require('./aiTasks')(aiQueue.store, log, aiQueue.worker);
+    r.get('/ai-tasks', aiTasks.list);
+    r.get('/ai-tasks/:id', aiTasks.get);
+    r.post('/ai-tasks/:id/retry', aiTasks.retry);
+    r.post('/ai-tasks/:id/cancel', aiTasks.cancel);
   }
 
   return r;
