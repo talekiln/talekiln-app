@@ -34,7 +34,7 @@
               @click="run(r)"
             >
               <span class="cp-title">{{ r.cmd.title }}</span>
-              <span v-if="r.cmd.hint" class="cp-hint">{{ r.cmd.hint }}</span>
+              <span v-if="r.cmd.hint" class="cp-hint">{{ hintText(r.cmd.hint) }}</span>
               <span v-else-if="r.cmd.group" class="cp-tag">{{ r.cmd.group }}</span>
             </li>
           </template>
@@ -54,7 +54,10 @@ import { registry, paletteOpen, closePalette, togglePalette } from '@/composable
 import { openHistory } from '@/composables/useHistoryDrawer'
 import { createBuiltinCommands, createContentProvider } from '@/utils/builtinCommands'
 import { episodeOfRoute } from '@/utils/episodeContext'
-import { resolveAction } from '@/utils/keymap'
+import { resolveAction, formatCombo } from '@/utils/keymap'
+
+// 快捷键提示随平台显示（macOS 上 Ctrl+K 显示为 ⌘K）；不是组合键写法的提示原样输出
+const hintText = (h) => (/^(Ctrl|Alt|Shift)\+/.test(h) ? formatCombo(h) : h)
 
 const route = useRoute()
 const router = useRouter()
