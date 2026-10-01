@@ -163,6 +163,8 @@ Node { id, type, params, legacy_id? }
 | `POST /episodes/:id/intent` | `{view, name, args, tx_id?}`；只放行规格 §3 的 26 个意图（K4 起含 `canvas.setNodeParam`），`setVoice`/`recordGeneration`/`setShotReferences`/`moveNodes` 等未放行 |
 | `POST /episodes/:id/undo`、`/redo` | `{tx_id?}` |
 | `POST /episodes/:id/import-legacy` | 首次 201，已存在 200 |
+| `GET /episodes/:id/versions` | 只读（P2-D）：每个生成类节点的版本列表，含采用标记、是否匹配当前输入（`current`）、产生时间（取自加入该版本的日志，导入版本为 null）、资产与元数据摘要 |
+| `GET /episodes/:id/history?limit=` | 只读（P2-D）：`graph_ops` 日志（新在前，默认 200、最多 1000），每个事务带 `state`（applied / undone / discarded，取自真实撤销栈）与回到该步所需的 `undo_steps` / `redo_steps`，undo/redo 记录本身为 `event` |
 
 返回体为 `{applied, tx_id, seq, invalidated, revalidated, stale, can_undo, can_redo, meta?}`（`meta` 带新建节点 id）。错误：内核错误码原样返回（`INVALID_OP`/`VALIDATION`/`INTENT` → 400，`NOT_FOUND`/`GRAPH_NOT_FOUND` → 404，`NOTHING_TO_UNDO`/`NOTHING_TO_REDO` → 409），均已进错误码表。`addShot` 的 `legacy_id` 参数被丢弃（只由物化分配）。
 
@@ -302,3 +304,12 @@ Node { id, type, params, legacy_id? }
 | gap 是 G02 里独立的“空场景”，不属于任何镜头 | gap 不进镜头键；对照测试显示改 gap 不改任何镜头的两种键 |
 
 对照测试 `kernel/test/sceneKeyG02.test.js`：用真实 `lycore` 二进制（`cargo build` 得到 `packages/core/target/*/lycore`）的 `render.plan`，素材换成内容 = `asset.hash` 的临时文件（`hashContent` 模式）。17 种编辑，两边逐镜头一致：对白文字、对白改动作行、字幕样式、裁剪、切分、改时长、重新生成视频、重新配音 -> 两边都变；音乐、画布移动、转场、镜头标题、生成输入参数、语速参数、镜头重排、改别的镜头的 gap、删别的镜头 -> 两边都不变。没有二进制时只跑按 plan.rs 字段写的 JS 移植；有二进制时还校验该移植与真实 `render.plan` 逐键一致。
+
+## 15. P2-D：命令面板、键位预设、版本历史界面
+
+代码：`apps/renderer/src/{utils/commandRegistry.js,utils/builtinCommands.js,components/CommandPalette.vue}`、`utils/keymapPresets.js`、`components/VersionHistoryDrawer.vue`、`utils/versionHistory.js`；后端只读接口见 §10.4；浏览器检查 `test/e2e/{commandPalette,versionHistory}.e2e.mjs`（`--shots docs/screenshots`）。
+
+- 命令面板：全局组件（App.vue），Ctrl+K 打开（动作 `palette.open`，全局作用域，可改键）。命令来自注册表（`registerCommand` / `registerCommandProvider`，返回卸载函数，同 id 覆盖，预留给插件）；内置命令按当前路由是否在剧集页面显示；镜头与台词行由 provider 按输入搜索（只认子串）。最近使用存 localStorage（最多 8 条）。
+- 键位：全局作用域动作与任意作用域的同一组合键算冲突；预设 = 对默认（剪映）键位的整体替换表，自定义是预设之上的覆盖项；导出 / 导入 JSON（`format: talekiln-keymap`）。Premiere 预设里切分是 Ctrl+K，所以命令面板在该预设下改为 Ctrl+Shift+P。
+- 版本历史（顶栏“历史”按钮或命令面板打开的抽屉）：节点版本页列出版本并可采用；操作历史页列出 `graph_ops` 并可回到 / 恢复到某一步。**写入路径**：采用版本 = `POST /tx` 的 `adoptVersion` op（内核已有，REST 白名单里没有对应意图，所以没有新增意图或写入旁路；一步可撤销）；回到 / 恢复 = 连续调用现有 `undo` / `redo`。
+- 局限：版本没有“预览视频”；缩略图只有图片版本；历史只显示最近 200 条日志；撤销栈最多保留 200 步（更早的步骤标为已被覆盖，不可跳转）；macOS 上 Ctrl 与 ⌘ 视同一个键（沿用 keymap.js 既有约定），未在真机验证。
