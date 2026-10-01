@@ -878,7 +878,7 @@ input_reference = (图片文件，可选)</pre>
         <div class="one-key-section">
           <div class="one-key-section-title">🔑 如何申请 API Key</div>
           <ol class="one-key-list">
-            <li>前往阿里云百炼控制台：<a href="https://bailian.console.aliyun.com/" target="_blank" class="one-key-link">bailian.console.aliyun.com</a></li>
+            <li>前往阿里云百炼控制台：<a href="https://bailian.console.aliyun.com/" target="_blank" @click.prevent="openKeyPage('bailian')" class="one-key-link">bailian.console.aliyun.com</a></li>
             <li>注册/登录阿里云账号，开通「百炼」服务（新用户有免费额度）</li>
             <li>左侧菜单点击「API Key」→「创建 API Key」</li>
             <li>复制生成的 Key（格式：<code>sk-xxxxxxxx</code>）填入下方</li>
@@ -926,7 +926,7 @@ input_reference = (图片文件，可选)</pre>
         <div class="one-key-section">
           <div class="one-key-section-title">🔑 如何申请 API Key</div>
           <ol class="one-key-list">
-            <li>前往火山引擎方舟控制台：<a href="https://console.volcengine.com/ark" target="_blank" class="one-key-link">console.volcengine.com/ark</a></li>
+            <li>前往火山引擎方舟控制台：<a href="https://console.volcengine.com/ark" target="_blank" @click.prevent="openKeyPage('ark')" class="one-key-link">console.volcengine.com/ark</a></li>
             <li>注册/登录字节跳动火山引擎账号（新用户有免费 token 额度）</li>
             <li>左侧菜单点击「API Key 管理」→「创建 API Key」</li>
             <li>复制生成的 Key 填入下方</li>
@@ -975,7 +975,7 @@ input_reference = (图片文件，可选)</pre>
         <div class="one-key-section">
           <div class="one-key-section-title">🔑 如何申请 API Key</div>
           <ol class="one-key-list">
-            <li>前往 Agnes 平台：<a href="https://platform.agnes-ai.com/settings/apiKeys" target="_blank" class="one-key-link">platform.agnes-ai.com/settings/apiKeys</a></li>
+            <li>前往 Agnes 平台：<a href="https://platform.agnes-ai.com/settings/apiKeys" target="_blank" @click.prevent="openKeyPage('agnes')" class="one-key-link">platform.agnes-ai.com/settings/apiKeys</a></li>
             <li>注册/登录账号，进入 Settings → API Keys</li>
             <li>点击「Create new secret key」创建密钥</li>
             <li>复制 Key 填入下方</li>
@@ -1100,6 +1100,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, MagicStick, QuestionFilled, Download, Upload, Delete, ChatDotRound, Picture, Film, VideoCamera, Key, Microphone, Folder } from '@element-plus/icons-vue'
 import { aiAPI } from '@/api/ai'
 import { generationSettingsAPI } from '@/api/prompts'
+import { openKeyPage } from '@/utils/referral'
 import PromptEditor from '@/components/PromptEditor.vue'
 import SceneModelMap from '@/components/SceneModelMap.vue'
 import Sd2AssetManagement from '@/components/Sd2AssetManagement.vue'
