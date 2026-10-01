@@ -85,10 +85,3 @@ export function validateCatalog(list) {
   return null
 }
 
-export function validateAnnouncements(list) {
-  for (const [i, a] of list.entries()) {
-    if (!a.title || !a.title.trim()) return `第 ${i + 1} 条：标题不能为空`
-    if ((a.body || '').length > 2000) return `第 ${i + 1} 条：正文不能超过 2000 字`
-  }
-  return null
-}

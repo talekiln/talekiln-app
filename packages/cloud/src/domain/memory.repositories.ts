@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type {
+  AdminAuditRecord, AdminRoleRecord, AnnouncementRecord, ReleaseRecord,
   Account, Device, FeedbackRecord, InvoiceRecord, InviteCode, LicenceUsageRecord, OrderRecord, PaymentRecord,
   Plan, PlanVersion, RefreshTokenRecord, RefundRecord, Repositories, Subscription, TelemetryRow,
 } from './repositories';
@@ -23,10 +24,80 @@ export function createMemoryRepositories(): Repositories {
   const invoices = new Map<string, InvoiceRecord>();
   const usages: LicenceUsageRecord[] = [];
   const notifications = new Set<string>();
+  const announcements = new Map<string, AnnouncementRecord>();
+  const releases = new Map<string, ReleaseRecord>();
+  const adminRoles = new Map<string, AdminRoleRecord>(); // key: accountId
+  const audits: AdminAuditRecord[] = [];
   const clone = <T extends object>(x: T): T => structuredClone(x);
   const cloneOrNull = <T extends object>(x: T | undefined | null): T | null => (x ? structuredClone(x) : null);
 
   return {
+    announcements: {
+      async create(a, now) {
+        const rec: AnnouncementRecord = { ...a, id: randomUUID(), createdAt: now, updatedAt: now };
+        announcements.set(rec.id, rec);
+        return clone(rec);
+      },
+      async update(id, patch, now) {
+        const r = announcements.get(id);
+        if (!r) return null;
+        Object.assign(r, patch, { updatedAt: now });
+        return clone(r);
+      },
+      async delete(id) { return announcements.delete(id); },
+      async findById(id) { return cloneOrNull(announcements.get(id)); },
+      async list() {
+        return [...announcements.values()].sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime() || a.id.localeCompare(b.id)).map(clone);
+      },
+      async listEffective(now, channel) {
+        return [...announcements.values()]
+          .filter((a) => a.enabled && a.startsAt <= now && (!a.endsAt || a.endsAt > now) && (a.channel === 'all' || a.channel === channel))
+          .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime() || a.id.localeCompare(b.id)).map(clone);
+      },
+    },
+    releases: {
+      async create(r, now) {
+        for (const x of releases.values()) if (x.version === r.version && x.channel === r.channel) throw new Error('unique:version');
+        const rec: ReleaseRecord = { ...r, id: randomUUID(), createdAt: now, updatedAt: now };
+        releases.set(rec.id, rec);
+        return clone(rec);
+      },
+      async update(id, patch, now) {
+        const r = releases.get(id);
+        if (!r) return null;
+        Object.assign(r, patch, { updatedAt: now });
+        return clone(r);
+      },
+      async findById(id) { return cloneOrNull(releases.get(id)); },
+      async list() { return [...releases.values()].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || a.id.localeCompare(b.id)).map(clone); },
+      async listEnabled(channels) { return [...releases.values()].filter((r) => r.enabled && channels.includes(r.channel)).map(clone); },
+    },
+    adminRoles: {
+      async set(accountId, role, grantedBy, now) {
+        const cur = adminRoles.get(accountId);
+        const rec: AdminRoleRecord = { accountId, role, grantedBy, createdAt: cur?.createdAt ?? now, updatedAt: now };
+        adminRoles.set(accountId, rec);
+        return clone(rec);
+      },
+      async find(accountId) { return cloneOrNull(adminRoles.get(accountId)); },
+      async remove(accountId) { return adminRoles.delete(accountId); },
+      async list() { return [...adminRoles.values()].map(clone); },
+    },
+    adminAudit: {
+      async add(r) {
+        const rec: AdminAuditRecord = { ...r, id: randomUUID(), detail: r.detail === undefined ? null : structuredClone(r.detail) };
+        audits.push(rec);
+        return clone(rec);
+      },
+      async list(f) {
+        return audits
+          .filter((a) => (!f.actorId || a.actorId === f.actorId) && (!f.action || a.action === f.action)
+            && (!f.targetType || a.targetType === f.targetType) && (!f.targetId || a.targetId === f.targetId)
+            && (!f.before || a.at < f.before))
+          .sort((a, b) => b.at.getTime() - a.at.getTime() || b.id.localeCompare(a.id))
+          .slice(0, f.limit).map(clone);
+      },
+    },
     accounts: {
       async create(a) {
         for (const x of accounts.values()) if (x.email === a.email) throw new Error('unique:email');
@@ -40,6 +111,7 @@ export function createMemoryRepositories(): Repositories {
         return null;
       },
       async list() { return [...accounts.values()].map((x) => ({ ...x })); },
+      async setRole(id, role) { const a = accounts.get(id); if (a) a.role = role; },
       async setDisabled(id, at) { const a = accounts.get(id); if (a) a.disabledAt = at; },
       async delete(id) {
         // 与数据库外键语义一致：设备/刷新令牌级联删除，邀请码的使用者置空
@@ -48,6 +120,7 @@ export function createMemoryRepositories(): Repositories {
         for (const [k, t] of tokens) if (t.accountId === id) tokens.delete(k);
         for (const i of invites.values()) if (i.usedById === id) i.usedById = null;
         subs.delete(id);
+        adminRoles.delete(id);
         for (let n = usages.length - 1; n >= 0; n--) if (usages[n].accountId === id) usages.splice(n, 1);
       },
     },
@@ -166,6 +239,9 @@ export function createMemoryRepositories(): Repositories {
     referralClicks: {
       async create(c) { const rec = { ...c, id: randomUUID() }; clicks.push(rec); return { ...rec }; },
       async countByCode(code) { return clicks.filter((x) => x.code === code).length; },
+      async between(from, to) {
+        return clicks.filter((x) => x.createdAt >= from && x.createdAt < to).map((x) => ({ ...x }));
+      },
     },
     plans: {
       async create(p) {

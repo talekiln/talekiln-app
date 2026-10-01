@@ -52,6 +52,8 @@ export interface AccountRepository {
   findById(id: string): Promise<Account | null>;
   findByEmail(email: string): Promise<Account | null>;
   delete(id: string): Promise<void>;
+  /** 仅用于撤销/授予旧式 ADMIN 标记（后台角色以 AdminRole 表为准）。 */
+  setRole(id: string, role: Role): Promise<void>;
 }
 
 export interface InviteRepository {
@@ -134,6 +136,8 @@ export interface ReferralClick { id: string; code: string; src: string | null; c
 export interface ReferralClickRepository {
   create(c: { code: string; src: string | null; createdAt: Date }): Promise<ReferralClick>;
   countByCode(code: string): Promise<number>;
+  /** createdAt 落在 [from, to) 的点击（漏斗统计用）。 */
+  between(from: Date, to: Date): Promise<ReferralClick[]>;
 }
 
 // ---------------------------------------------------------------------------
@@ -329,6 +333,115 @@ export interface BillingRepository {
   failRefund(refundId: string, i: { now: Date; reason: string }): Promise<boolean>;
 }
 
+// ---------------------------------------------------------------------------
+// 后台扩展（P2-H）：公告、版本灰度、管理员角色、审计。
+// ---------------------------------------------------------------------------
+export type ReleaseChannel = 'beta' | 'stable';
+export type AnnouncementChannel = 'all' | ReleaseChannel;
+export type AnnouncementLevel = 'info' | 'warn' | 'critical';
+export type AdminRoleName = 'ADMIN' | 'OPERATOR' | 'READONLY';
+
+export interface AnnouncementRecord {
+  id: string;
+  title: string;
+  body: string;
+  level: AnnouncementLevel;
+  channel: AnnouncementChannel;
+  startsAt: Date;
+  endsAt: Date | null;
+  enabled: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+export type AnnouncementInput = Omit<AnnouncementRecord, 'id' | 'createdAt' | 'updatedAt'>;
+
+export interface AnnouncementRepository {
+  create(a: AnnouncementInput, now: Date): Promise<AnnouncementRecord>;
+  update(id: string, patch: Partial<AnnouncementInput>, now: Date): Promise<AnnouncementRecord | null>;
+  delete(id: string): Promise<boolean>;
+  findById(id: string): Promise<AnnouncementRecord | null>;
+  /** 全部公告，开始时间新的在前。 */
+  list(): Promise<AnnouncementRecord[]>;
+  /** 生效中：enabled、startsAt <= now、endsAt 为空或 > now、渠道为 all 或等于 channel。 */
+  listEffective(now: Date, channel: ReleaseChannel): Promise<AnnouncementRecord[]>;
+}
+
+export interface ReleaseRecord {
+  id: string;
+  version: string;
+  channel: ReleaseChannel;
+  /** 灰度百分比 0..100。 */
+  rolloutPercent: number;
+  /** 低于该版本的客户端必须更新。 */
+  minVersion: string | null;
+  forced: boolean;
+  notes: string;
+  /** false = 暂停下发（回滚开关）。 */
+  enabled: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+export type ReleaseInput = Omit<ReleaseRecord, 'id' | 'createdAt' | 'updatedAt'>;
+
+export interface ReleaseRepository {
+  /** (version, channel) 重复抛唯一键错误。 */
+  create(r: ReleaseInput, now: Date): Promise<ReleaseRecord>;
+  update(id: string, patch: Partial<Omit<ReleaseInput, 'version' | 'channel'>>, now: Date): Promise<ReleaseRecord | null>;
+  findById(id: string): Promise<ReleaseRecord | null>;
+  list(): Promise<ReleaseRecord[]>;
+  /** 指定通道里 enabled 的发布（顺序不保证）。 */
+  listEnabled(channels: ReleaseChannel[]): Promise<ReleaseRecord[]>;
+}
+
+export interface AdminRoleRecord {
+  accountId: string;
+  role: AdminRoleName;
+  grantedBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface AdminRoleRepository {
+  /** 授予或更新（每账号一条）。 */
+  set(accountId: string, role: AdminRoleName, grantedBy: string | null, now: Date): Promise<AdminRoleRecord>;
+  find(accountId: string): Promise<AdminRoleRecord | null>;
+  remove(accountId: string): Promise<boolean>;
+  list(): Promise<AdminRoleRecord[]>;
+}
+
+export interface AdminAuditRecord {
+  id: string;
+  at: Date;
+  actorId: string | null;
+  actorEmail: string | null;
+  actorRole: AdminRoleName | null;
+  /** 如 "POST /admin/orders/:id/refund"。 */
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  ok: boolean;
+  status: number;
+  /** 脱敏后的请求摘要。 */
+  detail: unknown;
+  ip: string | null;
+}
+
+export interface AdminAuditFilter {
+  actorId?: string;
+  action?: string;
+  targetType?: string;
+  targetId?: string;
+  /** 只取 at < before 的记录（翻页）。 */
+  before?: Date;
+  limit: number;
+}
+
+export interface AdminAuditRepository {
+  add(r: Omit<AdminAuditRecord, 'id'>): Promise<AdminAuditRecord>;
+  /** 按时间倒序。 */
+  list(f: AdminAuditFilter): Promise<AdminAuditRecord[]>;
+}
+
 export const REPOS = Symbol('REPOS');
 export interface Repositories {
   accounts: AccountRepository;
@@ -346,4 +459,8 @@ export interface Repositories {
   invoices: InvoiceRepository;
   licenceUsage: LicenceUsageRepository;
   billing: BillingRepository;
+  announcements: AnnouncementRepository;
+  releases: ReleaseRepository;
+  adminRoles: AdminRoleRepository;
+  adminAudit: AdminAuditRepository;
 }

@@ -1,0 +1,12 @@
+{
+  "name": "@talekiln/website",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "故事窑 Talekiln 官网与下载页：纯静态 HTML/CSS，build.mjs 只做占位符替换（无第三方依赖）",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": { "node": ">=22" }
+}

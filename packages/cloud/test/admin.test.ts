@@ -123,7 +123,7 @@ test('用户：禁用后无法登录/刷新/续期，启用后恢复；管理员
   } finally { await s.close(); }
 });
 
-test('公告与模型目录：校验、保存、公开接口只返回启用项', async () => {
+test('模型目录：校验、保存、公开接口只返回启用项', async () => {
   const s = await boot();
   try {
     const t = await s.login();
@@ -136,12 +136,6 @@ test('公告与模型目录：校验、保存、公开接口只返回启用项',
     assert.equal((await s.call('/admin/catalog', { token: t })).json.length, 2);
     assert.deepEqual((await s.call('/public/catalog')).json.map((c: any) => c.id), ['a']);
 
-    await s.call('/admin/announcements', { token: t, method: 'PUT', body: [
-      { id: '1', title: '维护', body: '今晚维护', level: 'warn', active: true },
-      { id: '2', title: '旧', body: '', level: 'info', active: false },
-    ] });
-    assert.deepEqual((await s.call('/public/announcements')).json.map((a: any) => a.id), ['1']);
-    assert.equal((await s.call('/admin/announcements', { token: t, method: 'PUT', body: [{ id: '1', title: 'x', body: '', level: 'nope', active: true }] })).status, 400);
     assert.equal((await s.call('/admin/catalog', { token: 'bad', method: 'PUT', body: [] })).status, 401);
   } finally { await s.close(); }
 });

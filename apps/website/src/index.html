@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{siteName}} — 把故事烧成片子的桌面工作台</title>
+  <meta name="description" content="故事窑 Talekiln：剧本、镜头、时间线和画布，多个视图无缝切换。自带模型 Key，素材与项目在本地处理。">
+  <meta name="color-scheme" content="light dark">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+{{{header}}}
+<main>
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <p class="eyebrow">AI 短片创作桌面工作台</p>
+        <h1>从剧本到成片，<br>一个项目，四种看法</h1>
+        <p class="lead">{{siteName}}把剧本、镜头、时间线和画布放进同一份项目里，多个视图之间无缝切换：在任何一个视图里改动，其他视图立刻同步，不用导出、不用对表。</p>
+        <p class="cta">
+          <a class="btn btn-primary" href="download.html">下载 {{version}}</a>
+          <a class="btn btn-ghost" href="#features">看看有什么</a>
+        </p>
+        <p class="muted small">Windows 10/11 · 自带 Key · 项目与素材保存在你自己的电脑上</p>
+      </div>
+      <figure class="views" aria-label="剧本、镜头、时间线、画布四个视图围绕同一份项目">
+        <svg viewBox="0 0 360 260" role="img" aria-labelledby="views-title views-desc">
+          <title id="views-title">四个视图共享同一份项目</title>
+          <desc id="views-desc">剧本、镜头、时间线、画布四个方框，都连向中间的项目。</desc>
+          <g class="lines" fill="none" stroke-width="2">
+            <path d="M92 62 L160 112"/><path d="M268 62 L200 112"/><path d="M92 198 L160 148"/><path d="M268 198 L200 148"/>
+          </g>
+          <g class="box">
+            <rect x="20" y="30" width="144" height="56" rx="10"/><rect x="196" y="30" width="144" height="56" rx="10"/>
+            <rect x="20" y="174" width="144" height="56" rx="10"/><rect x="196" y="174" width="144" height="56" rx="10"/>
+          </g>
+          <circle class="core" cx="180" cy="130" r="34"/>
+          <g class="label" text-anchor="middle" font-size="15">
+            <text x="92" y="64">剧本</text><text x="268" y="64">镜头</text>
+            <text x="92" y="208">时间线</text><text x="268" y="208">画布</text>
+            <text class="core-text" x="180" y="135">项目</text>
+          </g>
+        </svg>
+      </figure>
+    </div>
+  </section>
+
+  <section id="features" class="section">
+    <div class="wrap">
+      <h2>一份项目，多个视图</h2>
+      <p class="section-lead">视图只是同一份数据的不同投影，切换时不丢选中、不丢位置。</p>
+      <div class="grid">
+        <article class="card">
+          <h3>剧本</h3>
+          <p>像写文档一样写故事，按场次、对白、动作组织。段落变化会同步到对应的镜头。</p>
+        </article>
+        <article class="card">
+          <h3>镜头</h3>
+          <p>每个镜头有画面描述、时长和素材。生成、重绘、替换都在镜头上完成，一目了然。</p>
+        </article>
+        <article class="card">
+          <h3>时间线</h3>
+          <p>多轨剪辑：拖动、裁剪、对齐、撤销。同一轨道上不会重叠，改动有版本历史可回看。</p>
+        </article>
+        <article class="card">
+          <h3>画布</h3>
+          <p>用节点把角色、场景、镜头连成关系图，适合梳理分支和复用素材。</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section id="privacy" class="section alt">
+    <div class="wrap two-col">
+      <div>
+        <h2>自带 Key，本地处理</h2>
+        <p class="section-lead">你的模型账号你做主，你的作品留在你手里。</p>
+      </div>
+      <ul class="ticks">
+        <li><strong>自带 Key：</strong>在设置里填写你自己的模型服务 Key，调用与计费直接发生在你和服务商之间。</li>
+        <li><strong>本地处理：</strong>项目、素材、剪辑与导出都在你的电脑上完成，不需要把成片上传到我们的服务器。</li>
+        <li><strong>反馈由你决定：</strong>问题反馈附带的诊断包在你的电脑上先脱敏，是否提交由你决定。</li>
+        <li><strong>统计需同意：</strong>匿名使用统计需要你同意后才会上报，只含事件名与错误码，不含提示词、路径或密钥。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="download" class="section">
+    <div class="wrap">
+      <h2>下载</h2>
+      <p class="section-lead">当前版本 {{version}}（{{releaseDate}}）。</p>
+      <p class="cta">
+        <a class="btn btn-primary" href="download.html">前往下载页</a>
+        <a class="btn btn-ghost" href="{{repoUrl}}">查看开源仓库</a>
+      </p>
+    </div>
+  </section>
+
+  <section id="opensource" class="section alt">
+    <div class="wrap">
+      <h2>开源</h2>
+      <p class="section-lead">桌面外壳与界面代码公开在仓库里，欢迎阅读、提 Issue 和贡献。渲染引擎的发布方式以仓库说明为准。</p>
+      <p class="cta"><a class="btn btn-ghost" href="{{repoUrl}}">开源仓库入口</a></p>
+    </div>
+  </section>
+</main>
+{{{footer}}}
+</body>
+</html>

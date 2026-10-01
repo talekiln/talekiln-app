@@ -1,8 +1,9 @@
 import { Module, type OnApplicationShutdown, Inject, Injectable, type Provider } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { AuthController, CatalogController, DeviceController, HealthController, LicenceController, ReferralController } from './http/controllers';
-import { AdminAuthController, AdminController, PublicController } from './http/admin.controllers';
+import { AdminAuthController, AdminController, AdminOpsController, PublicController } from './http/admin.controllers';
 import { AdminBillingController, OrderController, PaymentNotifyController, PlanController, SubscriptionController } from './http/billing.controllers';
+import { AuditInterceptor } from './http/audit.interceptor';
 import { AccessGuard, AdminGuard } from './http/guard';
 import { createProviders } from './payments/registry';
 import type { PaymentProviders } from './payments/provider';
@@ -14,6 +15,11 @@ import { createPrismaRepositories } from './domain/prisma.repositories';
 import { REPOS, type Repositories } from './domain/repositories';
 import { AdminAuthService } from './services/admin-auth.service';
 import { AdminService } from './services/admin.service';
+import { AdminsService } from './services/admins.service';
+import { AnnouncementService } from './services/announcement.service';
+import { AuditService } from './services/audit.service';
+import { FunnelService } from './services/funnel.service';
+import { ReleaseService } from './services/release.service';
 import { AuthService } from './services/auth.service';
 import { CONFIG, loadConfig, type AppConfig } from './services/config';
 import { CatalogService, loadCatalogFromEnv } from './services/catalog.service';
@@ -58,7 +64,7 @@ export function createAppModule(opts: ModuleOptions = {}) {
   @Module({
     controllers: [
       HealthController, AuthController, DeviceController, LicenceController,
-      AdminAuthController, AdminController, PublicController, CatalogController, ReferralController,
+      AdminAuthController, AdminController, AdminOpsController, PublicController, CatalogController, ReferralController,
       PlanController, OrderController, SubscriptionController, PaymentNotifyController, AdminBillingController,
     ],
     providers: [
@@ -82,6 +88,12 @@ export function createAppModule(opts: ModuleOptions = {}) {
       { provide: FeedbackService, useFactory: (r: Repositories, c: AppConfig) => new FeedbackService(r, c), inject: [REPOS, CONFIG] },
       { provide: CatalogService, useFactory: (c: AppConfig) => new CatalogService(c, loadCatalogFromEnv()), inject: [CONFIG] },
       { provide: ReferralService, useFactory: (r: Repositories) => new ReferralService(loadReferralConfig(), r.referralClicks), inject: [REPOS] },
+      { provide: AuditService, useFactory: (r: Repositories) => new AuditService(r), inject: [REPOS] },
+      { provide: AdminsService, useFactory: (r: Repositories) => new AdminsService(r), inject: [REPOS] },
+      { provide: AnnouncementService, useFactory: (r: Repositories) => new AnnouncementService(r), inject: [REPOS] },
+      { provide: ReleaseService, useFactory: (r: Repositories) => new ReleaseService(r), inject: [REPOS] },
+      { provide: FunnelService, useFactory: (r: Repositories) => new FunnelService(r), inject: [REPOS] },
+      AuditInterceptor,
       AccessGuard,
       AdminGuard,
     ],

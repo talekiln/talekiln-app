@@ -3,6 +3,10 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, errorText } from '../api.js'
 import { formatTime } from '../format.js'
+import { can } from '../permissions.js'
+import { me } from '../session.js'
+
+const canWrite = computed(() => can(me.value, 'ops:write'))
 
 const rows = ref([])
 const loading = ref(false)
@@ -81,7 +85,7 @@ onMounted(load)
       <el-table-column label="操作" width="170" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" @click="open(row)">授权详情</el-button>
-          <el-button v-if="row.role !== 'ADMIN'" link :type="row.disabled ? 'success' : 'danger'" @click="toggle(row)">
+          <el-button v-if="row.role !== 'ADMIN' && canWrite" link :type="row.disabled ? 'success' : 'danger'" @click="toggle(row)">
             {{ row.disabled ? '启用' : '禁用' }}
           </el-button>
         </template>

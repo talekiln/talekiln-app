@@ -1,26 +1,49 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { auth } from './api.js'
+import { denyRedirect } from './permissions.js'
+import { ROUTE_META as M } from './route-meta.js'
+import { ensureMe } from './session.js'
 import Login from './views/Login.vue'
 import Overview from './views/Overview.vue'
 import Invites from './views/Invites.vue'
 import Users from './views/Users.vue'
 import Content from './views/Content.vue'
+import Orders from './views/Orders.vue'
+import Refunds from './views/Refunds.vue'
+import Plans from './views/Plans.vue'
+import Releases from './views/Releases.vue'
+import Announcements from './views/Announcements.vue'
+import Admins from './views/Admins.vue'
 
 export const routes = [
-  { path: '/login', name: 'login', component: Login, meta: { public: true } },
+  { path: '/login', name: 'login', component: Login, meta: M.login },
   { path: '/', redirect: '/overview' },
-  { path: '/overview', name: 'overview', component: Overview, meta: { title: '概览' } },
-  { path: '/invites', name: 'invites', component: Invites, meta: { title: '邀请码' } },
-  { path: '/users', name: 'users', component: Users, meta: { title: '用户' } },
-  { path: '/content', name: 'content', component: Content, meta: { title: '公告与模型目录' } },
+  { path: '/overview', name: 'overview', component: Overview, meta: M.overview },
+  { path: '/orders', name: 'orders', component: Orders, meta: M.orders },
+  { path: '/refunds', name: 'refunds', component: Refunds, meta: M.refunds },
+  { path: '/plans', name: 'plans', component: Plans, meta: M.plans },
+  { path: '/releases', name: 'releases', component: Releases, meta: M.releases },
+  { path: '/announcements', name: 'announcements', component: Announcements, meta: M.announcements },
+  { path: '/invites', name: 'invites', component: Invites, meta: M.invites },
+  { path: '/users', name: 'users', component: Users, meta: M.users },
+  { path: '/content', name: 'content', component: Content, meta: M.content },
+  { path: '/admins', name: 'admins', component: Admins, meta: M.admins },
   { path: '/:pathMatch(.*)*', redirect: '/overview' },
 ]
 
 const router = createRouter({ history: createWebHashHistory(), routes })
 
-router.beforeEach((to) => {
-  if (!to.meta.public && !auth.get()) return { name: 'login' }
-  if (to.name === 'login' && auth.get()) return { name: 'overview' }
+router.beforeEach(async (to) => {
+  if (to.meta.public) return to.name === 'login' && auth.get() ? { name: 'overview' } : true
+  if (!auth.get()) return { name: 'login' }
+  let me
+  try {
+    me = await ensureMe()
+  } catch {
+    return { name: 'login' }
+  }
+  const back = denyRedirect(me, to.meta)
+  if (back && to.path !== back) return back
   return true
 })
 

@@ -1,9 +1,75 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
-import type { Entitlements, PlanVersion, Repositories } from './repositories';
+import type {
+  AdminAuditRecord, AdminRoleRecord, AnnouncementRecord, Entitlements, PlanVersion, ReleaseRecord, Repositories,
+} from './repositories';
 
 // Prisma 实现（需要真实 PostgreSQL 才能验证）。
 export function createPrismaRepositories(db: PrismaClient): Repositories {
   return {
+    announcements: {
+      async create(a, now) {
+        return toAnnouncement(await db.announcement.create({ data: { ...a, createdAt: now, updatedAt: now } }));
+      },
+      async update(id, patch, now) {
+        const r = await db.announcement.updateMany({ where: { id }, data: { ...patch, updatedAt: now } });
+        return r.count === 1 ? toAnnouncement(await db.announcement.findUniqueOrThrow({ where: { id } })) : null;
+      },
+      async delete(id) { return (await db.announcement.deleteMany({ where: { id } })).count === 1; },
+      async findById(id) { const r = await db.announcement.findUnique({ where: { id } }); return r ? toAnnouncement(r) : null; },
+      async list() {
+        return (await db.announcement.findMany({ orderBy: [{ startsAt: 'desc' }, { id: 'asc' }] })).map(toAnnouncement);
+      },
+      async listEffective(now, channel) {
+        return (await db.announcement.findMany({
+          where: {
+            enabled: true, startsAt: { lte: now }, channel: { in: ['all', channel] },
+            OR: [{ endsAt: null }, { endsAt: { gt: now } }],
+          },
+          orderBy: [{ startsAt: 'desc' }, { id: 'asc' }],
+        })).map(toAnnouncement);
+      },
+    },
+    releases: {
+      async create(r, now) { return toRelease(await db.release.create({ data: { ...r, createdAt: now, updatedAt: now } })); },
+      async update(id, patch, now) {
+        const r = await db.release.updateMany({ where: { id }, data: { ...patch, updatedAt: now } });
+        return r.count === 1 ? toRelease(await db.release.findUniqueOrThrow({ where: { id } })) : null;
+      },
+      async findById(id) { const r = await db.release.findUnique({ where: { id } }); return r ? toRelease(r) : null; },
+      async list() { return (await db.release.findMany({ orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] })).map(toRelease); },
+      async listEnabled(channels) {
+        return (await db.release.findMany({ where: { enabled: true, channel: { in: channels } } })).map(toRelease);
+      },
+    },
+    adminRoles: {
+      async set(accountId, role, grantedBy, now) {
+        return toAdminRole(await db.adminRole.upsert({
+          where: { accountId },
+          create: { accountId, role, grantedBy, createdAt: now, updatedAt: now },
+          update: { role, grantedBy, updatedAt: now },
+        }));
+      },
+      async find(accountId) { const r = await db.adminRole.findUnique({ where: { accountId } }); return r ? toAdminRole(r) : null; },
+      async remove(accountId) { return (await db.adminRole.deleteMany({ where: { accountId } })).count === 1; },
+      async list() { return (await db.adminRole.findMany()).map(toAdminRole); },
+    },
+    adminAudit: {
+      async add(r) {
+        return toAudit(await db.adminAudit.create({
+          data: { ...r, detail: r.detail === undefined || r.detail === null ? undefined : (r.detail as Prisma.InputJsonValue) },
+        }));
+      },
+      async list(f) {
+        return (await db.adminAudit.findMany({
+          where: {
+            actorId: f.actorId, action: f.action, targetType: f.targetType, targetId: f.targetId,
+            at: f.before ? { lt: f.before } : undefined,
+          },
+          orderBy: [{ at: 'desc' }, { id: 'desc' }],
+          take: f.limit,
+        })).map(toAudit);
+      },
+    },
     accounts: {
       create: (a) => db.account.create({ data: a }),
       list: () => db.account.findMany({ orderBy: { createdAt: 'desc' } }),
@@ -11,6 +77,7 @@ export function createPrismaRepositories(db: PrismaClient): Repositories {
       findById: (id) => db.account.findUnique({ where: { id } }),
       findByEmail: (email) => db.account.findUnique({ where: { email } }),
       delete: async (id) => { await db.account.delete({ where: { id } }); },
+      setRole: async (id, role) => { await db.account.update({ where: { id }, data: { role } }); },
     },
     invites: {
       create: (i) => db.inviteCode.create({ data: i }),
@@ -107,6 +174,7 @@ export function createPrismaRepositories(db: PrismaClient): Repositories {
     referralClicks: {
       create: (c) => db.referralClick.create({ data: c }),
       countByCode: (code) => db.referralClick.count({ where: { code } }),
+      between: (from, to) => db.referralClick.findMany({ where: { createdAt: { gte: from, lt: to } }, orderBy: { createdAt: 'asc' } }),
     },
     plans: {
       create: (p) => db.plan.create({ data: p }),
@@ -336,4 +404,20 @@ function toPlanVersion(r: {
     priceMonthCents: r.priceMonthCents, priceYearCents: r.priceYearCents,
     entitlements: r.entitlements as unknown as Entitlements, createdAt: r.createdAt,
   };
+}
+
+function toAnnouncement(r: { id: string; title: string; body: string; level: string; channel: string; startsAt: Date; endsAt: Date | null; enabled: boolean; createdAt: Date; updatedAt: Date }): AnnouncementRecord {
+  return { ...r, level: r.level as AnnouncementRecord['level'], channel: r.channel as AnnouncementRecord['channel'] };
+}
+
+function toRelease(r: { id: string; version: string; channel: string; rolloutPercent: number; minVersion: string | null; forced: boolean; notes: string; enabled: boolean; createdAt: Date; updatedAt: Date }): ReleaseRecord {
+  return { ...r, channel: r.channel as ReleaseRecord['channel'] };
+}
+
+function toAdminRole(r: { accountId: string; role: string; grantedBy: string | null; createdAt: Date; updatedAt: Date }): AdminRoleRecord {
+  return { ...r, role: r.role as AdminRoleRecord['role'] };
+}
+
+function toAudit(r: { id: string; at: Date; actorId: string | null; actorEmail: string | null; actorRole: string | null; action: string; targetType: string | null; targetId: string | null; ok: boolean; status: number; detail: Prisma.JsonValue | null; ip: string | null }): AdminAuditRecord {
+  return { ...r, actorRole: r.actorRole as AdminAuditRecord['actorRole'], detail: r.detail };
 }
