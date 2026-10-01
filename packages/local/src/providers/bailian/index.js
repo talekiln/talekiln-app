@@ -232,7 +232,7 @@ function createBailianAdapter(cfg = {}) {
     }
   }
 
-  // ---- tts.synthesize: CosyVoice over WebSocket (UNVERIFIED message schema) -----------------
+  // ---- tts.synthesize: CosyVoice over WebSocket (message schema verified live, see live_tts_* fixtures) -----------------
   function ttsSynthesize({ model, text, voice, format, sampleRate, rate, pitch, volume, wordTimestamps, signal }) {
     return new Promise((resolve, reject) => {
       if (!apiKey) return reject(new ProviderError(ERROR_CODES.INVALID_API_KEY, '未配置 Key', { provider: 'bailian' }));

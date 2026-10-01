@@ -5,6 +5,7 @@ const scriptgen = require('../scriptgen');
 const dramaService = require('./dramaService');
 const storyboardService = require('./storyboardService');
 const aiConfigService = require('./aiConfigService');
+const enablement = require('../providers/enablement');
 
 const ASPECT_RATIOS = ['9:16', '16:9', '1:1'];
 
@@ -52,8 +53,7 @@ function resolveProvider(db, preferred) {
   const rows = aiConfigService.listConfigsInternal(db, 'text').filter((c) => c.is_active && c.api_key);
   const kindOf = (c) => {
     const h = `${c.provider} ${c.base_url}`.toLowerCase();
-    if (/bailian|dashscope|aliyun/.test(h)) return 'bailian';
-    if (/ark|volc|doubao/.test(h)) return 'ark';
+    for (const m of enablement.listEnabledMeta()) if (m.textHint.test(h)) return m.id;
     return null;
   };
   const row = rows.find((c) => kindOf(c) && (!preferred || kindOf(c) === preferred));
@@ -90,7 +90,7 @@ async function createProjectFromStory(db, log, body) {
   if (!v.ok) { const e = new Error(v.errors.join('；')); e.status = 400; throw e; }
   const prov = resolveProvider(db, v.value.provider);
   if (!prov) {
-    const e = new Error('未找到可用的文本模型配置（百炼或方舟），请先在 AI 配置中添加');
+    const e = new Error(`未找到可用的文本模型配置（${enablement.enabledLabels()}），请先在 AI 配置中添加`);
     e.status = 400; e.code = 'NO_TEXT_PROVIDER'; throw e;
   }
   const providers = createProviders(prov.cfg);
