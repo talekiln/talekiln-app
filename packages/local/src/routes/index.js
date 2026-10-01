@@ -22,6 +22,7 @@ const audioRoutes = require('./audio');
 const promptOverridesRoutes = require('./promptOverrides');
 const sceneModelMapRoutes = require('./sceneModelMap');
 const timelineRoutes = require('./timelines');
+const scriptgenRoutes = require('./scriptgen');
 
 function setupRouter(cfg, db, log) {
   const r = express.Router();
@@ -48,6 +49,7 @@ function setupRouter(cfg, db, log) {
   const assets = assetRoutes(db, log);
   const audio = audioRoutes(db, log, cfg);
   const promptOverrides = promptOverridesRoutes.routes(db, log);
+  const scriptgen = scriptgenRoutes(db, log);
 
   // ---------- dramas ----------
   r.get('/dramas', drama.listDramas);
@@ -275,6 +277,9 @@ function setupRouter(cfg, db, log) {
 
   // ---------- storyboards ----------
   r.get('/storyboards/episode/:episode_id/generate', storyboards.episodeStoryboardsGenerate);
+  r.get('/scriptgen/templates', scriptgen.templates);
+  r.post('/scriptgen/projects', scriptgen.createProject);
+  r.put('/episodes/:episode_id/storyboards/order', scriptgen.reorder);
   r.post('/storyboards', storyboards.create);
   r.post('/storyboards/:id/insert-before', storyboards.insertBefore);
   r.get('/storyboards/:id', storyboards.getOne);
