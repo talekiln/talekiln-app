@@ -58,6 +58,9 @@
 - 把队列接进界面：出图、出视频、配音都应该走 `/ai-tasks`（花费守卫、任务中心、断点恢复），并在任务完成时写回分镜、角色。
 - ~~`scriptgen` 持久化写角色表~~、~~词级字幕与旁白写回~~、~~装配用视频实际时长~~：I2 已做（旧 `/timelines/episode/:id/assemble` 路由改调 `assembleFromKernel` 由 I3 接）。
 - 配音还没进队列/任务中心；`spend_log.actual` 仍为空；其余音色未实测。
+- ~~把队列接进界面（出图、出视频）~~ **I1 已做**：`POST /episodes/:id/generate`（先估算、再确认建任务、首帧图完成后自动接着出视频）+ `GET .../generation/status`，任务成功后写回内核并物化旧列，真实时长写进视频版本 `meta.duration_ms`；分镜表与镜头工作台已改用，旧同步按钮在 `generation.legacy_enabled` 之后。**仍缺**：配音走队列并写回、角色参考图结果回写角色、时间线装配改用 `meta.duration_ms`（`timeline/service.js` 由别的任务负责）。
+- `scriptgen` 持久化时写角色表，让角色库和参考图锁定可用。
+- 调用 `voiceShots` + `splitCues`，把词级字幕和旁白音频写进分镜与时间线；装配时用视频实际时长。
 - 把任务结果里的用量写入 `spend_log.actual`。
 - 向导的连通测试改用 `providers.probe`。
 - 桌面主进程启动 lycore（G06）。

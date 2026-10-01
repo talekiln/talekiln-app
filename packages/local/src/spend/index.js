@@ -121,6 +121,45 @@ function createSpendService(db, { estimator = createEstimator(), now = () => Dat
     return { ok: true, est };
   }
 
+  /** Cap status for confirm dialogs: limits, month spent, in-flight worst case and what is left. */
+  function capStatus() {
+    const lim = getLimits();
+    const spent = monthSpent();
+    const inflight = inFlightMax(null);
+    return {
+      currency: estimator.prices.currency || 'CNY',
+      per_run_cap: lim.per_run_cap,
+      monthly_cap: lim.monthly_cap,
+      month_spent: round(spent),
+      in_flight_max: round(inflight),
+      monthly_remaining: lim.monthly_cap == null ? null : round(Math.max(0, lim.monthly_cap - spent - inflight)),
+    };
+  }
+
+  /**
+   * Estimate a whole batch (one click) BEFORE any task exists, and check it against the caps as one run:
+   * per_run_cap applies to the batch's worst case, monthly_cap to month spent + in-flight + the batch.
+   * specs: [{ provider, kind, params }]. Creates nothing.
+   */
+  function checkBatch(specs) {
+    const estimates = specs.map((s) => estimator.estimate(s));
+    const total = round(estimates.reduce((a, e) => a + e.estimate, 0));
+    const max = round(estimates.reduce((a, e) => a + e.max, 0));
+    const cap = capStatus();
+    const cur = cap.currency;
+    const out = {
+      ok: true, reason: null, message: null, estimates, total, max, currency: cur,
+      sample_prices: estimator.prices.sample !== false, known: estimates.every((e) => e.known), cap,
+    };
+    if (cap.per_run_cap != null && max > cap.per_run_cap) {
+      return { ...out, ok: false, reason: 'per_run', message: `本次预计最高费用 ${max} ${cur} 超过单次上限 ${cap.per_run_cap} ${cur}` };
+    }
+    if (cap.monthly_cap != null && cap.month_spent + cap.in_flight_max + max > cap.monthly_cap) {
+      return { ...out, ok: false, reason: 'monthly', message: `本月已用 ${cap.month_spent} ${cur}、在途最高 ${cap.in_flight_max} ${cur}，加上本次最高 ${max} ${cur} 将超过月度上限 ${cap.monthly_cap} ${cur}` };
+    }
+    return out;
+  }
+
   /** Queue spendGuard: re-checked at submit time, so caps hold even if the limits changed after enqueue. */
   function guardTask(task) {
     const { params } = metaOf(task);
@@ -190,7 +229,7 @@ function createSpendService(db, { estimator = createEstimator(), now = () => Dat
     return { items, total, limit: lim, offset: off, currency: estimator.prices.currency || 'CNY' };
   }
 
-  return { estimate: (spec) => estimator.estimate(spec), listTasks, toCsv, check, guardTask, recordFinished, getLimits, setLimits, summary, monthSpent, inFlightMax };
+  return { estimate: (spec) => estimator.estimate(spec), listTasks, toCsv, check, checkBatch, capStatus, guardTask, recordFinished, getLimits, setLimits, summary, monthSpent, inFlightMax };
 }
 
 module.exports = { createEstimator, createSpendService, loadPrices, localDay, LIMITS_KEY, PRICES_PATH };

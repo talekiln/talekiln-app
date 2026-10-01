@@ -4,10 +4,19 @@
       <el-button text @click="$router.back()"><el-icon><ArrowLeft /></el-icon>返回</el-button>
       <h2 class="page-title">分镜工作台 · 镜 {{ shot?.storyboard_number ?? '' }}</h2>
       <span class="spacer" />
-      <el-select v-model="model" placeholder="视频模型" style="width: 220px">
-        <el-option v-for="m in models" :key="m" :label="m" :value="m" />
-      </el-select>
-      <el-button type="primary" :loading="busy" :disabled="!canRegen" @click="regenerate">重新生成 (R)</el-button>
+      <el-tag v-if="genChip" :type="genChip.type" data-test="gen-chip">{{ genChip.label }}</el-tag>
+      <span v-if="genFailureText" class="gen-fail">{{ genFailureText }}</span>
+      <el-button text @click="$router.push('/task-center')">任务中心</el-button>
+      <el-button :disabled="!episodeId || genBusy" data-test="gen-frame" @click="askGenerate('image')">生成首帧图</el-button>
+      <el-button :disabled="!episodeId || genBusy" data-test="gen-both" @click="askGenerate('both')">首帧图 + 视频</el-button>
+      <el-button type="primary" :disabled="!episodeId || genBusy" data-test="gen-video" @click="regenerate">重新生成视频 (R)</el-button>
+      <!-- 旧的同步出视频：仅在 config.yaml generation.legacy_enabled=true 时出现 -->
+      <template v-if="gen.legacyEnabled.value">
+        <el-select v-model="model" placeholder="视频模型（旧流程）" style="width: 200px">
+          <el-option v-for="m in models" :key="m" :label="m" :value="m" />
+        </el-select>
+        <el-button type="warning" plain :loading="busy" :disabled="!canRegen" @click="regenerateLegacy">旧流程生成（不走队列）</el-button>
+      </template>
     </div>
 
     <div v-loading="loading" class="grid">
@@ -44,6 +53,8 @@
       </section>
     </div>
 
+    <GenerateDialog :state="gen.dialog.value" @confirm="gen.confirm" @cancel="gen.cancel" />
+
     <h4>候选视频（Alt+1..4 采用）</h4>
     <div class="cands">
       <div v-for="(c, i) in slots" :key="i" class="cand" :class="{ adopted: c && c.adopted }">
@@ -72,6 +83,9 @@ import { videosAPI } from '@/api/videos'
 import { shotCandidatesAPI } from '@/api/referenceLocks'
 import { dramaAPI } from '@/api/drama'
 import { useKeymap } from '@/composables/useKeymap'
+import GenerateDialog from '@/components/GenerateDialog.vue'
+import { useGeneration } from '@/composables/useGeneration'
+import { failureText, isBusy } from '@/utils/generationView'
 import { SCOPE_WORKBENCH } from '@/utils/keymap'
 import { assetImageUrl } from '@/utils/mediaUrl'
 import { getSelectableModels } from '@/utils/modelSelection'
@@ -102,6 +116,19 @@ const shownNo = computed(() => shownSlot(compare.value))
 const compareSrc = computed(() => (shownNo.value ? candidateVideoSrc(slots.value[shownNo.value - 1]) : ''))
 const canRegen = computed(() => canRegenerate({ busy: busy.value, shot: shot.value, model: model.value }))
 
+const episodeId = computed(() => Number(shot.value?.episode_id) || 0)
+const gen = useGeneration(episodeId)
+const genStatus = computed(() => gen.shotStatus(shotId))
+const genChip = computed(() => gen.chip(shotId))
+const genBusy = computed(() => isBusy(genStatus.value))
+const genFailureText = computed(() => failureText(genStatus.value))
+// 任务结束并写回后，重新读一次镜头（video_url / 首帧已由内核物化到旧列）
+watch(() => genStatus.value && genStatus.value.state, (now, before) => {
+  if ((before === 'queued' || before === 'running') && now !== before) {
+    storyboardsAPI.get(shotId).then((s) => { shot.value = s }).catch(() => {})
+  }
+})
+
 function applyCandidates(res, resetCompare) {
   slots.value = toSlots(res.items)
   adoptedId.value = res.adopted_video_id ?? null
@@ -126,6 +153,7 @@ async function load() {
   loading.value = true
   try {
     shot.value = await storyboardsAPI.get(shotId)
+    gen.refresh()
     await refreshCandidates(true)
     dramaAPI.get(route.params.dramaId).then((d) => {
       try { aspectRatio.value = (typeof d.metadata === 'string' ? JSON.parse(d.metadata) : d.metadata)?.aspect_ratio || '' } catch (_) { /* 忽略 */ }
@@ -139,7 +167,18 @@ async function load() {
   }
 }
 
-async function regenerate() {
+/** 新流程：估算 -> 确认 -> 持久队列；结果写回内核后状态变“最新”，下面自动刷新镜头。 */
+function askGenerate(kind, regenerateSeed = false) {
+  if (!episodeId.value || genBusy.value) return
+  gen.ask({ shots: [Number(shotId)], kind, regenerate: regenerateSeed })
+}
+
+/** 重新生成视频 = 换种子后只重做这个镜头的视频（旧版本保留，可在内核里切回）。 */
+function regenerate() {
+  askGenerate('video', true)
+}
+
+async function regenerateLegacy() {
   if (!canRegen.value) return
   busy.value = true
   try {
@@ -195,6 +234,7 @@ onBeforeUnmount(() => {
 .page-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
 .page-title { margin: 0; font-size: 18px; }
 .spacer { flex: 1; }
+.gen-fail { font-size: 12px; color: var(--el-color-danger); max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .grid { display: grid; grid-template-columns: 320px 1fr; gap: 20px; }
 .panel h4 { margin: 0 0 8px; }
 .frame { width: 100%; aspect-ratio: 16 / 9; background: var(--el-fill-color); border-radius: 6px; }
