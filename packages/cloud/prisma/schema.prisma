@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model Account {
+  id           String         @id @default(uuid())
+  email        String         @unique
+  passwordHash String
+  role         Role           @default(USER)
+  plan         String         @default("test")
+  createdAt    DateTime       @default(now())
+  devices      Device[]
+  refreshTokens RefreshToken[]
+  invitesUsed  InviteCode[]   @relation("InviteUsedBy")
+}
+
+model InviteCode {
+  id          String    @id @default(uuid())
+  code        String    @unique
+  plan        String    @default("test")
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime?
+  usedAt      DateTime?
+  usedById    String?
+  usedBy      Account?  @relation("InviteUsedBy", fields: [usedById], references: [id], onDelete: SetNull)
+}
+
+model Device {
+  id          String    @id @default(uuid())
+  accountId   String
+  account     Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  fingerprint String
+  name        String
+  createdAt   DateTime  @default(now())
+  lastSeenAt  DateTime?
+  revokedAt   DateTime?
+
+  @@unique([accountId, fingerprint])
+  @@index([accountId])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  familyId  String
+  accountId String
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  deviceId  String?
+  tokenHash String    @unique
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
+  revokedAt DateTime?
+
+  @@index([familyId])
+  @@index([accountId])
+}

@@ -17,10 +17,13 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
       "better-sqlite3",
       "electron",
       "electron-winstaller",
       "esbuild",
+      "prisma",
       "sharp",
       "vue-demi"
     ]
