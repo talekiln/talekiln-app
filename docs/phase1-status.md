@@ -30,3 +30,5 @@
 | G03/G05 渲染导出 | 已做（Linux 真 ffmpeg 测过） | 硬件编码器、Windows 路径、取消需 Windows 真机 |
 | B01–B03 云端账号与授权 | 已做（无数据库验证） | 迁移与 Prisma 仓库待真 Postgres 验证 |
 | D04/D05 角色库与镜头工作台 | 已做（未在浏览器打开） | 锁定参考图对火山经典路径可能无效 |
+| C06 首次引导向导 | 已做（headless Chromium 截图验证） | 欢迎→选服务商→粘贴 Key→连通测试→完成；可跳过、可续接，配好 Key 后不再出现；“获取 Key”按钮走 getKeyReferralUrl 占位函数（推广跳转待接）；连通测试复用 aiConfigService.testConnection，真 Key 联通未验证；Electron 内未跑 |
+| C08 内置示例项目 | 已做（headless Chromium 截图验证） | POST /api/v1/samples/:id/seed 本地生成 5 镜分镜 + 脚本生成的占位图/提示音，幂等，不调用任何 AI；首页“试试示例项目”入口；音频暂未在界面播放 |
