@@ -19,6 +19,7 @@ function openDb() {
     db.exec(`ALTER TABLE storyboards ADD COLUMN ${col} TEXT`);
   }
   db.exec(MIG('24_timelines.sql'));
+  db.exec(MIG('26_music_library_and_mix.sql'));
   return db;
 }
 
