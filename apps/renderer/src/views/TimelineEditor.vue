@@ -8,9 +8,12 @@
       <span class="te-save" :class="'is-' + store.saveState">{{ saveText }}</span>
       <div class="te-spacer" />
       <template v-if="store.timeline">
+        <el-button size="small" :disabled="!store.canUndo" @click="store.undo()">撤销</el-button>
+        <el-button size="small" :disabled="!store.canRedo" @click="store.redo()">重做</el-button>
         <el-button size="small" :disabled="!selectedClip" @click="onSplit">切分 (S)</el-button>
         <el-button size="small" :disabled="!selectedClip" @click="onDelete">删除 (Del)</el-button>
         <el-button size="small" :loading="store.loading" @click="onReassemble">重新组装</el-button>
+        <el-button size="small" @click="router.push('/settings/shortcuts')">快捷键</el-button>
         <el-button-group>
           <el-button size="small" @click="zoom(1 / 1.25)">-</el-button>
           <el-button size="small" disabled>{{ Math.round(pxPerSec) }} px/s</el-button>
@@ -44,12 +47,12 @@
             <el-icon><VideoPause v-if="playing" /><VideoPlay v-else /></el-icon>
           </el-button>
           <span class="te-time">{{ formatTime(playhead) }} / {{ formatTime(store.durationMs) }}</span>
-          <span class="te-hint">空格 播放/暂停 · S 切分 · Del 删除</span>
+          <span class="te-hint">空格 播放/暂停 · S 切分 · Del 删除 · Ctrl+Z 撤销 · ←/→ 逐帧 · M 静音</span>
         </div>
       </section>
 
       <section class="te-timeline">
-        <div ref="scrollEl" class="te-scroll">
+        <div ref="scrollEl" class="te-scroll" @wheel="onWheel">
           <div class="te-canvas" :style="{ width: LABEL_W + contentWidth + 'px' }">
             <div class="te-row te-ruler-row">
               <div class="te-label" />
@@ -96,6 +99,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, VideoPlay, VideoPause } from '@element-plus/icons-vue'
 import { useTimelineStore } from '@/stores/timeline'
+import { useKeymap } from '@/composables/useKeymap'
+import { SCOPE_TIMELINE, SCOPE_WORKBENCH } from '@/utils/keymap'
 import {
   DEFAULT_ZOOM, msToPx, pxToMs, zoomBy, formatTime, rulerTicks, clipAt, clipEnd, findClip,
   snapPoints, snapValue, snapMove, resolveMove, resolveResize, sourceTimeAt, resolveAssetUrl
@@ -157,6 +162,7 @@ async function loadAll() {
   } catch (e) {
     ElMessage.error(e.message || '加载时间线失败')
   }
+  await maybeRecover()
 }
 
 async function onAssemble() {
@@ -283,19 +289,66 @@ function onDelete() {
   if (store.selectedClipId) store.deleteClip(store.selectedClipId)
 }
 
-function onKeydown(e) {
-  const tag = (e.target?.tagName || '').toLowerCase()
-  if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return
-  if (e.metaKey || e.ctrlKey || e.altKey) return
-  if (e.code === 'Space') {
-    e.preventDefault()
-    togglePlay()
-  } else if (e.key === 's' || e.key === 'S') {
-    e.preventDefault()
-    onSplit()
-  } else if (e.key === 'Delete' || e.key === 'Backspace') {
-    e.preventDefault()
-    onDelete()
+const FRAME_MS = 1000 / 30
+const { createKeyHandler } = useKeymap()
+
+function seek(ms) {
+  playing.value = false
+  playhead.value = Math.max(0, Math.min(store.durationMs, Math.round(ms)))
+}
+
+function onToggleMute() {
+  if (!store.toggleMute()) ElMessage.warning('请先选中一个片段以指定轨道')
+}
+
+const stub = (name) => () => { ElMessage.info(`${name}（分镜工作台功能即将上线）`) }
+
+const onKeydown = createKeyHandler({
+  'play.toggle': () => togglePlay(),
+  'clip.split': () => onSplit(),
+  'clip.delete': () => onDelete(),
+  'edit.undo': () => store.undo(),
+  'edit.redo': () => store.redo(),
+  'playhead.prevFrame': () => seek(playhead.value - FRAME_MS),
+  'playhead.nextFrame': () => seek(playhead.value + FRAME_MS),
+  'playhead.prevSecond': () => seek(playhead.value - 1000),
+  'playhead.nextSecond': () => seek(playhead.value + 1000),
+  'playhead.home': () => seek(0),
+  'playhead.end': () => seek(store.durationMs),
+  'zoom.in': () => zoom(1.25),
+  'zoom.out': () => zoom(1 / 1.25),
+  'track.mute': () => onToggleMute(),
+  // 工作台 AI 快捷键：仅注册动作，处理逻辑为占位
+  'shot.regenerate': stub('重新生成'),
+  'shot.pick1': stub('选用候选 V1'),
+  'shot.pick2': stub('选用候选 V2'),
+  'shot.pick3': stub('选用候选 V3'),
+  'shot.pick4': stub('选用候选 V4'),
+  'shot.compareToggle': stub('A/B 对比'),
+}, [SCOPE_TIMELINE, SCOPE_WORKBENCH])
+
+function onWheel(e) {
+  if (!e.ctrlKey && !e.metaKey) return
+  e.preventDefault()
+  zoom(e.deltaY < 0 ? 1.1 : 1 / 1.1)
+}
+
+function onPageHide() {
+  store.flushDraft()
+}
+
+async function maybeRecover() {
+  const r = store.recovery
+  if (!r) return
+  const when = new Date(r.draft.savedAt).toLocaleString()
+  const msg = r.conflict
+    ? `发现 ${when} 的本地未保存草稿，但服务端之后已有更新，恢复将覆盖服务端的较新改动。是否恢复？`
+    : `发现 ${when} 的本地未保存草稿（可能因意外关闭而丢失）。是否恢复？`
+  try {
+    await ElMessageBox.confirm(msg, '恢复未保存的编辑', { confirmButtonText: '恢复草稿', cancelButtonText: '丢弃草稿', type: 'warning', distinguishCancelAndClose: true, closeOnClickModal: false })
+    store.applyRecovery()
+  } catch (action) {
+    if (action === 'cancel') store.discardRecovery()
   }
 }
 
@@ -365,15 +418,20 @@ watch(episodeId, loadAll)
 
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
+  window.addEventListener('pagehide', onPageHide)
+  window.addEventListener('beforeunload', onPageHide)
   loadAll()
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('pagehide', onPageHide)
+  window.removeEventListener('beforeunload', onPageHide)
   window.removeEventListener('pointermove', onDragMove)
   window.removeEventListener('pointerup', onDragEnd)
   cancelAnimationFrame(rafId)
   store.flushPending()
+  store.flushDraft()
 })
 </script>
 

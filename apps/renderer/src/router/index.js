@@ -34,6 +34,12 @@ const router = createRouter({
       meta: { title: '时间线编辑' }
     },
     {
+      path: '/settings/shortcuts',
+      name: 'keyboard-settings',
+      component: () => import('@/views/KeyboardSettings.vue'),
+      meta: { title: '快捷键设置' }
+    },
+    {
       path: '/ai-config',
       name: 'ai-config',
       component: () => import('@/views/AiConfig.vue'),
