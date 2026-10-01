@@ -219,7 +219,7 @@ function validateGraph(g) {
   for (const id of Object.keys(g.layout)) {
     const p = g.layout[id];
     if (!g.nodes[id]) fail(`layout for missing node ${id}`);
-    if (!isObj(p) || typeof p.x !== 'number' || typeof p.y !== 'number') fail(`layout ${id} malformed`);
+    if (!isObj(p) || !Number.isFinite(p.x) || !Number.isFinite(p.y)) fail(`layout ${id} malformed`); // 有限数：NaN/Infinity 会让规范 JSON（落盘）抛错
   }
   for (const [id, list] of Object.entries(g.versions)) {
     if (!g.nodes[id]) fail(`versions for missing node ${id}`);
