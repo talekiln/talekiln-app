@@ -178,6 +178,8 @@ importers:
         specifier: ^8.22.0
         version: 8.22.0
 
+  packages/plugin-sdk: {}
+
 packages:
 
   '@babel/helper-string-parser@7.29.7':

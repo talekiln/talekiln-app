@@ -1,0 +1,22 @@
+{
+  "name": "@talekiln/plugin-sdk",
+  "version": "0.1.0",
+  "description": "Talekiln provider-adapter plugin SDK: manifest schema, adapter interface, runtime validation, contract test kit (MIT)",
+  "license": "MIT",
+  "private": true,
+  "main": "src/index.js",
+  "types": "src/index.d.ts",
+  "exports": {
+    ".": { "types": "./src/index.d.ts", "default": "./src/index.js" },
+    "./contract": "./src/contract.js",
+    "./bridge": "./src/bridge.js"
+  },
+  "files": ["src", "examples", "LICENSE", "README.md"],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
