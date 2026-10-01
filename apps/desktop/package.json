@@ -11,7 +11,8 @@
     "dist:win": "electron-builder --win"
   },
   "dependencies": {
-    "@talekiln/local": "workspace:*"
+    "@talekiln/local": "workspace:*",
+    "electron-updater": "^6.8.9"
   },
   "devDependencies": {
     "electron": "39.8.10",
@@ -27,6 +28,9 @@
     "files": [
       "main.js",
       "lifecycle.js",
+      "updater.js",
+      "updater-logic.js",
+      "update-config.json",
       "package.json",
       "node_modules/**/*"
     ],
@@ -36,10 +40,18 @@
         "to": "renderer"
       }
     ],
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://updates.example.invalid/talekiln",
+        "channel": "latest"
+      }
+    ],
     "win": {
       "target": [
         "nsis"
-      ]
+      ],
+      "verifyUpdateCodeSignature": true
     },
     "nsis": {
       "oneClick": false,

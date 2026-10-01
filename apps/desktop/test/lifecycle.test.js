@@ -130,3 +130,23 @@ describe('notifications and resume', () => {
     assert.equal(calls.resume, 1);
   });
 });
+
+describe('tray extra items', () => {
+  it('inserts extra items between show and quit, and rebuilds on refresh', () => {
+    const { deps } = fakes();
+    const menus = [];
+    deps.Tray = class { setToolTip() {} setContextMenu(m) { menus.push(m); } on() {} };
+    let label = '检查更新';
+    const lc = createLifecycle({ ...deps, getExtraTrayItems: () => [{ label }] });
+    assert.equal(lc.setupTray(), true);
+    assert.deepEqual(menus[0].map((i) => i.label), ['显示窗口', '检查更新', '退出']);
+    label = '安装更新 1.3.0';
+    lc.refreshTrayMenu();
+    assert.equal(menus[1][1].label, '安装更新 1.3.0');
+  });
+  it('a throwing extra-items provider does not break the tray', () => {
+    const { deps } = fakes();
+    const lc = createLifecycle({ ...deps, getExtraTrayItems: () => { throw new Error('x'); } });
+    assert.equal(lc.setupTray(), true);
+  });
+});
