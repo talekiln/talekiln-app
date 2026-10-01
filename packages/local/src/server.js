@@ -16,7 +16,16 @@ const { createApp } = require('./app.js');
 const { closeDb } = require('./db/index.js');
 const logger = require('./logger.js');
 
-const { app, config } = createApp();
+// 独立运行（开发）：仅当提供 TALEKILN_DEV_SECRET_KEY（64 位 hex）时启用文件密文存储；否则无法保存 key
+let secretStore;
+if (process.env.TALEKILN_DEV_SECRET_KEY) {
+  const { FileSecretStore, createAesCipher } = require('./secrets');
+  secretStore = new FileSecretStore({
+    cipher: createAesCipher(process.env.TALEKILN_DEV_SECRET_KEY),
+    filePath: require('path').join(process.cwd(), 'data', 'secrets.enc.json'),
+  });
+}
+const { app, config } = createApp({ secretStore });
 const port = Number(process.env.PORT) || config.server?.port || 5679;
 const host = '127.0.0.1';
 
