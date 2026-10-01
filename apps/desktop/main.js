@@ -33,6 +33,25 @@ const DATA_DIR = path.join(USERDATA_DIR, 'local');
 
 let serverInstance = null;
 let aiWorker = null;
+let coreRuntime = null;
+
+// lycore（渲染核心）：由主进程守护，崩溃自动重启；管道地址经 LYCORE_ENDPOINT 传给本地服务。后台启动，失败不阻止应用
+function setupCore() {
+  const rt = require('./core-runtime');
+  const coreDir = app.isPackaged ? null : path.join(path.dirname(require.resolve('@talekiln/core/package.json')));
+  const client = require('@talekiln/core');
+  coreRuntime = rt.createCoreRuntime({
+    createSupervisor: client.createSupervisor,
+    bin: rt.resolveLycoreBin({ isPackaged: app.isPackaged, resourcesPath: process.resourcesPath, repoCoreDir: coreDir }),
+    endpoint: rt.makeEndpoint(),
+    logDir: path.join(USERDATA_DIR, 'logs'),
+    appDataDir: USERDATA_DIR,
+    provision: (o) => client.provision(o),
+    log: (m) => writeMainLog(m),
+    onFailed: () => dialog.showErrorBox('Talekiln', '渲染核心多次崩溃，导出功能暂不可用。请重启应用；若仍失败请导出诊断包反馈。'),
+  });
+  coreRuntime.start().catch((e) => writeMainLog(`core runtime start threw: ${e && e.stack ? e.stack : e}`));
+}
 
 // 托盘 / 退出确认 / 完成通知 / 系统唤醒（逻辑在 lifecycle.js，Electron 对象注入）
 const lifecycle = require('./lifecycle').createLifecycle({
@@ -91,6 +110,7 @@ function ensureDataDir() {
 
 async function startLocalService() {
   ensureDataDir();
+  setupCore();
   process.env.TALEKILN_LOCAL_TOKEN = LOCAL_TOKEN;
   process.env.WEB_DIST_PATH = RENDERER_DIST;
   process.env.LOG_FILE = path.join(DATA_DIR, 'logs', 'app.log');
@@ -196,8 +216,16 @@ app.whenReady().then(async () => {
   }
 });
 
+let coreStopped = false;
 app.on('before-quit', (e) => {
   if (!lifecycle.onBeforeQuit(e)) return; // 有未完成任务：等待用户确认
+  if (coreRuntime && !coreStopped) {
+    // 先优雅关闭 lycore（最多几秒），再真正退出
+    coreStopped = true;
+    e.preventDefault();
+    coreRuntime.stop().finally(() => app.quit());
+    return;
+  }
   if (aiWorker) { aiWorker.stop().catch(() => {}); aiWorker = null; }
   if (serverInstance) {
     serverInstance.close();
