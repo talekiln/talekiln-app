@@ -13,6 +13,8 @@
         <el-button size="small" :disabled="!selectedClip" @click="onSplit">切分 (S)</el-button>
         <el-button size="small" :disabled="!selectedClip" @click="onDelete">删除 (Del)</el-button>
         <el-button size="small" :loading="store.loading" @click="onReassemble">重新组装</el-button>
+        <el-button size="small" data-test="open-music" @click="musicOpen = true">音乐与混音</el-button>
+        <el-button size="small" type="primary" data-test="open-export" @click="goExport">导出</el-button>
         <el-button size="small" @click="router.push('/settings/shortcuts')">快捷键</el-button>
         <el-button-group>
           <el-button size="small" @click="zoom(1 / 1.25)">-</el-button>
@@ -21,6 +23,10 @@
         </el-button-group>
       </template>
     </header>
+
+    <el-drawer v-model="musicOpen" title="音乐与混音" size="400px" append-to-body>
+      <MusicPanel v-if="store.timeline" />
+    </el-drawer>
 
     <div v-if="store.loading && !store.timeline" class="te-empty">加载中…</div>
     <div v-else-if="!store.timeline" class="te-empty">
@@ -99,6 +105,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, VideoPlay, VideoPause } from '@element-plus/icons-vue'
 import { useTimelineStore } from '@/stores/timeline'
+import MusicPanel from '@/components/MusicPanel.vue'
 import { useKeymap } from '@/composables/useKeymap'
 import { SCOPE_TIMELINE, SCOPE_WORKBENCH } from '@/utils/keymap'
 import {
@@ -120,6 +127,7 @@ const playhead = ref(0)
 const playing = ref(false)
 const drag = ref(null)
 const snapLine = ref(null)
+const musicOpen = ref(false)
 const videoEl = ref(null)
 const scrollEl = ref(null)
 
@@ -142,6 +150,11 @@ const previewKind = computed(() => {
 function goBack() {
   const dramaId = route.query.drama
   router.push(dramaId ? { path: `/film/${dramaId}`, query: { episode: String(episodeId.value) } } : '/')
+}
+
+async function goExport() {
+  await store.flushPending()
+  router.push({ path: `/episodes/${episodeId.value}/export`, query: route.query })
 }
 
 function zoom(factor) {

@@ -18,6 +18,34 @@ const newId = () => crypto.randomUUID();
 const nowIso = () => new Date().toISOString();
 const isInt = (n) => Number.isInteger(n);
 
+const DEFAULT_MIX = { ducking: { enabled: true, gain: 0.25, rampMs: 200 }, loudnorm: true };
+
+/**
+ * Mix settings persisted with the timeline (consumed as render.start `mix`):
+ * { ducking: { enabled, gain (0..1, music level under narration), rampMs }, loudnorm }.
+ * Missing fields take defaults; invalid values throw TimelineError.
+ */
+function normalizeMix(input) {
+  const m = input == null ? {} : input;
+  if (typeof m !== 'object' || Array.isArray(m)) throw new TimelineError('mix must be an object');
+  const d = m.ducking == null ? {} : m.ducking;
+  if (typeof d !== 'object' || Array.isArray(d)) throw new TimelineError('mix.ducking must be an object');
+  const enabled = d.enabled ?? DEFAULT_MIX.ducking.enabled;
+  const gain = d.gain ?? DEFAULT_MIX.ducking.gain;
+  const rampMs = d.rampMs ?? DEFAULT_MIX.ducking.rampMs;
+  const loudnorm = m.loudnorm ?? DEFAULT_MIX.loudnorm;
+  if (typeof enabled !== 'boolean') throw new TimelineError('mix.ducking.enabled must be a boolean');
+  if (typeof gain !== 'number' || !(gain >= 0 && gain <= 1)) throw new TimelineError('mix.ducking.gain must be between 0 and 1');
+  if (!isInt(rampMs) || rampMs < 0 || rampMs > 5000) throw new TimelineError('mix.ducking.rampMs must be an integer between 0 and 5000');
+  if (typeof loudnorm !== 'boolean') throw new TimelineError('mix.loudnorm must be a boolean');
+  return { ducking: { enabled, gain, rampMs }, loudnorm };
+}
+
+function parseSettings(raw) {
+  if (!raw) return {};
+  try { const o = JSON.parse(raw); return o && typeof o === 'object' ? o : {}; } catch (_) { return {}; }
+}
+
 function emptyTracks() {
   return TRACK_KINDS.map((kind) => ({ id: newId(), kind, name: kind, volume: 1, muted: false, clips: [] }));
 }
@@ -74,6 +102,7 @@ function validateTimeline(tl) {
     if (!TRACK_KINDS.includes(t.kind)) throw new TimelineError(`unknown track kind: ${t.kind}`);
     if (seen.has(t.kind)) throw new TimelineError(`duplicate track kind: ${t.kind}`);
     seen.add(t.kind);
+    if (typeof t.volume !== 'number' || !(t.volume >= 0 && t.volume <= 4)) throw new TimelineError(`track ${t.kind}: volume must be between 0 and 4`);
     if (!Array.isArray(t.clips)) throw new TimelineError(`track ${t.kind}: clips must be an array`);
     for (const c of t.clips) {
       if (ids.has(c.id)) throw new TimelineError(`duplicate clip id: ${c.id}`);
@@ -131,6 +160,7 @@ function loadTimeline(db, timelineId) {
     duration_ms: row.duration_ms,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    mix: normalizeMix(parseSettings(row.settings).mix),
     tracks: tracks.map((t) => ({
       id: t.id,
       kind: t.kind,
@@ -156,6 +186,7 @@ function saveTimeline(db, input) {
   if (!input || !isInt(Number(input.episode_id))) throw new TimelineError('episode_id is required');
   const tl = normalizeTimeline(input);
   validateTimeline(tl);
+  const mixIn = input.mix === undefined ? undefined : normalizeMix(input.mix);
   const duration = computeDuration(tl);
   const ts = nowIso();
   const run = db.transaction(() => {
@@ -168,11 +199,14 @@ function saveTimeline(db, input) {
         throw new TimelineError(`stale version (have ${cur.version}, got ${input.version})`, 409, 'CONFLICT');
       }
       db.prepare('UPDATE timelines SET version = version + 1, duration_ms = ?, updated_at = ? WHERE id = ?').run(duration, ts, id);
+      if (mixIn !== undefined) {
+        db.prepare('UPDATE timelines SET settings = ? WHERE id = ?').run(JSON.stringify({ ...parseSettings(cur.settings), mix: mixIn }), id);
+      }
       db.prepare('DELETE FROM timeline_clips WHERE timeline_id = ?').run(id);
       db.prepare('DELETE FROM timeline_tracks WHERE timeline_id = ?').run(id);
     } else {
-      id = Number(db.prepare('INSERT INTO timelines (episode_id, version, duration_ms, created_at, updated_at) VALUES (?, 1, ?, ?, ?)')
-        .run(Number(tl.episode_id), duration, ts, ts).lastInsertRowid);
+      id = Number(db.prepare('INSERT INTO timelines (episode_id, version, duration_ms, created_at, updated_at, settings) VALUES (?, 1, ?, ?, ?, ?)')
+        .run(Number(tl.episode_id), duration, ts, ts, JSON.stringify({ mix: mixIn ?? normalizeMix(null) })).lastInsertRowid);
     }
     const insTrack = db.prepare('INSERT INTO timeline_tracks (id, timeline_id, kind, name, position, volume, muted) VALUES (?, ?, ?, ?, ?, ?, ?)');
     const insClip = db.prepare(`INSERT INTO timeline_clips
@@ -213,15 +247,35 @@ function findClip(tl, clipId) {
   throw new TimelineError(`clip not found: ${clipId}`, 404, 'NOT_FOUND');
 }
 
+function prepareNewClip(kind, data) {
+  const clip = normalizeClip({ ...data, id: undefined });
+  if (kind !== 'subtitle' && clip.asset_ref && clip.src_in_ms == null && clip.src_out_ms == null && isInt(clip.duration_ms)) {
+    clip.src_in_ms = 0;
+    clip.src_out_ms = clip.duration_ms;
+  }
+  return clip;
+}
+
+/** Add several clips to one track in a single transaction (all-or-nothing). */
+function addClips(db, timelineId, kind, list) {
+  return mutate(db, timelineId, (tl) => {
+    const track = tl.tracks.find((t) => t.kind === kind);
+    if (!track) throw new TimelineError(`unknown track kind: ${kind}`);
+    const ids = [];
+    for (const data of list) {
+      const clip = prepareNewClip(kind, data);
+      track.clips.push(clip);
+      ids.push(clip.id);
+    }
+    return { clip_ids: ids };
+  });
+}
+
 function addClip(db, timelineId, kind, data) {
   return mutate(db, timelineId, (tl) => {
     const track = tl.tracks.find((t) => t.kind === kind);
     if (!track) throw new TimelineError(`unknown track kind: ${kind}`);
-    const clip = normalizeClip({ ...data, id: undefined });
-    if (kind !== 'subtitle' && clip.asset_ref && clip.src_in_ms == null && clip.src_out_ms == null && isInt(clip.duration_ms)) {
-      clip.src_in_ms = 0;
-      clip.src_out_ms = clip.duration_ms;
-    }
+    const clip = prepareNewClip(kind, data);
     track.clips.push(clip);
     return { clip_id: clip.id };
   });
@@ -328,6 +382,6 @@ function assembleFromStoryboard(db, episodeId, opts = {}) {
 }
 
 module.exports = {
-  TRACK_KINDS, TimelineError, validateTimeline, createTimeline, loadTimeline, loadTimelineByEpisode,
-  saveTimeline, addClip, moveClip, trimClip, splitClip, deleteClip, assembleFromStoryboard,
+  DEFAULT_MIX, normalizeMix, computeDuration, TRACK_KINDS, TimelineError, validateTimeline, createTimeline, loadTimeline, loadTimelineByEpisode,
+  saveTimeline, addClip, addClips, moveClip, trimClip, splitClip, deleteClip, assembleFromStoryboard,
 };

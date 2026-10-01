@@ -25,7 +25,7 @@ const timelineRoutes = require('./timelines');
 const scriptgenRoutes = require('./scriptgen');
 const workbenchRoutes = require('./workbench');
 
-function setupRouter(cfg, db, log, aiQueue) {
+function setupRouter(cfg, db, log, aiQueue, extras = {}) {
   const r = express.Router();
   const drama = dramaRoutes(db, cfg, log);
   const task = taskRoutes(db, log);
@@ -339,6 +339,16 @@ function setupRouter(cfg, db, log, aiQueue) {
   r.put('/timelines/:id', timelines.save);
   r.post('/timelines/:id/clips', timelines.addClip);
   r.patch('/timelines/:id/clips/:clip_id', timelines.patchClip);
+
+  // ---------- music library (F05) ----------
+  if (extras.storageRoot) {
+    const library = require('../music').createMusicLibrary(db, { storageRoot: extras.storageRoot });
+    const music = require('./music')(db, library, log);
+    r.get('/music-library', music.list);
+    r.post('/music-library', music.multerSingle, music.import);
+    r.delete('/music-library/:id', music.remove);
+    r.post('/timelines/:id/music', music.attach);
+  }
 
   // 启动时将已有的覆盖加载到 promptI18n 内存缓存
   try {
