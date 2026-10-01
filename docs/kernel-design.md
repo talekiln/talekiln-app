@@ -122,3 +122,62 @@ Node { id, type, params, legacy_id? }
 - **幂等与历史**：`applyTx` 为纯函数，`opts.applied`（Set）里已有的 `tx_id` 为空操作；`History` 在撤销时把 `tx_id` 移出生效集合、重做时放回。事务可带非规格字段 `meta`（如新建节点 id），应用时忽略。
 - **视图 `params`**：视图里输出的 params 是键排序副本，保证快照重载（规范 JSON）前后视图逐字节相同。
 - **未做（留给后续任务）**：持久化（`project_graphs` / `graph_ops`）、REST、`importLegacy` / `materialize`、`conformance/` 完整套件（`packages/kernel/test/` 里目前是各模块单测与随机属性测试）。
+
+## 10. K2 实现备注（持久化、旧表适配、REST）
+
+代码：`packages/local/migrations/27_project_graphs.sql`、`src/kernel/{store,legacy}.js`、`src/routes/kernel.js`；测试 `test/kernelStore.test.js`、`test/kernelRoutes.test.js`。`packages/local` 通过 `@talekiln/kernel`（workspace 依赖）使用内核。
+
+### 10.1 存储
+
+- 表：`project_graphs(episode_id PK, snapshot, snapshot_seq, updated_at)`、`graph_ops(seq AUTOINCREMENT, episode_id, tx_id, tx, created_at, UNIQUE(episode_id, tx_id))`；另加 `graph_legacy_map(episode_id, node_id, storyboard_id)`，记录图里新建的镜头在旧表分到的行，撤销再重做时复用同一行。
+- 快照内容 = 规范 JSON 的 `{graph, past, future}`（撤销/重做栈随快照保存，撤销栈最多保留 200 步）。每 `snapshotEvery`（默认 20）条日志写一次快照；打开项目 = 读快照 + 按 seq 重放其后的日志。
+- 日志条目 `kind`：`apply`（原事务）、`undo`（目标 tx_id + 逆 op）、`redo`（目标 tx_id + 原 op）。undo/redo 各有自己的 tx_id（可由调用方指定作为幂等键），重放时用同一个 `History`，所以图与撤销栈都能精确复原；重放时核对目标 tx_id，对不上视为日志损坏。
+- `commit` 在**一个** better-sqlite3 事务里依次：加载状态 → 同 tx_id 已在日志则空操作 → 应用事务 → 物化到旧表 → 写日志 → 视情况写快照。任一步抛错整体回滚，图、日志、快照、旧表都不变。意图类提交用 `commit(db, ep, (graph) => tx, {tx_id})`，在事务里基于最新图构造，避免读-改-写竞态。
+- 物化可能给新镜头分配 `storyboards.id`：这些绑定（`shot_id -> legacy_id`）写进同一条日志的 `binds` 字段，并在重放时回放到节点上，所以重载后 `shot.legacy_id` 与活图一致。
+- 持久性：与队列一致，依赖连接的 WAL；要断电级保证由调用方把 `synchronous` 设为 FULL（store 不改 pragma）。
+
+### 10.2 导入（`importLegacy`）
+
+- 已有项目图则原样返回（`created:false`），不覆盖。
+- `episodes.script_content` 用 `parseScript` 按行切成 `script_line`；与某镜头的 dialogue / narration / action 列逐字相同的行并入该镜头的行（不重复），其余放进首个“剧本”组。
+- 镜头按 `storyboard_number` 排序，连续且 `(segment_index, segment_title)` 相同的归为一个场景组（组名 = `segment_title`）。每个镜头的 `action`、`narration`、`dialogue` 列按换行切成 `action`/`narration`/`dialogue` 行并连 `derives` 边；对白行保留整行文字（含“说话人：”），`speaker` 另存，物化时逐字写回。
+- `video_url`、`local_path || image_url`、`narration_audio_local_path || audio_local_path` 导入为 image/video/narration 的采用版本（cacheKey 取导入时的当前值，所以是 fresh；`asset.hash` 是引用字符串的摘要，不读文件）。
+- 旧时间线的视频轨 → `compose.segments`（片段 id = 旧 clip id，起点差折成 `gap_before_ms`，裁剪区间取 `src_in/out` 并夹到镜头时长内，转场取 `style.transition`），音乐轨 → `compose.music`；没有旧时间线的镜头得到整段片段。
+
+### 10.3 物化（`materialize`）
+
+- 只写由图派生的列：`storyboard_number, segment_index, segment_title, title, description, location, time, duration, dialogue, narration, action, atmosphere, image_prompt, video_prompt, characters, shot_type, angle, movement`，以及 `video_url`（仅在图有采用视频且不同时）、`status`、`deleted_at`。没有变化的行不写（`updated_at` 也不动）。
+- 图里已不存在的镜头 → `deleted_at` 软删除；撤销后同一行取消软删除。新镜头插入新行并绑定 `legacy_id`。
+- `dialogue/narration/action` 列由各自 `kind` 的行拼接（与内核 `shotDialogue` 不同：后者把旁白也算对白，写回旧表会污染 `dialogue` 列）。
+- 时间线：用 `timelineView` 重写 `timelines/timeline_tracks/timeline_clips`（保留轨道行、音量、静音和 `settings.mix`），内容无变化则不写。`timeline_clips.id` 是全库主键，内核确定性 id 加 `e<episode_id>_` 前缀，旧 UUID 片段 id 原样保留。
+- 状态映射：旧表 `status` 取值有 `draft`（schema 默认）、`pending`（服务层新建）、`processing`/`completed`/`failed`（生成流程）。图只表达“有无采用产物”：有 → `completed`；无且旧值为 `completed` → `pending`；`processing`/`failed` 是队列运行态，原样保留；其余不动。缺口：图的 `stale`（有产物但已过期）在旧表无对应值，旧页面仍显示 `completed`，过期信息只在内核视图里；`error_msg` 不由图管理。
+
+### 10.4 REST（`/api/v1`，令牌由 app 级 `localTokenGuard` 统一校验）
+
+| 方法 路径 | 说明 |
+|---|---|
+| `GET /episodes/:id/graph` | 全图 + `stale` 集合 + `seq` + `can_undo/can_redo` |
+| `GET /episodes/:id/views/{script,shots,timeline,canvas}` | 四个视图（`shot` 同 `shots`） |
+| `POST /episodes/:id/tx` | `{tx_id, label, ops}` 原始 op 事务 |
+| `POST /episodes/:id/intent` | `{view, name, args, tx_id?}`；只放行规格 §3 的 25 个意图，`setVoice`/`recordGeneration`/`moveNodes` 等未放行 |
+| `POST /episodes/:id/undo`、`/redo` | `{tx_id?}` |
+| `POST /episodes/:id/import-legacy` | 首次 201，已存在 200 |
+
+返回体为 `{applied, tx_id, seq, invalidated, revalidated, stale, can_undo, can_redo, meta?}`（`meta` 带新建节点 id）。错误：内核错误码原样返回（`INVALID_OP`/`VALIDATION`/`INTENT` → 400，`NOT_FOUND`/`GRAPH_NOT_FOUND` → 404，`NOTHING_TO_UNDO`/`NOTHING_TO_REDO` → 409），均已进错误码表。`addShot` 的 `legacy_id` 参数被丢弃（只由物化分配）。
+
+### 10.5 仍绕过内核的旧写路径（后续要改成调意图层）
+
+下列接口仍直接写旧表，之后内核提交的物化会按图覆盖其派生列，或图感知不到这些变化：
+
+- 镜头增删改：`POST/PUT/DELETE /storyboards`、`/storyboards/:id/insert-before`、`PUT /episodes/:id/storyboards/order`、`POST /storyboards/batch-infer-params`、`split-by-audio`、各类 polish / prompt 接口；
+- 整集重建：`POST /episodes/:id/storyboards`（生成分镜，整体替换）、`scriptgen` 的 createProject、`dramaImport`/`novelImport`、`PUT /dramas/:id/episodes`（改 `script_content`）；
+- 时间线：`PUT /timelines/:id`、`POST /timelines/:id/clips`、`PATCH /timelines/:id/clips/:clip_id`、`POST /timelines/episode/:id/assemble`、`POST /timelines/:id/music`（F02/F05 编辑器）；
+- 生成结果落库：图片/视频/配音流程直接写 `storyboards.video_url / local_path / image_url / *_audio_local_path / status`，工作台 `adopt-video` 写 `adopted_video_id`。这些应改为 `recordGeneration`（新增版本并采用）；在此之前物化对 `video_url` 只增不清，不会抹掉旧流程写入的视频，但图里看不到它；
+- `episodes.script_content` 不由物化写回（剧本行改动只在图里）。
+
+### 10.6 已知取舍
+
+- 导入后旧页面的字幕轨会多出“旁白镜头”的字幕（旧装配只取 `dialogue` 列，内核把旁白行也算字幕）。
+- `segment_index` 物化为“含镜头的场景组在全项目的序号”，与旧值同序同分组，但绝对值可能不同。
+- 旧时间线里手工编辑过的字幕文字/样式不导入（字幕由行文字推导）；视频片段顺序与 `storyboard_number` 不一致时以镜头顺序为准。
+- 每次 `commit` 都从快照 + 日志重放，没有进程内缓存（日志最多 `snapshotEvery` 条，成本可控）。
