@@ -1,9 +1,11 @@
 const response = require('../response');
+const { legacyGuard } = require('./legacySpendGuard');
 const videoService = require('../services/videoService');
 const taskService = require('../services/taskService');
 const { normalizeAspectRatioForApi } = require('../services/videoClient');
 
-function routes(db, log) {
+function routes(db, log, deps = {}) {
+  const guard = legacyGuard(deps.spend, 'video');
   return {
     list: (req, res) => {
       try {
@@ -16,6 +18,7 @@ function routes(db, log) {
       }
     },
     create: (req, res) => {
+      if (!guard(req, res)) return;
       try {
         const body = req.body || {};
         const task = taskService.createTask(db, log, 'video_generation', String(body.drama_id || ''));
