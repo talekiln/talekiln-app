@@ -52,3 +52,4 @@
 | 服务商开关 | 已做 | `providers.enabled` 统一控制注册表、队列、向导、AI 配置页、模型目录、获取 Key 链接和提示文案；默认 `['bailian']`；新增服务商步骤见 docs/provider-extension.md |
 | 百炼全流程覆盖审计 | 已做（文档） | docs/bailian-flow-coverage.md：逐步骤列真实验证 / 仅夹具 / 缺；顺手修了队列共享 Key、默认模型与请求形态、本地图内联三处接线 |
 | 百炼端到端脚本 | 已写，未用真 Key 跑 | scripts/bailian-e2e.mjs（3 镜、花费上限默认 5 元）；用本地模拟百炼（HTTP + WebSocket）和真 lycore 跑通过编排；手动工作流 bailian-live.yml 的 run_e2e 选项，真实运行待有 Key 的会话 |
+| I2 生成项目建图 / 旁白写回 / 词级字幕 / 真实片长 | 已做（假文本模型与假 TTS 测试，未用真 Key，未在浏览器打开） | scriptgen 同事务写角色表并建项目图；`POST /episodes/:id/voiceover` 估价后确认、经内核写回、旧列物化；词级字幕与真实片长为内核投影；时间线编辑器“旁白配音”抽屉；见 kernel-design §11 |

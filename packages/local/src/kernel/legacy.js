@@ -217,6 +217,12 @@ function deriveStatus(existing, hasAsset) {
   return existing === 'completed' || !existing ? 'pending' : existing;
 }
 
+/** 节点采用版本的资产引用（kind 匹配时），否则 null。 */
+function adoptedRef(graph, nodeId, kind) {
+  const v = nodeId && kernel.adoptedVersion(graph, nodeId);
+  return v && v.asset && v.asset.ref && (!kind || v.asset.kind === kind) ? v.asset.ref : null;
+}
+
 function shotRows(graph) {
   const { storyboards } = kernel.toLegacyRows(graph);
   const groupIndex = new Map();
@@ -231,6 +237,7 @@ function shotRows(graph) {
       segment_index: groupIndex.get(r.scene_group_id), segment_title: r.scene_title || '',
       dialogue: by('dialogue'), narration: by('narration'), action: by('action'),
       has_asset: hasAsset,
+      narration_audio: (kernel.adoptedVersion(graph, parts.narration) || {}).source === 'legacy-import' ? null : adoptedRef(graph, parts.narration, 'audio'),
     };
   });
 }
@@ -264,6 +271,7 @@ function writeStoryboards(db, ep, graph) {
       id = Number(info.lastInsertRowid);
       mapSet.run(ep, r.shot_id, id);
       binds[r.shot_id] = id;
+      if (r.narration_audio) db.prepare('UPDATE storyboards SET narration_audio_local_path = ? WHERE id = ?').run(r.narration_audio, id);
     } else {
       if (r.legacy_id !== id) binds[r.shot_id] = id; // 节点没有（或指向已不存在的行）：绑定到复用的行
       mapSet.run(ep, r.shot_id, id);
@@ -274,6 +282,8 @@ function writeStoryboards(db, ep, graph) {
       }
       // video_url：图里没有采用视频时不清空（旧生成流程还会直接写这一列，见报告“绕过内核的旧写路径”）
       if (r.video_url && existing.video_url !== r.video_url) { sets.push('video_url = ?'); vals.push(r.video_url); }
+      // narration_audio_local_path：与 video_url 同理，只增不清（旁白音频由配音写回，图里采用的音频引用 -> 旧列）
+      if (r.narration_audio && existing.narration_audio_local_path !== r.narration_audio) { sets.push('narration_audio_local_path = ?'); vals.push(r.narration_audio); }
       const status = deriveStatus(existing.status, r.has_asset);
       if (status !== existing.status) { sets.push('status = ?'); vals.push(status); }
       if (existing.deleted_at != null) sets.push('deleted_at = NULL');

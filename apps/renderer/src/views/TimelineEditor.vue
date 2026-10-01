@@ -13,6 +13,7 @@
         <el-button size="small" :disabled="!selectedClip" @click="onSplit">切分 (S)</el-button>
         <el-button size="small" :disabled="!selectedClip" @click="onDelete">删除 (Del)</el-button>
         <el-button size="small" :loading="store.loading" @click="onReassemble">重新组装</el-button>
+        <el-button size="small" data-test="open-voiceover" @click="voiceoverOpen = true">旁白配音</el-button>
         <el-button size="small" data-test="open-music" @click="musicOpen = true">音乐与混音</el-button>
         <el-button size="small" type="primary" data-test="open-export" @click="goExport">导出</el-button>
         <el-button size="small" @click="router.push('/settings/shortcuts')">快捷键</el-button>
@@ -26,6 +27,10 @@
 
     <el-drawer v-model="musicOpen" title="音乐与混音" size="400px" append-to-body>
       <MusicPanel v-if="store.timeline" />
+    </el-drawer>
+
+    <el-drawer v-model="voiceoverOpen" title="旁白配音" size="400px" append-to-body>
+      <VoiceoverPanel v-if="store.timeline" :episode-id="episodeId" @done="onVoiceoverDone" />
     </el-drawer>
 
     <div v-if="store.loading && !store.timeline" class="te-empty">加载中…</div>
@@ -106,6 +111,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, VideoPlay, VideoPause } from '@element-plus/icons-vue'
 import { useTimelineStore } from '@/stores/timeline'
 import MusicPanel from '@/components/MusicPanel.vue'
+import VoiceoverPanel from '@/components/VoiceoverPanel.vue'
 import { useKeymap } from '@/composables/useKeymap'
 import { SCOPE_TIMELINE, SCOPE_WORKBENCH } from '@/utils/keymap'
 import {
@@ -128,6 +134,7 @@ const playing = ref(false)
 const drag = ref(null)
 const snapLine = ref(null)
 const musicOpen = ref(false)
+const voiceoverOpen = ref(false)
 const videoEl = ref(null)
 const scrollEl = ref(null)
 
@@ -176,6 +183,11 @@ async function loadAll() {
     ElMessage.error(e.message || '加载时间线失败')
   }
   await maybeRecover()
+}
+
+// 配音写进了项目图（旁白音频 + 词级字幕）；重新读取时间线即可看到新的旁白轨和字幕轨
+async function onVoiceoverDone() {
+  try { await store.load(episodeId.value) } catch (e) { ElMessage.error(e.message || '重新加载时间线失败') }
 }
 
 async function onAssemble() {
