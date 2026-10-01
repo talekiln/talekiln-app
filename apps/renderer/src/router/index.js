@@ -10,6 +10,18 @@ const router = createRouter({
       meta: { title: '项目列表' }
     },
     {
+      path: '/new-project',
+      name: 'new-project',
+      component: () => import('@/views/NewProject.vue'),
+      meta: { title: '新建项目' }
+    },
+    {
+      path: '/project/:dramaId/storyboard',
+      name: 'storyboard',
+      component: () => import('@/views/StoryboardPage.vue'),
+      meta: { title: '分镜表' }
+    },
+    {
       path: '/drama/:id',
       name: 'drama-detail',
       component: () => import('@/views/DramaDetail.vue'),
