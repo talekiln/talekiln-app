@@ -8,7 +8,9 @@ try {
   require('dns').setDefaultResultOrder('ipv4first');
 } catch (_) {}
 
-const USERDATA_DIR = path.join(app.getPath('appData'), 'talekiln');
+const plat = require('./platform');
+// Windows: %APPDATA%\talekiln；macOS: ~/Library/Application Support/talekiln；目录名规则见 platform.userDataDir
+const USERDATA_DIR = plat.userDataDir(app.getPath('appData'));
 app.setPath('userData', USERDATA_DIR);
 
 const LOG_FILE = path.join(USERDATA_DIR, 'main.log');
@@ -121,7 +123,8 @@ async function startLocalService() {
   // 密钥：主进程用 safeStorage 加密，仅密文落盘；明文只在本地服务内存中。不可用时拒绝保存而非降级明文
   const { FileSecretStore, createSafeStorageCipher } = require(path.join(LOCAL_DIR, 'src', 'secrets'));
   const secretStore = new FileSecretStore({
-    cipher: createSafeStorageCipher(safeStorage),
+    // guardSafeStorage：Linux 上退化为 basic_text 的后端视为不可用；macOS 走 Keychain
+    cipher: createSafeStorageCipher(plat.guardSafeStorage(safeStorage)),
     filePath: path.join(DATA_DIR, 'data', 'secrets.enc.json'),
   });
   if (!secretStore.isAvailable()) writeMainLog('safeStorage encryption unavailable: API keys cannot be saved');
@@ -169,7 +172,9 @@ function isExternal(url, port) {
 }
 
 function createWindow(port) {
-  Menu.setApplicationMenu(null);
+  // Windows/Linux 无菜单栏；macOS 必须保留应用菜单，否则 ⌘C/⌘V/⌘Q 等键位失效
+  const tpl = plat.buildAppMenuTemplate({ appName: app.getName() });
+  Menu.setApplicationMenu(tpl ? Menu.buildFromTemplate(tpl) : null);
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -200,9 +205,20 @@ function createWindow(port) {
   if (process.env.TALEKILN_DEVTOOLS === '1') win.webContents.openDevTools();
 }
 
+let servicePort = null;
+// macOS：点击 Dock 图标时窗口已关闭则重建；无托盘时关窗并不退出应用
+app.on('activate', () => {
+  if (servicePort) lifecycle.reopen(() => createWindow(servicePort));
+});
+// 显式声明 window-all-closed：mac 上保持运行；其他平台由 lifecycle 在关窗时退出，这里不重复处理
+app.on('window-all-closed', () => {
+  if (plat.quitOnAllWindowsClosed()) app.quit();
+});
+
 app.whenReady().then(async () => {
   try {
     const port = await startLocalService();
+    servicePort = port;
     hardenSession(port);
     lifecycle.setupTray();
     createWindow(port);

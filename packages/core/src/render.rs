@@ -102,6 +102,9 @@ pub fn encoder_args(enc: &str, out: &OutSpec) -> Vec<String> {
         "h264_qsv" => &["-preset", "medium", "-global_quality", "21"],
         "h264_amf" => &["-quality", "balanced", "-rc", "cqp", "-qp_i", "21", "-qp_p", "21"],
         "h264_mf" => &["-b:v", "10M"],
+        // macOS VideoToolbox: bitrate-driven; `-allow_sw 0` keeps it on the hardware engine (a software
+        // fallback would be slower than libx264-free LGPL builds can afford and hides detect results).
+        "h264_videotoolbox" => &["-b:v", "10M", "-allow_sw", "0"],
         _ => &[],
     };
     a.extend(extra.iter().map(|s| s.to_string()));
@@ -266,7 +269,33 @@ pub fn ass_content(cues: &[Cue], out: &OutSpec) -> String {
 
 /// Arguments to render one scene into `tmp_out` (muxer forced to mp4 so any temp name works).
 /// `ass_name` is a bare file name relative to ffmpeg's working directory (avoids filter path escaping).
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn scene_args(sc: &SceneSpec, out: &OutSpec, enc: &str, ass_name: Option<&str>, tmp_out: &str) -> Vec<String> {
+    scene_args_ex(sc, out, enc, ass_name, None, tmp_out)
+}
+
+/// Escape a value for use inside a filtergraph option (two levels: option parser, then graph parser).
+/// Needed for absolute paths such as a Windows `C:\fonts` (colon, backslash) or a macOS path with `'` / `,`.
+pub fn filter_escape(v: &str) -> String {
+    let l1: String = v.chars().fold(String::new(), |mut a, c| {
+        if matches!(c, '\\' | ':' | '\'') {
+            a.push('\\');
+        }
+        a.push(c);
+        a
+    });
+    l1.chars().fold(String::new(), |mut a, c| {
+        if matches!(c, '\\' | '\'' | '[' | ']' | ',' | ';') {
+            a.push('\\');
+        }
+        a.push(c);
+        a
+    })
+}
+
+/// `scene_args` plus an optional libass font directory (bundled CJK fonts so subtitles look the same on
+/// every OS instead of depending on which system fonts libass can see).
+pub fn scene_args_ex(sc: &SceneSpec, out: &OutSpec, enc: &str, ass_name: Option<&str>, fonts_dir: Option<&str>, tmp_out: &str) -> Vec<String> {
     let s = |x: &str| x.to_string();
     let dur = secs(sc.dur_ms);
     let mut a: Vec<String> = ["-hide_banner", "-nostdin", "-loglevel", "error", "-y"].iter().map(|x| s(x)).collect();
@@ -295,6 +324,9 @@ pub fn scene_args(sc: &SceneSpec, out: &OutSpec, enc: &str, ass_name: Option<&st
     );
     if let Some(n) = ass_name {
         vf.push_str(&format!(",subtitles=filename={n}"));
+        if let Some(d) = fonts_dir {
+            vf.push_str(&format!(":fontsdir={}", filter_escape(d)));
+        }
     }
     vf.push_str(",setpts=PTS-STARTPTS[v]");
     let mut parts = vec![vf];
@@ -423,7 +455,24 @@ pub fn final_args(list: &str, mix: &Mix, tmp_out: &str) -> Vec<String> {
 
 /// Escape a path for the concat demuxer list file.
 pub fn concat_line(p: &str) -> String {
-    format!("file '{}'\n", p.replace('\\', "/").replace('\'', "'\\''"))
+    concat_line_for(p, cfg!(windows))
+}
+
+/// Only on Windows is `\` a path separator that may be flipped to `/`; on macOS/Linux it is a legal
+/// file-name character and rewriting it would point the concat list at a different file.
+pub fn concat_line_for(p: &str, windows: bool) -> String {
+    let p = if windows { p.replace('\\', "/") } else { p.to_string() };
+    // the concat demuxer's own quoting: a backslash inside single quotes is literal, only ' needs closing/reopening
+    format!("file '{}'\n", p.replace('\'', "'\\''"))
+}
+
+/// Font directory for libass: request param `fontsDir`, env LYCORE_FONTS_DIR, else `<exe dir>/fonts` when present.
+pub fn resolve_fonts_dir(param: Option<&str>, env: Option<&str>, exe_dir_fonts: Option<&Path>) -> Option<String> {
+    param
+        .filter(|s| !s.is_empty())
+        .or(env.filter(|s| !s.is_empty()))
+        .map(|s| s.to_string())
+        .or_else(|| exe_dir_fonts.filter(|d| d.is_dir()).map(|d| d.to_string_lossy().into_owned()))
 }
 
 // ---------------------------------------------------------------- process runner
@@ -707,7 +756,12 @@ async fn attempt_inner(
             Some(name)
         };
         let tmp = cache.join(format!("{key}.{}.tmp", job.id));
-        let args = scene_args(&spec, out, enc, ass_name.as_deref(), &tmp.to_string_lossy());
+        let fonts_dir = resolve_fonts_dir(
+            ctx.params.get("fontsDir").and_then(|v| v.as_str()),
+            std::env::var("LYCORE_FONTS_DIR").ok().as_deref(),
+            std::env::current_exe().ok().and_then(|e| e.parent().map(|p| p.join("fonts"))).as_deref(),
+        );
+        let args = scene_args_ex(&spec, out, enc, ass_name.as_deref(), fonts_dir.as_deref(), &tmp.to_string_lossy());
         job.update(|s| s["stage"] = json!(format!("segment {}/{}", n + 1, to_render.len())));
         let dur_ms = spec.dur_ms as f64;
         let r = run_ff(job, &ctx.ffmpeg, &args, Some(work), |sec| {

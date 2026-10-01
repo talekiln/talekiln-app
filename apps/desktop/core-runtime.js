@@ -6,24 +6,32 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 
-const EXE = process.platform === 'win32' ? 'lycore.exe' : 'lycore';
+const plat = require('./platform');
+
+const EXE = plat.exeName('lycore');
 
 /** 打包后在 <resources>/lycore/；开发时取 packages/core/target 下最新的 release/debug 构建。未找到返回 null。 */
-function resolveLycoreBin({ isPackaged, resourcesPath, repoCoreDir, env = process.env, exists = fs.existsSync, mtime = (p) => fs.statSync(p).mtimeMs }) {
+function resolveLycoreBin({ isPackaged, resourcesPath, repoCoreDir, env = process.env, exists = fs.existsSync, mtime = (p) => fs.statSync(p).mtimeMs, platform = process.platform }) {
+  const p = plat.pathFor(platform);
+  const exe = plat.exeName('lycore', platform);
   if (env.LYCORE_BIN && exists(env.LYCORE_BIN)) return env.LYCORE_BIN;
   if (isPackaged) {
-    const p = path.join(resourcesPath, 'lycore', EXE);
-    return exists(p) ? p : null;
+    const bin = p.join(resourcesPath, 'lycore', exe);
+    return exists(bin) ? bin : null;
   }
-  const found = ['release', 'debug'].map((d) => path.join(repoCoreDir, 'target', d, EXE)).filter((p) => exists(p));
+  const found = ['release', 'debug'].map((d) => p.join(repoCoreDir, 'target', d, exe)).filter((f) => exists(f));
   if (!found.length) return null;
   return found.sort((a, b) => mtime(b) - mtime(a))[0];
 }
 
-/** 每次启动独占的管道地址（Windows 命名管道，其他平台用 UDS）。 */
+/**
+ * 每次启动独占的管道地址（Windows 命名管道，其他平台用 UDS）。
+ * UDS 路径有长度上限（macOS 104 字节），过长时退到 /tmp，仍放不下则抛错而不是等 bind 失败。
+ */
 function makeEndpoint({ platform = process.platform, tmpDir = require('os').tmpdir(), pid = process.pid } = {}) {
   const id = `talekiln-lycore-${pid}-${crypto.randomBytes(4).toString('hex')}`;
-  return platform === 'win32' ? `\\\\.\\pipe\\${id}` : path.join(tmpDir, `${id}.sock`);
+  if (platform === 'win32') return `\\\\.\\pipe\\${id}`;
+  return plat.pickSocketPath({ platform, tmpDir, fileName: `${id}.sock` });
 }
 
 /**
@@ -33,11 +41,12 @@ function makeEndpoint({ platform = process.platform, tmpDir = require('os').tmpd
  *  3. 首次使用时按清单下载（清单仍是占位则跳过，错误只记日志）
  * 返回 { dir?: string, source: 'env'|'bundled'|'provisioned'|'none', error?: string }
  */
-async function resolveFfmpeg({ env = process.env, lycoreBin, appDataDir, provision, exists = fs.existsSync, log = () => {} }) {
+async function resolveFfmpeg({ env = process.env, lycoreBin, appDataDir, provision, exists = fs.existsSync, log = () => {}, platform = process.platform }) {
   if (env.LYCORE_FFMPEG_DIR) return { dir: env.LYCORE_FFMPEG_DIR, source: 'env' };
-  const tool = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
-  const bundled = lycoreBin && path.join(path.dirname(lycoreBin), 'ffmpeg');
-  if (bundled && (exists(path.join(bundled, tool)) || exists(path.join(bundled, 'bin', tool)))) return { source: 'bundled' };
+  const p = plat.pathFor(platform);
+  const tool = plat.exeName('ffmpeg', platform);
+  const bundled = lycoreBin && p.join(p.dirname(lycoreBin), 'ffmpeg');
+  if (bundled && (exists(p.join(bundled, tool)) || exists(p.join(bundled, 'bin', tool)))) return { source: 'bundled' };
   if (!provision) return { source: 'none' };
   try {
     const { dir } = await provision({ appDataDir });
@@ -65,6 +74,8 @@ function createCoreRuntime({ createSupervisor, env = process.env, bin, endpoint,
         log('lycore binary not found; export disabled (set LYCORE_BIN or build packages/core)');
         return { ok: false, reason: 'binary_missing' };
       }
+      // 拷贝 / 解压 / 某些打包路径会丢掉 x 位；mac 与 Linux 上先补上，否则 spawn 报 EACCES
+      if (!plat.ensureExecutable(bin)) log(`lycore is not executable and chmod failed: ${bin}`);
       const ff = await resolveFfmpeg({ env, lycoreBin: bin, appDataDir, provision, log });
       log(`ffmpeg source: ${ff.source}${ff.dir ? ' ' + ff.dir : ''}`);
       sup = createSupervisor({ bin, endpoint, logDir, env: ff.dir ? { LYCORE_FFMPEG_DIR: ff.dir } : {}, ...supervisorOptions });

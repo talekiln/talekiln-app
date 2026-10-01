@@ -10,6 +10,7 @@ pub const CANDIDATES: &[(&str, &str)] = &[
     ("h264_qsv", "intel"),
     ("h264_amf", "amd"),
     ("h264_mf", "mediafoundation"),
+    ("h264_videotoolbox", "apple"),
     ("libx264", "software"),
 ];
 
@@ -165,16 +166,30 @@ mod tests {
             ("h264_qsv".to_string(), Ok(())),
             ("h264_amf".to_string(), Err("amf unsupported".to_string())),
             ("h264_mf".to_string(), Ok(())),
+            ("h264_videotoolbox".to_string(), Ok(())),
             ("libx264".to_string(), Ok(())),
         ];
         let r = build_result(&listed, &tests);
         assert_eq!(r["recommended"], json!(["h264_qsv", "h264_mf", "libx264"]));
         assert_eq!(r["best"], "h264_qsv");
         let enc = r["encoders"].as_array().unwrap();
-        assert_eq!(enc.len(), 5);
+        assert_eq!(enc.len(), 6);
         assert_eq!(enc[0]["name"], "h264_nvenc");
         assert_eq!(enc[0]["available"], false);
         assert_eq!(enc[0]["reason"], "Cannot load libcuda.so.1");
+    }
+
+    #[test]
+    fn videotoolbox_preferred_on_mac_lgpl_build() {
+        // An LGPL macOS build has no libx264; VideoToolbox is then the only H.264 encoder.
+        let listed = parse_encoders(include_str!("fixtures/ffmpeg_encoders_macos_lgpl.txt"));
+        assert!(listed.contains("h264_videotoolbox") && !listed.contains("libx264"));
+        let r = build_result(&listed, &[("h264_videotoolbox".to_string(), Ok(()))]);
+        assert_eq!(r["recommended"], json!(["h264_videotoolbox"]));
+        assert_eq!(r["best"], "h264_videotoolbox");
+        let vt = r["encoders"].as_array().unwrap().iter().find(|e| e["name"] == "h264_videotoolbox").unwrap();
+        assert_eq!(vt["vendor"], "apple");
+        assert_eq!(vt["hardware"], true);
     }
 
     #[test]

@@ -118,3 +118,117 @@ jobs:
             apps/desktop/release/*.exe
             apps/desktop/release/*.blockmap
             apps/desktop/release/latest*.yml
+
+  # macOS 构建（P2-F）。未签名为默认；有 Apple 证书 Secrets 且不是 PR 时才签名并公证。见 docs/phase2-macos.md。
+  # 选择：arm64（macos-14）为主——Apple 芯片是现役 Mac 的主体，且原生模块（better-sqlite3、sharp）按同架构构建最稳；
+  # x64（Intel）作为实验项并行跑（continue-on-error），首次验证后再决定是否出 universal 或保留双包。
+  # runner 标签随 GitHub 调整（Intel 镜像尤其会下线），改标签前先查 GitHub 当前文档。整个作业从未在真实 runner 上跑过。
+  package-macos:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: arm64, runner: macos-14, experimental: false }
+          - { arch: x64, runner: macos-15-intel, experimental: true }
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.experimental }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm secrets:scan
+      - run: pnpm test:scripts
+      - run: pnpm build
+
+      # 签名 / 公证骨架：只有存在证书 Secrets 且不是 PR 时才签名；否则走未签名构建。
+      # Secret 只经 env 传给需要它的单个步骤，不 echo、不落盘。
+      # MAC_CSC_LINK = Developer ID Application 证书（.p12）的 base64；MAC_CSC_KEY_PASSWORD = 其口令；
+      # APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID = 公证用（App 专用口令，不是 Apple ID 登录密码）。
+      - name: Detect signing secrets
+        id: signing
+        env:
+          HAS_CERT: ${{ secrets.MAC_CSC_LINK != '' && secrets.MAC_CSC_KEY_PASSWORD != '' }}
+          HAS_NOTARY: ${{ secrets.APPLE_ID != '' && secrets.APPLE_APP_SPECIFIC_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$HAS_CERT" = "true" ] && [ "$EVENT" != "pull_request" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"; else echo "enabled=false" >> "$GITHUB_OUTPUT"; fi
+          if [ "$HAS_CERT" = "true" ] && [ "$HAS_NOTARY" = "true" ] && [ "$EVENT" != "pull_request" ]; then echo "notarize=true" >> "$GITHUB_OUTPUT"; else echo "notarize=false" >> "$GITHUB_OUTPUT"; fi
+
+      - uses: dtolnay/rust-toolchain@stable
+      # 在真实 macOS 上跑 lycore 的 Rust 单测与 Node 集成测试（Unix 套接字、SIGTERM、父进程消失、编码器检测夹具）
+      - name: lycore tests (cargo + node client)
+        run: pnpm --filter @talekiln/core test
+      # 桌面主进程的平台逻辑测试（参数注入平台，本来不依赖 macOS，这里顺带在 mac 上再跑一遍）
+      - run: pnpm --filter @talekiln/desktop test
+      # 全量测试先不作为门槛：其余包从未在 macOS 上跑过，第一轮结果用来摸底，稳定后去掉 continue-on-error
+      - name: all package tests (informational for now)
+        continue-on-error: true
+        run: pnpm test
+
+      - run: cargo build --release
+        working-directory: packages/core
+
+      # ffmpeg：固定清单里 macOS 条目仍是 TODO 时该步骤失败（退出码 3），作业继续，产物名带 NOFFMPEG，包内没有 ffmpeg。
+      - name: Fetch ffmpeg (LGPL, pinned hash)
+        id: ffmpeg
+        continue-on-error: true
+        run: node scripts/fetch-ffmpeg.mjs
+
+      # 未签名构建：arm64 上完全无签名的 Mach-O 不能运行，所以对内置可执行文件做 ad-hoc 签名（不是身份签名，不能分发给公众）
+      - name: Ad-hoc sign bundled executables (unsigned build only)
+        if: steps.signing.outputs.enabled != 'true'
+        run: |
+          codesign --force --sign - packages/core/target/release/lycore
+          for f in apps/desktop/resources/ffmpeg/ffmpeg apps/desktop/resources/ffmpeg/ffprobe; do
+            if [ -f "$f" ]; then codesign --force --sign - "$f"; fi
+          done
+
+      - name: Build app (signed, notarized)
+        if: steps.signing.outputs.enabled == 'true' && steps.signing.outputs.notarize == 'true'
+        run: node scripts/pack-desktop.mjs --mac --${{ matrix.arch }} -c.mac.notarize=true
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Build app (signed, not notarized)
+        if: steps.signing.outputs.enabled == 'true' && steps.signing.outputs.notarize != 'true'
+        run: node scripts/pack-desktop.mjs --mac --${{ matrix.arch }}
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+
+      - name: Build app (unsigned)
+        if: steps.signing.outputs.enabled != 'true'
+        run: node scripts/pack-desktop.mjs --mac --${{ matrix.arch }} -c.mac.identity=null
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Verify signature, Gatekeeper and notarization ticket
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          NOTARIZED: ${{ steps.signing.outputs.notarize }}
+        run: |
+          app=$(ls -d apps/desktop/release/mac*/Talekiln.app | head -n 1)
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -dv --verbose=4 "$app" 2>&1 | grep -E "Authority|TeamIdentifier|flags=.*runtime"
+          if [ "$NOTARIZED" = "true" ]; then
+            spctl --assess --type execute --verbose=2 "$app"
+            xcrun stapler validate "$app"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: talekiln-mac-${{ matrix.arch }}-${{ steps.signing.outputs.enabled == 'true' && 'signed' || 'UNSIGNED' }}${{ steps.ffmpeg.outcome == 'success' && '' || '-NOFFMPEG' }}
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/latest*.yml

@@ -12,6 +12,7 @@
 const fs = require('fs');
 const { execFile } = require('child_process');
 const { getGlobalSetting, setGlobalSetting } = require('../services/settingsService');
+const { defaultSubtitleFont } = require('../utils/platformFonts');
 
 const SETTINGS_KEY = 'aigc.settings';
 const WATERMARK_TEXT = 'AI生成';
@@ -74,7 +75,7 @@ function watermarkClips(totalMs, width, height, newId) {
   if (!(totalMs > 0)) return [];
   const short = Math.min(width, height);
   const style = (ratio) => ({
-    font: 'Microsoft YaHei', size: Math.max(12, Math.round(short * ratio)), bold: true,
+    font: defaultSubtitleFont(), size: Math.max(12, Math.round(short * ratio)), bold: true,
     color: '#FFFFFF', outlineColor: '#000000', outline: 2, position: 'top', marginV: Math.round(short * 0.03),
   });
   const mk = (start, dur, ratio) => ({
