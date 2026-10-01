@@ -20,6 +20,39 @@ jobs:
       - run: pnpm build
       - run: pnpm --filter @talekiln/admin build
 
+  # 云服务：同一套测试跑在真实 PostgreSQL 上（服务容器需要 Linux runner）。
+  # 下面的库口令仅用于该一次性服务容器，不是任何真实环境的凭据。
+  cloud-pg:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci-throwaway-db
+          POSTGRES_DB: talekiln_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d talekiln_ci"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://ci:ci-throwaway-db@localhost:5432/talekiln_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @talekiln/cloud prisma:generate
+      - run: pnpm --filter @talekiln/cloud prisma:deploy
+      - run: pnpm --filter @talekiln/cloud exec prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+      - run: pnpm --filter @talekiln/cloud test:pg
+
   package:
     needs: test
     runs-on: windows-latest

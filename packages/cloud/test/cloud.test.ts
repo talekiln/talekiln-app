@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { generateKeyPairSync } from 'node:crypto';
 import { jwtVerify, importJWK, SignJWT } from 'jose';
-import { createMemoryRepositories } from '../src/domain/memory.repositories';
+import { makeRepos } from './helpers/repos';
 import { AuthService } from '../src/services/auth.service';
 import { loadConfig } from '../src/services/config';
 import { DeviceService } from '../src/services/device.service';
@@ -10,8 +10,8 @@ import { LicenceService } from '../src/services/licence.service';
 import { TokenService } from '../src/services/token.service';
 import { ServiceError } from '../src/services/errors';
 
-function setup() {
-  const repos = createMemoryRepositories();
+async function setup() {
+  const repos = await makeRepos();
   let t = Date.parse('2026-10-01T00:00:00Z');
   const clock = { now: () => new Date(t), advance: (ms: number) => { t += ms; } };
   const cfg = loadConfig({ JWT_ACCESS_SECRET: 'x'.repeat(40), NODE_ENV: 'test' } as NodeJS.ProcessEnv);
@@ -26,7 +26,7 @@ const rejects = (p: Promise<unknown>, code: string) =>
   assert.rejects(p, (e) => e instanceof ServiceError && e.code === code);
 
 test('邀请码一码一用', async () => {
-  const { auth } = setup();
+  const { auth } = await setup();
   const invite = await auth.createInvite('admin');
   const ok = await auth.activate({ inviteCode: invite.code, email: 'a@x.com', password: 'password1' });
   assert.equal(ok.account.email, 'a@x.com');
@@ -35,7 +35,7 @@ test('邀请码一码一用', async () => {
 });
 
 test('邀请码并发激活只有一个成功，失败者不留账号', async () => {
-  const { auth, repos } = setup();
+  const { auth, repos } = await setup();
   const invite = await auth.createInvite('admin');
   const results = await Promise.allSettled([
     auth.activate({ inviteCode: invite.code, email: 'a@x.com', password: 'password1' }),
@@ -46,8 +46,27 @@ test('邀请码并发激活只有一个成功，失败者不留账号', async ()
   assert.equal(survivors.filter(Boolean).length, 1);
 });
 
+test('同邮箱并发激活：唯一键冲突映射为 email_taken，仅一个账号；非唯一键故障不被伪装', async () => {
+  const { auth, repos } = await setup();
+  const i1 = await auth.createInvite('admin');
+  const i2 = await auth.createInvite('admin');
+  const rs = await Promise.allSettled([
+    auth.activate({ inviteCode: i1.code, email: 'same@x.com', password: 'password1' }),
+    auth.activate({ inviteCode: i2.code, email: 'same@x.com', password: 'password1' }),
+  ]);
+  assert.equal(rs.filter((r) => r.status === 'fulfilled').length, 1);
+  const lost = rs.find((r) => r.status === 'rejected') as PromiseRejectedResult;
+  assert.ok(lost.reason instanceof ServiceError && lost.reason.code === 'email_taken');
+  assert.equal((await repos.accounts.list()).length, 1);
+
+  const i3 = await auth.createInvite('admin');
+  const broken = { ...repos, accounts: { ...repos.accounts, create: async () => { throw new Error('connection reset'); } } };
+  const auth2 = new AuthService(broken, new TokenService(broken, loadConfig({ JWT_ACCESS_SECRET: 'x'.repeat(40), NODE_ENV: 'test' } as NodeJS.ProcessEnv)), undefined, 4);
+  await assert.rejects(auth2.activate({ inviteCode: i3.code, email: 'z@x.com', password: 'password1' }), /connection reset/);
+});
+
 test('过期邀请码不可用；密码登录', async () => {
-  const { auth, clock } = setup();
+  const { auth, clock } = await setup();
   const invite = await auth.createInvite('admin', { expiresInDays: 1 });
   clock.advance(2 * 86400_000);
   await rejects(auth.activate({ inviteCode: invite.code, email: 'a@x.com', password: 'password1' }), 'invalid_invite');
@@ -60,7 +79,7 @@ test('过期邀请码不可用；密码登录', async () => {
 });
 
 test('刷新令牌轮换；重放旧令牌吊销整个家族', async () => {
-  const { auth, repos } = setup();
+  const { auth, repos } = await setup();
   const invite = await auth.createInvite('admin');
   const first = await auth.activate({ inviteCode: invite.code, email: 'a@x.com', password: 'password1', device: dev });
   const second = await auth.refresh(first.refreshToken);
@@ -77,7 +96,7 @@ test('刷新令牌轮换；重放旧令牌吊销整个家族', async () => {
 });
 
 test('并发使用同一刷新令牌：只有一个成功，家族被吊销', async () => {
-  const { auth } = setup();
+  const { auth } = await setup();
   const invite = await auth.createInvite('admin');
   const first = await auth.activate({ inviteCode: invite.code, email: 'a@x.com', password: 'password1' });
   const rs = await Promise.allSettled([auth.refresh(first.refreshToken), auth.refresh(first.refreshToken)]);
@@ -85,7 +104,7 @@ test('并发使用同一刷新令牌：只有一个成功，家族被吊销', as
 });
 
 test('刷新令牌过期被拒；登出吊销', async () => {
-  const { auth, clock } = setup();
+  const { auth, clock } = await setup();
   const invite = await auth.createInvite('admin');
   const first = await auth.activate({ inviteCode: invite.code, email: 'a@x.com', password: 'password1' });
   await auth.logout(first.refreshToken);
@@ -96,7 +115,7 @@ test('刷新令牌过期被拒；登出吊销', async () => {
 });
 
 test('许可证：公钥可验证，claims 正确，篡改失败', async () => {
-  const { auth, licences, tokens, clock, cfg } = setup();
+  const { auth, licences, tokens, clock, cfg } = await setup();
   const invite = await auth.createInvite('admin');
   const r = await auth.activate({ inviteCode: invite.code, email: 'a@x.com', password: 'password1', device: dev });
   const claims = await tokens.verifyAccess(r.accessToken);
@@ -134,7 +153,7 @@ test('许可证：公钥可验证，claims 正确，篡改失败', async () => {
 });
 
 test('许可证续期需要有效设备；吊销设备后拒绝', async () => {
-  const { auth, licences, devices, tokens } = setup();
+  const { auth, licences, devices, tokens } = await setup();
   const invite = await auth.createInvite('admin');
   const noDev = await auth.activate({ inviteCode: invite.code, email: 'a@x.com', password: 'password1' });
   const c0 = await tokens.verifyAccess(noDev.accessToken);
@@ -150,7 +169,7 @@ test('许可证续期需要有效设备；吊销设备后拒绝', async () => {
 });
 
 test('访问令牌：篡改/他人密钥签名被拒', async () => {
-  const { auth, tokens } = setup();
+  const { auth, tokens } = await setup();
   const invite = await auth.createInvite('admin');
   const r = await auth.activate({ inviteCode: invite.code, email: 'a@x.com', password: 'password1' });
   await tokens.verifyAccess(r.accessToken);
