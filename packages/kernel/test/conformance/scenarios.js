@@ -2,7 +2,7 @@
 // 场景库。每个场景：{ id, title, applicable(g,story)->原因|null, equivalence?, entries:{ script|shot|timeline|canvas: [变体] } }
 // 变体：{ name, steps(g0, story) -> [步骤函数] }；步骤函数 (g, o, env) -> { tx, writes, invalidated, ... }。
 // 入口视图通过“该视图自己的投影”定位目标（scriptView 的行 id、shotView 的行、timelineView 的片段/字幕 clip、canvasView 的节点），
-// 再调用该视图的意图；画布没有“改参数”意图，用 canvasEdit（一条纯 setParam 事务，等价于属性面板编辑）。
+// 再调用该视图的意图；画布的属性面板编辑用 canvas.setNodeParam（canvasEdit 只是把一次面板编辑的多个参数合成一个事务）。
 // 期望的失效集合全部手工推导（写在每个场景旁边），不是从内核结果复制。
 const assert = require('node:assert/strict');
 const K = require('../../src');
@@ -37,8 +37,11 @@ const compose1 = (g) => [composeId(g)];
 const chainsPlusCompose = (g, shotIds) => (shotIds.length ? sortedUniq([...shotIds.flatMap((s) => O.chainIds(g, s)), composeId(g)]) : []);
 const sortedUniq = (a) => uniq(a).sort();
 
-/** 画布“属性面板”编辑：一条纯 setParam 事务（内核没有对应的画布意图，见报告“缺口”）。 */
-const canvasEdit = (o, edits) => ({ tx_id: o.tx_id, label: 'canvasEdit', ops: edits.map(([node, key, value]) => ({ op: 'setParam', node, path: [key], value })) });
+/** 画布“属性面板”编辑：正式意图 canvas.setNodeParam（白名单 + 取值校验）；一次编辑多个参数时把各自的 ops 合进同一个带标签的事务（同一步撤销）。 */
+const canvasEdit = (g, o, edits) => {
+  const parts = edits.map(([node, key, value]) => canvas.setNodeParam(g, node, [key], value));
+  return { tx_id: o.tx_id, label: 'setNodeParam', ops: parts.flatMap((t) => t.ops) };
+};
 
 const needShots = (n) => (g) => (O.shotsInOrder(g).length >= n ? null : `需要至少 ${n} 个镜头`);
 const needTwoShotGroups = (g) => (shotGroups(g).length >= 2 ? null : '需要至少两个含镜头的场景');
@@ -86,11 +89,11 @@ function lineEditEntries(kind) { // kind: 'text' | 'kind'
     },
     canvas: (g, T) => { assert.equal(K.canvasView(g).nodes.find((n) => n.id === T.id).params.text, T.text); return T.id; },
   };
-  const mk = (view) => variant(view === 'canvas' ? 'setParam' : 'rewriteLine', (g0) => {
+  const mk = (view) => variant(view === 'canvas' ? 'setNodeParam' : 'rewriteLine', (g0) => {
     const T = rewriteTarget(g0);
     return [(g, o) => {
       const id = locate[view](g, T);
-      const tx = view === 'canvas' ? canvasEdit(o, [[id, key, patch(T)[key]]]) : script.rewriteLine(g, id, patch(T), o);
+      const tx = view === 'canvas' ? canvasEdit(g, o, [[id, key, patch(T)[key]]]) : script.rewriteLine(g, id, patch(T), o);
       return { tx, ...expect(g, T) };
     }];
   });
@@ -480,7 +483,7 @@ const SCENARIOS = [
       });
       return {
         shot: [variant('setShotField', (g0) => { const T = mid(flatShots(g0)); return [(g, o) => ({ tx: shot.setShotField(g, T.id, { title: '新标题', image_prompt: '新的首帧提示词' }, o), ...expect(g, T) })]; })],
-        canvas: [variant('setParam', (g0) => { const T = mid(flatShots(g0)); return [(g, o) => ({ tx: canvasEdit(o, [[T.id, 'title', '新标题'], [T.id, 'image_prompt', '新的首帧提示词']]), ...expect(g, T) })]; })],
+        canvas: [variant('setNodeParam', (g0) => { const T = mid(flatShots(g0)); return [(g, o) => ({ tx: canvasEdit(g, o, [[T.id, 'title', '新标题'], [T.id, 'image_prompt', '新的首帧提示词']]), ...expect(g, T) })]; })],
       };
     })(),
   },
@@ -556,7 +559,7 @@ const SCENARIOS = [
       });
       return {
         shot: [mk('regenerateShot', (g, o, T) => shot.regenerateShot(g, T.id, { seed: 777 }, o))],
-        canvas: [mk('setParam(seed)', (g, o, T, c) => canvasEdit(o, [[c.image, 'seed', 777], [c.video, 'seed', 777]]))],
+        canvas: [mk('setNodeParam(seed)', (g, o, T, c) => canvasEdit(g, o, [[c.image, 'seed', 777], [c.video, 'seed', 777]]))],
       };
     })(),
   },
@@ -569,7 +572,7 @@ const SCENARIOS = [
       });
       return {
         shot: [mk('regenerateShot(video)', (g, o, T) => shot.regenerateShot(g, T.id, { seed: 31, targets: ['video'] }, o))],
-        canvas: [mk('setParam(seed)', (g, o, T, c) => canvasEdit(o, [[c.video, 'seed', 31]]))],
+        canvas: [mk('setNodeParam(seed)', (g, o, T, c) => canvasEdit(g, o, [[c.video, 'seed', 31]]))],
       };
     })(),
   },
@@ -590,7 +593,7 @@ const SCENARIOS = [
       });
       return {
         shot: [mk('setVoice', (g, o, T) => shot.setVoice(g, T.id, { voice: '温柔女声' }, o))],
-        canvas: [mk('setParam(voice)', (g, o, T, c) => canvasEdit(o, [[c.narration, 'voice', '温柔女声']]))],
+        canvas: [mk('setNodeParam(voice)', (g, o, T, c) => canvasEdit(g, o, [[c.narration, 'voice', '温柔女声']]))],
       };
     })(),
   },
@@ -702,7 +705,7 @@ const SCENARIOS = [
             tx: timeline.setTransition(g, seg.id, 'fade', o), invalidated: [composeId(g)], stale: [composeId(g)], writes: composeW(g, 'segments'),
             check: (b, a) => {
               assert.equal(clipRuns(a).find((r) => r.shot === T.shot).clips[0].style.transition, 'fade');
-              for (const x of O.shotsInOrder(a)) assert.equal(K.sceneKey(a, x) === keys0[x], x !== T.shot, 'transition changes only that shot scene key');
+              for (const x of O.shotsInOrder(a)) assert.equal(K.sceneKey(a, x), keys0[x], 'transition is not part of the G02 scene key (lycore does not render transitions)');
             },
           };
         },
@@ -816,6 +819,78 @@ const SCENARIOS = [
     })] },
   },
 
+  ...[
+    {
+      id: 'change_references', title: '改锁定的参考图（只有该镜头的 image + video + 合成过期；改回去零成本重新采用旧版本）',
+      affected: (c, cid) => [c.image, c.video, cid],
+      change: { shot: { reference_hashes: ['ref:scene-a', 'ref:char-b'] }, canvas: (c) => [[c.image, 'reference_hashes', ['ref:scene-a', 'ref:char-b']]] },
+      revert: { shot: { reference_hashes: [] }, canvas: (c) => [[c.image, 'reference_hashes', null]] },
+    },
+    {
+      id: 'change_tail_frame', title: '改尾帧（只有该镜头的 video + 合成过期，首帧图保持新鲜）',
+      affected: (c, cid) => [c.video, cid],
+      change: { shot: { tail_frame_hash: 'tail:abc' }, canvas: (c) => [[c.video, 'tail_frame_hash', 'tail:abc']] },
+      revert: { shot: { tail_frame_hash: null }, canvas: (c) => [[c.video, 'tail_frame_hash', null]] },
+    },
+    {
+      id: 'change_image_model', title: '换出图模型（该镜头的 image + video + 合成过期）',
+      affected: (c, cid) => [c.image, c.video, cid],
+      change: { shot: { image_model: 'wan2.6-image' }, canvas: (c) => [[c.image, 'model', 'wan2.6-image']] },
+      revert: { shot: { image_model: 'default' }, canvas: (c) => [[c.image, 'model', 'default']] },
+    },
+    {
+      id: 'change_video_model', title: '换视频模型（只有该镜头的 video + 合成过期）',
+      affected: (c, cid) => [c.video, cid],
+      change: { shot: { video_model: 'wan2.2-kf2v-flash' }, canvas: (c) => [[c.video, 'model', 'wan2.2-kf2v-flash']] },
+      revert: { shot: { video_model: 'default' }, canvas: (c) => [[c.video, 'model', 'default']] },
+    },
+  ].map((d) => ({
+    id: d.id, title: d.title, applicable: needShots(1), equivalence: 'graph',
+    // 手工推导：生成输入是节点自己的参数，所以改了它就让该节点及其下游过期；其余镜头、配音不受影响；
+    // 生成一次后改回去，cacheKey 回到最初的值，最初的旧版本（v_1）可以直接重新采用，不新增版本 = 不花钱。
+    entries: (() => {
+      const mk = (name, edit) => variant(name, (g0) => {
+        const T = mid(flatShots(g0));
+        return [
+          (g, o) => {
+            const c = O.chain(g, T.id);
+            const aff = sortedUniq(d.affected(c, composeId(g)));
+            const keys0 = K.cacheKeys(g);
+            return {
+              tx: edit('change', g, o, T, c), invalidated: aff, stale: aff,
+              writes: W(`^nodes\\.(${aff.filter((x) => x !== composeId(g)).map(esc).join('|')})\\.params\\.(model|reference_hashes|tail_frame_hash)$`),
+              check: (b, a) => {
+                const keys1 = K.cacheKeys(a);
+                for (const id of Object.keys(a.nodes)) if (!aff.includes(id)) assert.equal(keys1[id], keys0[id], `unrelated node ${id} key unchanged`);
+                for (const s of flatShots(a)) if (s.id !== T.id) assert.deepEqual([s.image, s.video, s.narration], ['fresh', 'fresh', 'fresh'], 'other shots stay fresh');
+                assert.equal(flatShots(a).find((s) => s.id === T.id).narration, 'fresh', 'narration does not depend on image/video inputs');
+                for (const id of aff) assert.notEqual(keys1[id], keys0[id]);
+              },
+            };
+          },
+          (g, o) => { const c = O.chain(g, T.id); const aff = sortedUniq(d.affected(c, composeId(g))); return { tx: S.generateTx(g, aff, o), revalidated: aff, stale: [] }; },
+          (g, o) => {
+            const c = O.chain(g, T.id);
+            const aff = sortedUniq(d.affected(c, composeId(g)));
+            return { tx: edit('revert', g, o, T, c), invalidated: aff, stale: aff };
+          },
+          (g, o) => {
+            const c = O.chain(g, T.id);
+            const aff = sortedUniq(d.affected(c, composeId(g)));
+            return {
+              tx: { tx_id: o.tx_id, label: 'adoptVersion', ops: aff.map((id) => ({ op: 'adoptVersion', node: id, version_id: 'v_1' })) },
+              revalidated: aff, stale: [], writes: W(...aff.map((id) => `^adopted\\.${esc(id)}$`)),
+              check: (b, a) => { for (const id of aff) assert.equal(a.versions[id].length, 2, `${id}: cache hit re-adopts the old version, no new version is created`); },
+            };
+          },
+        ];
+      });
+      return {
+        shot: [mk('setShotReferences', (phase, g, o, T) => shot.setShotReferences(g, T.id, d[phase].shot, o))],
+        canvas: [mk('setNodeParam', (phase, g, o, T, c) => canvasEdit(g, o, d[phase].canvas(c)))],
+      };
+    })(),
+  })),
   {
     id: 'adopt_old_version', title: '采用旧版本（版本回退）：版本不被覆盖，采用旧版本后按 key 判断新鲜', applicable: needShots(1),
     entries: { shot: [variant('regenerate+generate+adoptVersion', (g0) => {
