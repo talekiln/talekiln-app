@@ -143,13 +143,13 @@ function getImageProxyUploadSettings() {
     const cfg = require('../config').loadConfig();
     const ip = cfg?.image_proxy || {};
     return {
-      uploadUrl: (ip.upload_url || 'https://imageproxy.zhongzhuan.chat/api/upload').trim(),
+      uploadUrl: String(ip.upload_url || '').trim(), // 没有默认图床：用户参考图不得在未配置时发往第三方
       timeoutMs: Math.max(5000, Number(ip.upload_timeout_seconds ?? 45) * 1000),
       maxAttempts: Math.max(1, Math.min(5, Number(ip.upload_max_attempts ?? 2))),
     };
   } catch (_) {
     return {
-      uploadUrl: 'https://imageproxy.zhongzhuan.chat/api/upload',
+      uploadUrl: '',
       timeoutMs: 45000,
       maxAttempts: 2,
     };
@@ -164,6 +164,10 @@ function getImageProxyUploadSettings() {
  */
 async function uploadToImageProxy(imageBuffer, mimeType, log, tag) {
   const { uploadUrl, timeoutMs, maxAttempts } = getImageProxyUploadSettings();
+  if (!uploadUrl) {
+    log.warn('[图床上传] 未配置 image_proxy.upload_url，不上传（参考图只在用户自己配置的图床上传）', { tag });
+    return null;
+  }
   const extMap = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' };
   const ext = extMap[mimeType] || 'jpg';
   const filename = `ref_${Date.now()}.${ext}`;
