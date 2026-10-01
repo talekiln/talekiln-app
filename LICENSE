@@ -1,0 +1,24 @@
+TODO(需法务审阅 / legal review required) -- THIS FILE IS A PLACEHOLDER, NOT THE LICENSE TEXT.
+
+Decision: the interface, local service and provider adapters of this repository are to be released
+under the GNU Affero General Public License, version 3 (SPDX: AGPL-3.0-only).
+
+The full license text is intentionally NOT written here from memory. Before the repository is made public:
+
+  1. Download the verbatim, unmodified text from the canonical source
+       https://www.gnu.org/licenses/agpl-3.0.txt
+     (or copy it from the `LICENSE` file of an AGPL-3.0 package you have vetted), and replace the
+     contents of this file with it, keeping the standard "How to Apply" notice only if counsel wants it.
+  2. Have counsel confirm: AGPL-3.0-only vs AGPL-3.0-or-later, the copyright holder name, and the
+     treatment of the upstream MIT code (see LICENSE-LocalMiniDrama, which must stay in the repo).
+  3. `node scripts/open-source-export.mjs` fails until this file contains the full AGPL-3.0 text.
+
+Scope (draft, see docs/open-source-split.md):
+  - apps/desktop, apps/renderer, packages/local, packages/kernel ........ AGPL-3.0-only
+  - packages/plugin-sdk ................................................. MIT (own LICENSE file)
+  - upstream LocalMiniDrama portions .................................... MIT (LICENSE-LocalMiniDrama)
+  - lycore (packages/core), licensing and cloud services ................ proprietary, not in this repo
+
+Contributions are accepted under the CLA described in CLA.md (draft).
+
+Copyright (c) 2026 TODO: copyright holder (Jay to confirm the legal entity)

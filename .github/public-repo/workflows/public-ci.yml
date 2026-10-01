@@ -1,0 +1,48 @@
+# DRAFT: CI of the PUBLIC repository (no lycore, no cloud). The private monorepo keeps ci.yml / core.yml.
+# Builds and tests everything that exists in the open repo; the "no core" case is the default here.
+# No secrets are needed. See docs/open-source-ci.md.
+name: public-ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm secrets:scan
+      - run: pnpm licenses:check
+      - run: pnpm test
+        env:
+          # Make "no lycore" explicit: nothing in the open repo may need a core endpoint to pass tests.
+          LYCORE_ENDPOINT: ''
+      - run: pnpm build
+
+  plugin-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @talekiln/plugin-sdk test
+      - run: pnpm --filter @talekiln/plugin-sdk exec tsc --noEmit -p tsconfig.json
+        continue-on-error: true # typescript is not a workspace dependency yet; make it required once added
