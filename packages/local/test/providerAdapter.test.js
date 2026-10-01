@@ -6,6 +6,8 @@ const path = require('path');
 const Database = require('better-sqlite3');
 const { createAiTaskStore, createAiTaskQueue, buildQueueProviders, withDownloads, toView } = require('../src/queue');
 const { ProviderError, ERROR_CODES } = require('../src/providers/errors');
+// 方舟代码保留但默认隐藏（providers.enabled 默认只有 bailian）；本文件测试方舟，所以显式开启。
+require('../src/providers/enablement').configureEnabled(['bailian', 'ark']);
 
 const MIG = fs.readFileSync(path.join(__dirname, '..', 'migrations', '23_ai_tasks.sql'), 'utf8');
 const SECRET = 'sk-test-SECRET-1234567890';
@@ -115,5 +117,66 @@ describe('queue provider adapter', () => {
     store.enqueue({ idempotencyKey: 't2', provider: 'ark', kind: 'tts', params: { text: 'a' } });
     await drain(queue, 2);
     assert.deepEqual(calls.configs[0].speech, { appId: 'app1', accessToken: 'tok-abc-123456', cluster: 'c1' });
+  });
+});
+
+describe('shared key, model fit and local media', () => {
+  const textOnly = { text: [{ id: 5, provider: 'qwen', service_type: 'text', api_key: SECRET, is_active: true, model: ['qwen-plus'], default_model: 'qwen-plus' }] };
+
+  it('a bailian task borrows the key of the text config and does not borrow its model', async () => {
+    const { store, queue, calls } = setup({ configs: textOnly });
+    store.enqueue({ idempotencyKey: 's1', provider: 'bailian', kind: 'image', params: { prompt: 'x' } });
+    store.enqueue({ idempotencyKey: 's2', provider: 'bailian', kind: 'tts', params: { text: 'a' } });
+    await drain(queue, 4);
+    assert.equal(calls.image[0].req.model, undefined);
+    assert.equal(calls.tts[0].req.model, undefined);
+    assert.equal(calls.configs[0].apiKey, SECRET);
+  });
+
+  it('ark tts never borrows another service key (its speech token is separate)', async () => {
+    const cfgs = { text: [{ id: 6, provider: 'volces', service_type: 'text', api_key: SECRET, is_active: true, model: ['m'] }] };
+    const { store, queue } = setup({ configs: cfgs });
+    const t = store.enqueue({ idempotencyKey: 's3', provider: 'ark', kind: 'tts', params: { text: 'a' } }).task;
+    await drain(queue, 2);
+    assert.equal(store.get(t.id).error_code, 'INVALID_API_KEY');
+  });
+
+  it('modelFitsRequest keeps wan2.6-image for edits only and falls back for video shapes', () => {
+    const { modelFitsRequest: fit } = require('../src/queue');
+    assert.equal(fit('bailian', 'image', 'wan2.6-image', { prompt: 'x' }), undefined);
+    assert.equal(fit('bailian', 'image', 'wan2.6-image', { referenceImages: ['u'] }), 'wan2.6-image');
+    assert.equal(fit('bailian', 'image', 'wan2.6-t2i', {}), 'wan2.6-t2i');
+    assert.equal(fit('bailian', 'video', 'wan2.2-kf2v-flash', { prompt: 'x' }), undefined);
+    assert.equal(fit('bailian', 'video', 'wan2.6-t2v', { firstFrameUrl: 'u' }), 'wan2.2-kf2v-flash');
+    assert.equal(fit('bailian', 'video', 'wan2.6-t2v', { prompt: 'x' }), 'wan2.6-t2v');
+    assert.equal(fit('ark', 'image', 'wan2.6-image', {}), 'wan2.6-image');
+  });
+
+  it('inlines local reference images and first frames, leaves URLs and outside paths alone', () => {
+    const { inlineLocalMedia } = require('../src/queue');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'inl-'));
+    fs.mkdirSync(path.join(dir, 'blobs', 'ab'), { recursive: true });
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+    fs.writeFileSync(path.join(dir, 'blobs', 'ab', 'abc'), png);
+    fs.writeFileSync(path.join(dir, 'ref.jpg'), Buffer.from([0xff, 0xd8, 0xff, 1]));
+    const out = inlineLocalMedia({
+      prompt: 'p', referenceImages: ['blobs/ab/abc', '/static/ref.jpg', 'https://x/y.png', '../../etc/passwd', 'missing.png'],
+      firstFrameUrl: 'ref.jpg',
+    }, dir);
+    assert.equal(out.referenceImages[0], `data:image/png;base64,${png.toString('base64')}`);
+    assert.match(out.referenceImages[1], /^data:image\/jpeg;base64,/);
+    assert.deepEqual(out.referenceImages.slice(2), ['https://x/y.png', '../../etc/passwd', 'missing.png']);
+    assert.match(out.firstFrameUrl, /^data:image\/jpeg/);
+    assert.equal(out.prompt, 'p');
+  });
+
+  it('the queue sends inlined media to the vendor but keeps the stored params as paths', async () => {
+    const { store, queue, calls, storageDir } = setup({ configs: textOnly });
+    fs.mkdirSync(storageDir, { recursive: true });
+    fs.writeFileSync(path.join(storageDir, 'c1.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 9]));
+    const { task } = store.enqueue({ idempotencyKey: 'm1', provider: 'bailian', kind: 'image', params: { prompt: 'x', referenceImages: ['c1.png'] } });
+    await drain(queue, 3);
+    assert.match(calls.image[0].req.referenceImages[0], /^data:image\/png;base64,/);
+    assert.deepEqual(JSON.parse(store.get(task.id).params).referenceImages, ['c1.png']);
   });
 });
