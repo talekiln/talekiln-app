@@ -1,8 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAccountStore } from '@/stores/account'
+import { routeDecision, isStale } from '@/utils/account'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    {
+      path: '/login',
+      name: 'login',
+      component: () => import('@/views/Login.vue'),
+      meta: { title: '登录' }
+    },
     {
       path: '/',
       name: 'list',
@@ -90,11 +98,16 @@ const router = createRouter({
   ]
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   if (to.meta.title) {
     document.title = `${to.meta.title} - LocalMiniDrama`
   }
-  return true
+  // 登录门禁：仅当本地配置 cloud.require_login 为 true 时生效；状态查不到（本地服务异常）不拦截
+  const account = useAccountStore()
+  if (to.name !== 'login' && (!account.loaded || isStale(account.lastAt, Date.now()))) {
+    await account.fetch({ sync: true })
+  }
+  return routeDecision(account.status, to)
 })
 
 export default router
