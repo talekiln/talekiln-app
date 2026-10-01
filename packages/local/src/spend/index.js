@@ -7,6 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const { getGlobalSetting, setGlobalSetting } = require('../services/settingsService');
+const { toCsv } = require('./csv');
 
 const LIMITS_KEY = 'spend.limits';
 const PRICES_PATH = path.join(__dirname, '..', '..', 'configs', 'prices.json');
@@ -158,6 +159,10 @@ function createSpendService(db, { estimator = createEstimator(), now = () => Dat
       to: to || null,
       total: { count: total.count, cost: total.cost },
       by_provider: agg('provider').map(({ key, ...r }) => ({ provider: key, ...r })),
+      by_model: agg("COALESCE(provider, '') || '/' || COALESCE(model, '')").map(({ key, ...r }) => {
+        const i = key.indexOf('/');
+        return { provider: key.slice(0, i), model: key.slice(i + 1) || null, ...r };
+      }),
       by_project: agg("COALESCE(project_id, '')").map(({ key, ...r }) => ({ project_id: key || null, ...r })),
       by_day: agg('day').map(({ key, ...r }) => ({ day: key, ...r })),
       month: { spent: round(spent), in_flight_max: round(inFlightMax(null)), monthly_cap: lim.monthly_cap, remaining: lim.monthly_cap == null ? null : round(Math.max(0, lim.monthly_cap - spent)) },
@@ -165,7 +170,27 @@ function createSpendService(db, { estimator = createEstimator(), now = () => Dat
     };
   }
 
-  return { estimate: (spec) => estimator.estimate(spec), check, guardTask, recordFinished, getLimits, setLimits, summary, monthSpent, inFlightMax };
+  /** Per-task rows (newest first) for the cost view and CSV export. cost = actual when reported, else estimate. */
+  function listTasks({ from, to, project_id, limit = 200, offset = 0 } = {}) {
+    const where = ['day >= ?', 'day <= ?'];
+    const args = [from || '0000-01-01', to || '9999-12-31'];
+    if (project_id !== undefined && project_id !== null && project_id !== '') {
+      where.push('project_id = ?');
+      args.push(String(project_id));
+    }
+    const lim = Math.min(Math.max(Math.floor(Number(limit)) || 200, 1), 100000);
+    const off = Math.max(Math.floor(Number(offset)) || 0, 0);
+    const w = where.join(' AND ');
+    const total = db.prepare(`SELECT COUNT(*) AS n FROM spend_log WHERE ${w}`).get(...args).n;
+    const items = db.prepare(
+      `SELECT task_id, provider, kind, model, project_id, currency, estimated, actual,
+              ROUND(COALESCE(actual, estimated), 6) AS cost, day, created_at
+       FROM spend_log WHERE ${w} ORDER BY day DESC, id DESC LIMIT ? OFFSET ?`
+    ).all(...args, lim, off);
+    return { items, total, limit: lim, offset: off, currency: estimator.prices.currency || 'CNY' };
+  }
+
+  return { estimate: (spec) => estimator.estimate(spec), listTasks, toCsv, check, guardTask, recordFinished, getLimits, setLimits, summary, monthSpent, inFlightMax };
 }
 
 module.exports = { createEstimator, createSpendService, loadPrices, localDay, LIMITS_KEY, PRICES_PATH };

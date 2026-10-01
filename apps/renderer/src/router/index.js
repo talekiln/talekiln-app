@@ -73,6 +73,12 @@ const router = createRouter({
       meta: { title: '时间线编辑' }
     },
     {
+      path: '/episodes/:id/export',
+      name: 'episode-export',
+      component: () => import('@/views/ExportPage.vue'),
+      meta: { title: '导出视频' }
+    },
+    {
       path: '/settings/shortcuts',
       name: 'keyboard-settings',
       component: () => import('@/views/KeyboardSettings.vue'),
@@ -95,6 +101,12 @@ const router = createRouter({
       name: 'task-center',
       component: () => import('@/views/TaskCenter.vue'),
       meta: { title: '任务中心' }
+    },
+    {
+      path: '/spend',
+      name: 'spend',
+      component: () => import('@/views/SpendPage.vue'),
+      meta: { title: '花费统计' }
     },
     {
       path: '/media-library',
