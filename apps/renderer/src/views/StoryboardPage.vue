@@ -1,4 +1,6 @@
 <template>
+  <div class="sb-shell">
+  <ViewSwitcher />
   <div class="storyboard-page">
     <div class="page-header">
       <el-button text @click="$router.push('/')">
@@ -24,7 +26,7 @@
       </el-button>
     </div>
 
-    <el-table v-loading="loading" :data="rows" row-key="id" border empty-text="暂无分镜">
+    <el-table v-loading="loading" :data="rows" row-key="id" border empty-text="暂无分镜" :row-class-name="rowClass" @row-click="onRowClick">
       <el-table-column label="镜号" width="64" align="center">
         <template #default="{ row }">{{ row.no }}</template>
       </el-table-column>
@@ -70,10 +72,11 @@
     </el-table>
     <GenerateDialog :state="gen.dialog.value" @confirm="gen.confirm" @cancel="gen.cancel" />
   </div>
+  </div>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, ArrowLeft, ArrowUp, Delete, Plus } from '@element-plus/icons-vue'
@@ -81,6 +84,8 @@ import { dramaAPI } from '@/api/drama'
 import { storyboardsAPI } from '@/api/storyboards'
 import { scriptgenAPI } from '@/api/scriptgen'
 import GenerateDialog from '@/components/GenerateDialog.vue'
+import ViewSwitcher from '@/components/ViewSwitcher.vue'
+import { useProjectViewsStore } from '@/stores/projectViews'
 import { useGeneration } from '@/composables/useGeneration'
 import { failureText, isBusy } from '@/utils/generationView'
 import {
@@ -97,6 +102,15 @@ const saveState = ref('saved')
 const episodeId = ref(Number(route.query.episode) || 0)
 
 const total = computed(() => totalDuration(rows.value))
+// 四视图共享状态：选择 / 历史 / 过期数。分镜表自己的编辑仍走旧接口（已改道经内核），保存后从共享 store 刷新
+const views = useProjectViewsStore()
+const focusShot = computed(() => views.focusFor('shots'))
+const focusLegacy = computed(() => (focusShot.value ? views.index.shotById[focusShot.value.id]?.legacy_id : null))
+const rowClass = ({ row }) => (focusLegacy.value != null && row.id === focusLegacy.value ? 'is-focus' : '')
+function onRowClick(row) {
+  const id = views.index.shotByLegacy[row.id]
+  if (id) views.select({ kind: 'shot', id })
+}
 // 出图 / 出视频：走持久队列（估算 -> 确认 -> 任务中心），结果写回后状态芯片变“最新”
 const gen = useGeneration(episodeId)
 const genFailure = (row) => failureText(gen.shotStatus(row.id))
@@ -116,6 +130,7 @@ async function load() {
     const data = await dramaAPI.getStoryboards(episodeId.value)
     rows.value = sortRows((data.storyboards || []).map(rowFromApi))
     gen.refresh()
+    views.load(episodeId.value, { drama: route.params.dramaId })
   } finally {
     loading.value = false
   }
@@ -190,6 +205,10 @@ onBeforeRouteLeave(async () => {
   } catch (_) { return false }
 })
 
+// 保存完成 -> 共享 store 刷新（其它视图立刻看到）；在别的地方撤销 / 重做后 -> 重新读取分镜行
+watch(saveState, (s, old) => { if (s === 'saved' && old !== 'saved' && episodeId.value) views.refresh() })
+watch(() => views.revision, () => { if (saveState.value === 'saved') load() })
+
 onMounted(() => {
   load()
   window.addEventListener('beforeunload', beforeUnload)
@@ -198,6 +217,8 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 </script>
 
 <style scoped>
+.sb-shell { min-height: 100vh; }
+:deep(.el-table .is-focus > td.el-table__cell) { background: var(--el-color-primary-light-9) !important; }
 .storyboard-page { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .page-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
 .page-title { margin: 0; font-size: 20px; }
