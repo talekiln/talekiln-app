@@ -26,3 +26,4 @@ frontweb-edu
 build_edu
 node_modules
 .claude/worktrees/
+packages/local/data/

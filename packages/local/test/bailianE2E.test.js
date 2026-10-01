@@ -193,7 +193,8 @@ test('a spend cap that is too small aborts before any paid vendor call and skips
   assert.equal(r.ok, false);
   assert.equal(r.rows.find((x) => x.stage.startsWith('setup')).status, 'PASS');
   assert.equal(r.rows.find((x) => x.stage.startsWith('script')).status, 'PASS'); // text is not metered by the guard
-  assert.equal(r.rows.find((x) => x.stage.startsWith('video_t2v_submit')).status, 'FAIL'); // refused at enqueue by the spend guard
+  assert.equal(r.rows.find((x) => x.stage.startsWith('character')).status, 'FAIL'); // first paid stage: refused at enqueue by the spend guard
+  assert.equal(r.rows.find((x) => x.stage.startsWith('video_t2v_submit')).status, 'SKIP'); // not submitted once the image stage failed
   const failed = r.rows.filter((x) => x.status === 'FAIL');
   assert.equal(failed.length, 1, JSON.stringify(r.rows));
   assert.match(failed[0].detail, /SPEND_LIMIT|花费|上限/);
