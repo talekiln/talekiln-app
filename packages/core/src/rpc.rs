@@ -94,9 +94,10 @@ pub async fn handle_line(line: &str) -> Option<Value> {
                 Err(e) => err(id, ERR_INVALID_PARAMS, &format!("plan failed: {e}"), None),
             }
         }
-        "licence.status" | "render.start" => {
-            err(id, ERR_NOT_IMPLEMENTED, &format!("not implemented: {method}"), None)
-        }
+        "render.start" => ff_result(id, crate::render::start(&params).await),
+        "render.status" => ff_result(id, crate::render::status(&params)),
+        "render.cancel" => ff_result(id, crate::render::cancel(&params)),
+        "licence.status" => err(id, ERR_NOT_IMPLEMENTED, &format!("not implemented: {method}"), None),
         _ => err(id, ERR_METHOD_NOT_FOUND, &format!("method not found: {method}"), None),
     })
 }
@@ -124,7 +125,7 @@ mod tests {
 
     #[tokio::test]
     async fn stubs_not_implemented() {
-        let r = call(r#"{"jsonrpc":"2.0","id":1,"method":"render.start"}"#).await;
+        let r = call(r#"{"jsonrpc":"2.0","id":1,"method":"licence.status"}"#).await;
         assert_eq!(r["error"]["code"], ERR_NOT_IMPLEMENTED);
     }
 
