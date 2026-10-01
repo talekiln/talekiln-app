@@ -28,6 +28,12 @@ const router = createRouter({
       meta: { title: '画布模式' }
     },
     {
+      path: '/episodes/:id/timeline',
+      name: 'episode-timeline',
+      component: () => import('@/views/TimelineEditor.vue'),
+      meta: { title: '时间线编辑' }
+    },
+    {
       path: '/ai-config',
       name: 'ai-config',
       component: () => import('@/views/AiConfig.vue'),
