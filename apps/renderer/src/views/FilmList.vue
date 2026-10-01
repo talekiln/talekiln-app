@@ -30,6 +30,9 @@
           <el-button class="btn-library" title="AI 任务中心" @click="$router.push('/task-center')">
             任务中心
           </el-button>
+          <el-button class="btn-library" title="AI 花费统计" @click="$router.push('/spend')">
+            花费统计
+          </el-button>
           <el-button class="btn-theme" :title="isDark ? '切换到浅色模式' : '切换到暗色模式'" @click="toggleTheme">
             <el-icon><Sunny v-if="isDark" /><Moon v-else /></el-icon>
             {{ isDark ? '浅色' : '暗色' }}

@@ -364,6 +364,8 @@ function setupRouter(cfg, db, log, aiQueue) {
   if (aiQueue && aiQueue.spend) {
     const spendRoutes = require('./spend')(aiQueue.spend, log);
     r.get('/spend/summary', spendRoutes.summary);
+    r.get('/spend/tasks', spendRoutes.tasks);
+    r.get('/spend/export', spendRoutes.exportCsv);
     r.get('/spend/limits', spendRoutes.getLimits);
     r.put('/spend/limits', spendRoutes.putLimits);
     r.post('/spend/estimate', spendRoutes.estimate);
