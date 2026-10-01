@@ -5,16 +5,20 @@
  * Request shapes reused from services/imageClient.js (wan2.6-image, sync multimodal-generation)
  * and services/videoClient.js (video-synthesis async submit + /api/v1/tasks/{id} poll).
  *
- * UNCERTAIN (not verifiable without a real key / full docs; marked "UNVERIFIED" below):
- *  - CosyVoice WebSocket message JSON (help.aliyun.com page reachable but omits the JSON schema;
- *    shapes below come from the public DashScope SDK protocol as recalled).
- *  - Exact vendor error code strings for arrearage / model access (matched loosely on code + message).
- *  - Default model names (qwen-plus, wan2.6-image, wan2.6-t2v, cosyvoice-v2) may be renamed by the vendor.
+ * Verified against a real cn-beijing workspace key on 2026-10-01 (recorded responses in
+ * test/fixtures/bailian/live_*): compat-mode chat + SSE, wan2.6-t2i / wan2.6-image / z-image-turbo
+ * image, CosyVoice (cosyvoice-v2, longxiaochun_v2) WebSocket protocol, invalid key, unknown model,
+ * task-level FAILED. Workspace keys (sk-ws-…) must use the workspace host for both HTTP and WebSocket.
+ *
+ * Still UNVERIFIED (cannot be triggered with a funded, fully-enabled key):
+ *  - Arrearage / Model.AccessDenied strings (taken from the public error-code page, matched loosely).
+ *  - Video submit/poll success path (costs real money; not run yet).
  */
 const { ProviderError, ERROR_CODES } = require('../errors');
 
 const DEFAULT_BASE = 'https://dashscope.aliyuncs.com';
-const DEFAULT_WS = 'wss://dashscope.aliyuncs.com/api-ws/v1/inference/';
+const WS_PATH = '/api-ws/v1/inference/';
+const MODELS_PATH = '/compatible-mode/v1/models';
 const IMAGE_PATH = '/api/v1/services/aigc/multimodal-generation/generation';
 const VIDEO_PATH = '/api/v1/services/aigc/video-generation/video-synthesis';
 const IMAGE2VIDEO_PATH = '/api/v1/services/aigc/image2video/video-synthesis';
@@ -33,7 +37,7 @@ function mapError(status, body, extra = {}) {
     code = ERROR_CODES.INSUFFICIENT_BALANCE;
   } else if (status === 401 || /invalid[_ ]?api[_ ]?key|invalidapikey|incorrect api key|apikey/.test(hay)) {
     code = ERROR_CODES.INVALID_API_KEY;
-  } else if (/model\.?(accessdenied|notfound)|model_not_found|modelnotfound|access denied|accessdenied|not (been )?(activated|enabled|opened)|未开通/.test(hay) || status === 403 || status === 404) {
+  } else if (/model\.?(accessdenied|notfound)|model_not_found|modelnotfound|model not exist|unpurchased|access denied|accessdenied|not (been )?(activated|enabled|opened)|未开通/.test(hay) || status === 403 || status === 404) {
     code = ERROR_CODES.MODEL_NOT_ENABLED;
   } else if (status === 429 || /throttling|ratelimit|rate_limit|too many requests/.test(hay)) {
     code = ERROR_CODES.RATE_LIMITED;
@@ -47,8 +51,9 @@ function mapError(status, body, extra = {}) {
 
 function createBailianAdapter(cfg = {}) {
   const apiKey = cfg.apiKey;
-  const base = (cfg.baseUrl || DEFAULT_BASE).replace(/\/+$/, '');
-  const wsUrl = cfg.wsUrl || DEFAULT_WS;
+  // Accept the console's DashScope / compatible-mode URLs as well as the bare host.
+  const base = (cfg.baseUrl || DEFAULT_BASE).replace(/\/+$/, '').replace(/\/(compatible-mode\/v1|api\/v1)$/, '');
+  const wsUrl = cfg.wsUrl || base.replace(/^http/, 'ws') + WS_PATH;
   const doFetch = cfg.fetch || ((...a) => globalThis.fetch(...a));
   const WS = cfg.WebSocket || globalThis.WebSocket;
   const genId = cfg.idGenerator || (() => require('crypto').randomUUID());
@@ -131,21 +136,24 @@ function createBailianAdapter(cfg = {}) {
     yield { type: 'done', text: full, usage };
   }
 
-  // ---- image.generate: wan2.6-image sync endpoint (shape from imageClient.js) -------------
+  // ---- image.generate: sync multimodal-generation endpoint ---------------------------------
+  // No reference images -> text-to-image (wan2.6-t2i). With references -> wan2.6-image edit mode,
+  // which (verified) rejects enable_interleave=false unless the message carries 1-4 images.
   async function imageGenerate({ model, prompt, size, referenceImages, negativePrompt, signal }) {
+    const refs = (referenceImages || []).filter(Boolean);
     const content = [{ text: prompt || '' }];
-    for (const img of (referenceImages || []).filter(Boolean).slice(0, 10)) content.push({ image: img });
-    const parameters = {
-      prompt_extend: true,
-      watermark: false,
-      n: 1,
-      // wan2.6-image: enable_interleave=false requires stream=false; we use sync (non-SSE) only.
-      enable_interleave: false,
-      stream: false,
-      size: size || '1280*720',
-    };
+    const parameters = { prompt_extend: true, watermark: false, n: 1, size: size || '1280*720' };
+    const useModel = model || (refs.length ? 'wan2.6-image' : 'wan2.6-t2i');
+    if (useModel === 'wan2.6-image') {
+      if (!refs.length) throw new ProviderError(ERROR_CODES.INVALID_PARAMS, 'wan2.6-image 需要 1-4 张参考图', { provider: 'bailian' });
+      for (const img of refs.slice(0, 4)) content.push({ image: img });
+      parameters.enable_interleave = false;
+      parameters.stream = false;
+    } else {
+      for (const img of refs.slice(0, 4)) content.push({ image: img });
+    }
     if (negativePrompt) parameters.negative_prompt = negativePrompt;
-    const body = { model: model || 'wan2.6-image', input: { messages: [{ role: 'user', content }] }, parameters };
+    const body = { model: useModel, input: { messages: [{ role: 'user', content }] }, parameters };
     const res = await request(IMAGE_PATH, { body, signal });
     const data = await readJson(res);
     const urls = [];
@@ -263,13 +271,38 @@ function createBailianAdapter(cfg = {}) {
           done(reject, mapError(200, { code: m.header.error_code, message: m.header.error_message }));
         }
       };
-      ws.onerror = (e) => done(reject, new ProviderError(ERROR_CODES.NETWORK, (e && e.message) || 'websocket error', { provider: 'bailian' }));
+      let opened = false;
+      const onOpen = ws.onopen;
+      ws.onopen = () => { opened = true; onOpen(); };
+      // Verified: a bad key fails the handshake with no status or body visible to the client,
+      // so probe the free models endpoint to tell an invalid key from a network failure.
+      const handshakeFailed = (detail) => probeKey().then(
+        (e) => done(reject, e || new ProviderError(ERROR_CODES.NETWORK, detail, { provider: 'bailian' })),
+        () => done(reject, new ProviderError(ERROR_CODES.NETWORK, detail, { provider: 'bailian' })),
+      );
+      ws.onerror = (e) => {
+        if (!opened) return void handshakeFailed((e && e.message) || 'websocket error');
+        done(reject, new ProviderError(ERROR_CODES.NETWORK, (e && e.message) || 'websocket error', { provider: 'bailian' }));
+      };
       ws.onclose = (e) => {
-        // Handshake rejections (401/403) surface as close/error without a body; best-effort map.
-        const c = e && e.code;
-        if (!settled) done(reject, c === 1006 ? new ProviderError(ERROR_CODES.NETWORK, '连接被关闭（可能是 Key 无效，UNVERIFIED）', { provider: 'bailian' }) : new ProviderError(ERROR_CODES.NETWORK, `closed ${c}`, { provider: 'bailian' }));
+        if (settled) return;
+        if (!opened) return void handshakeFailed(`closed ${e && e.code}`);
+        // Verified: server closes with 1011 and the vendor message as reason after task-failed.
+        done(reject, e && e.code === 1011 && e.reason ? mapError(200, { message: e.reason }) : new ProviderError(ERROR_CODES.NETWORK, `closed ${e && e.code}`, { provider: 'bailian' }));
       };
     });
+  }
+
+  /** Resolves to an INVALID_API_KEY error if the key is rejected, else null. */
+  async function probeKey() {
+    const res = await request(MODELS_PATH, { method: 'GET' });
+    if (res.status === 401) {
+      const raw = await res.text();
+      let data = null;
+      try { data = JSON.parse(raw); } catch (_) { /* ignore */ }
+      return mapError(401, data || raw);
+    }
+    return null;
   }
 
   return {
