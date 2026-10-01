@@ -22,6 +22,13 @@ fn err(id: Value, code: i64, message: &str, data: Option<Value>) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "error": e })
 }
 
+fn ff_result(id: Value, r: Result<Value, crate::ffmpeg::FfError>) -> Value {
+    match r {
+        Ok(v) => json!({ "jsonrpc": "2.0", "id": id, "result": v }),
+        Err(e) => err(id, e.code, &e.message, e.data),
+    }
+}
+
 fn build_id() -> String {
     option_env!("LYCORE_BUILD")
         .unwrap_or(if cfg!(debug_assertions) { "dev-debug" } else { "dev-release" })
@@ -60,7 +67,7 @@ fn hello(id: Value, params: &Value) -> Value {
 }
 
 /// Handle one raw request line; returns the response (None for notifications).
-pub fn handle_line(line: &str) -> Option<Value> {
+pub async fn handle_line(line: &str) -> Option<Value> {
     let req: Value = match serde_json::from_str(line) {
         Ok(v) => v,
         Err(e) => return Some(err(Value::Null, ERR_PARSE, &format!("parse error: {e}"), None)),
@@ -77,7 +84,9 @@ pub fn handle_line(line: &str) -> Option<Value> {
     let id = id?; // notification: no response
     Some(match method {
         "core.hello" => hello(id, &params),
-        "licence.status" | "media.probe" | "render.start" => {
+        "media.probe" => ff_result(id, crate::media::probe(&params).await),
+        "encoder.detect" => ff_result(id, crate::encoder::detect(&params).await),
+        "licence.status" | "render.start" => {
             err(id, ERR_NOT_IMPLEMENTED, &format!("not implemented: {method}"), None)
         }
         _ => err(id, ERR_METHOD_NOT_FOUND, &format!("method not found: {method}"), None),
@@ -88,32 +97,50 @@ pub fn handle_line(line: &str) -> Option<Value> {
 mod tests {
     use super::*;
 
-    fn call(s: &str) -> Value {
-        handle_line(s).unwrap()
+    async fn call(s: &str) -> Value {
+        handle_line(s).await.unwrap()
     }
 
-    #[test]
-    fn hello_ok() {
-        let r = call(r#"{"jsonrpc":"2.0","id":1,"method":"core.hello","params":{"apiVersions":[1,2]}}"#);
+    #[tokio::test]
+    async fn hello_ok() {
+        let r = call(r#"{"jsonrpc":"2.0","id":1,"method":"core.hello","params":{"apiVersions":[1,2]}}"#).await;
         assert_eq!(r["result"]["apiVersion"], 1);
         assert_eq!(r["result"]["name"], "lycore");
     }
 
-    #[test]
-    fn hello_incompatible() {
-        let r = call(r#"{"jsonrpc":"2.0","id":1,"method":"core.hello","params":{"apiVersions":[7]}}"#);
+    #[tokio::test]
+    async fn hello_incompatible() {
+        let r = call(r#"{"jsonrpc":"2.0","id":1,"method":"core.hello","params":{"apiVersions":[7]}}"#).await;
         assert_eq!(r["error"]["code"], ERR_INCOMPATIBLE_VERSION);
     }
 
-    #[test]
-    fn stubs_not_implemented() {
-        let r = call(r#"{"jsonrpc":"2.0","id":1,"method":"render.start"}"#);
+    #[tokio::test]
+    async fn stubs_not_implemented() {
+        let r = call(r#"{"jsonrpc":"2.0","id":1,"method":"render.start"}"#).await;
         assert_eq!(r["error"]["code"], ERR_NOT_IMPLEMENTED);
     }
 
-    #[test]
-    fn notification_and_parse_error() {
-        assert!(handle_line(r#"{"jsonrpc":"2.0","method":"core.hello"}"#).is_none());
-        assert_eq!(call("{bad")["error"]["code"], ERR_PARSE);
+    #[tokio::test]
+    async fn notification_and_parse_error() {
+        assert!(handle_line(r#"{"jsonrpc":"2.0","method":"core.hello"}"#).await.is_none());
+        assert_eq!(call("{bad").await["error"]["code"], ERR_PARSE);
+    }
+
+    #[tokio::test]
+    async fn ffmpeg_missing_is_recoverable_error() {
+        for (m, tool) in [("media.probe", "ffprobe"), ("encoder.detect", "ffmpeg")] {
+            let req = json!({"jsonrpc":"2.0","id":1,"method":m,"params":{"path":"x.mp4","ffmpegDir":"/nonexistent-lycore-dir"}});
+            let r = call(&req.to_string()).await;
+            assert_eq!(r["error"]["code"], crate::ffmpeg::ERR_FFMPEG_MISSING);
+            assert_eq!(r["error"]["data"]["recoverable"], true);
+            assert_eq!(r["error"]["data"]["action"], "reinstall");
+            assert_eq!(r["error"]["data"]["tool"], tool);
+        }
+    }
+
+    #[tokio::test]
+    async fn probe_requires_path() {
+        let r = call(r#"{"jsonrpc":"2.0","id":1,"method":"media.probe","params":{}}"#).await;
+        assert_eq!(r["error"]["code"], ERR_INVALID_PARAMS);
     }
 }
