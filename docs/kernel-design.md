@@ -181,3 +181,16 @@ Node { id, type, params, legacy_id? }
 - `segment_index` 物化为“含镜头的场景组在全项目的序号”，与旧值同序同分组，但绝对值可能不同。
 - 旧时间线里手工编辑过的字幕文字/样式不导入（字幕由行文字推导）；视频片段顺序与 `storyboard_number` 不一致时以镜头顺序为准。
 - 每次 `commit` 都从快照 + 日志重放，没有进程内缓存（日志最多 `snapshotEvery` 条，成本可控）。
+
+## 11. I2 实现备注（生成项目建图、旁白写回、词级字幕、真实片长）
+
+代码：`services/scriptgenService.js`、`voiceover/service.js`、`routes/voiceover.js`、`timeline/kernelAssemble.js`、`packages/kernel/src/projections.js`、`kernel/legacy.js`；测试 `local/test/narrationFlow.test.js`、`kernel/test/realDuration.test.js`。
+
+- **scriptgen 落库**：`persist` 在同一个 SQLite 事务里写 drama / episode / storyboards / `characters`（按名去重）/ `episode_characters`，随后 `importLegacy` 建项目图，所以每个生成的项目一开始就有 script_line、shot、group、compose；返回体多 `character_ids` 与 `graph` 计数。路由/服务可注入 `{ resolveProvider, createProviders }`，测试用假文本模型。
+- **配音** `POST /api/v1/episodes/:id/voiceover` `{ shots:[镜头图 id 或旧分镜 id] | all:true, voice?, force?, confirm? }`；`GET /voiceover/voices`。不带 `confirm`：只估价（`confirm_required`、`estimate`、`max`、`chars`、`allowed`，价格仍是示例价），不合成不写图。`confirm:true`：先对总字数过 `spend.check`（超限 402 `SPEND_LIMIT`），再逐镜合成（并发 2）。`all` 跳过旁白已新鲜且音色相同的镜头，`force:true` 全部重做。单镜失败不影响其他镜头；全部失败 502 `VOICEOVER_FAILED`。成功后在 `spend_log` 记 `voiceover:*` 估算行（直接走门面，不进 ai_tasks / 任务中心）。
+- **配音文字**：只取 script_line（旁白/对白；对白行去掉“说话人：”前缀），不另存。音色经 `setVoice` 写进 narration 节点参数（所以换音色会让旧旁白过期），再合成，再在一个事务里基于最新图 `recordGeneration`；合成期间台词或音色被改过则不采用（`STALE_INPUT`）。
+- **旁白版本** = `asset { ref:'audio/narration/…', hash, kind:'audio' }` + `metadata { duration_ms, voice, format, text_sha, words, cues, aspect_ratio }`；`recordGeneration` 新增可选 `metadata` 入参（video 版本用 `metadata.duration_ms` 记真实片长）。物化把采用的旁白 ref 写进 `storyboards.narration_audio_local_path`（只增不清，导入来的版本不回写）。
+- **词级字幕**：不新增第二份事实源，也不放进 `compose.params`：字幕块（相对镜头起点的 `{start_ms,end_ms,text}`，由 `splitCues(words)` 算出）是那次配音的产物，存在旁白版本 metadata 里。`timelineView` 只在旁白新鲜（采用版本 cacheKey = 当前 key，即行文字、音色没变）时按块输出 `sub_<shot>_<n>`，否则退回整镜一条 `sub_<shot>`（文字取自行）。`subtitle_overrides[lineId]` 的样式对所有块生效。字幕块被夹到镜头时间范围内；旁白片段时长取 `min(镜头跨度, 音频时长)`。
+- **真实片长**：`effectiveSegments`（只读投影）——采用的 video 版本带正整数 `metadata.duration_ms`（R）时，到末尾的片段（out == 目标时长）伸缩到 R，其余裁到 R 以内；存储的 `shot.duration_ms` 与 `compose.segments` 不变。`timelineView`、`shotView.used_ms` 用它，`shotView` 另给 `real_ms`。物化后旧时间线表同步。注意：改写镜头目标时长会改 shot 的 cacheKey 进而让图/视频过期，所以不用“回写 duration_ms”的办法。
+- **装配**：`timeline/kernelAssemble.js` 的 `assembleFromKernel(db, ep, {replace})` 与 `assembleFromStoryboard` 同语义（已存在且未 replace -> 409），但经内核；`replace` 重置片段为整段、清字幕样式覆盖（音乐保留）。旧路由 `POST /timelines/episode/:id/assemble` 尚未改调（路由归 I3）。
+- **未做**：配音进队列/任务中心；多说话人分别配不同音色（现在一个镜头一个音色）；台词比镜头长只返回时间不处理（`timelineView` 会夹掉越界字幕）；除 `longxiaochun_v2` 外音色未实测；字幕样式界面。
