@@ -92,6 +92,16 @@
       "message": "这个编辑无法执行",
       "action": "检查所选对象是否还存在，或调整参数后重试"
     },
+    "GRAPH_UNSUPPORTED_EDIT": {
+      "scope": "local",
+      "message": "这个修改无法用项目图表达，已拒绝且未改动任何数据",
+      "action": "改在剧本或分镜里修改，例如台词请改剧本行，字幕和配音由它们推导"
+    },
+    "TIMELINE_ORDER_UNSUPPORTED": {
+      "scope": "local",
+      "message": "时间线上片段的排列方式无法对应到镜头顺序",
+      "action": "让同一分镜的片段相邻，不要把别的分镜的片段插在中间"
+    },
     "GRAPH_NOT_FOUND": {
       "scope": "local",
       "message": "该剧集还没有项目图",
@@ -131,6 +141,16 @@
       "scope": "local",
       "message": "剧本/分镜生成失败",
       "action": "缩短或调整故事梗概后重试"
+    },
+    "VOICEOVER_FAILED": {
+      "scope": "local",
+      "message": "配音生成失败",
+      "action": "检查配音服务的 Key 与音色后重试；已成功的镜头不会重复扣费"
+    },
+    "NO_TTS_PROVIDER": {
+      "scope": "local",
+      "message": "没有可用的配音服务配置",
+      "action": "到 AI 配置里添加百炼 Key（文本或配音配置均可）"
     },
     "STORYBOARD_INVALID": {
       "scope": "local",

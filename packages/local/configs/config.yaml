@@ -57,6 +57,14 @@ ai_queue:
   poll_min_ms: 2000
   poll_max_ms: 30000
   jitter_ratio: 0.2
+# 对外开放的服务商（唯一开关）：注册表、引导向导、AI 配置页、模型目录、错误/帮助文案都只认这一项。
+# 默认只开放阿里云百炼；其余服务商代码保留但隐藏。新增服务商见 docs/provider-extension.md。
+providers:
+  enabled:
+    - bailian
+# 生成：出图/出视频默认走持久队列（/episodes/:id/generate）。legacy_enabled=true 才在界面保留旧的同步按钮（仅用于排障对照）。
+generation:
+  legacy_enabled: false
 # 云端（账号/许可证/目录/推广跳转）。base_url 留占位表示未配置；也可用环境变量 TALEKILN_CLOUD_URL 覆盖
 cloud:
   base_url: https://cloud.talekiln.example

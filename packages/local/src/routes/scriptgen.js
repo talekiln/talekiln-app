@@ -2,7 +2,7 @@ const response = require('../response');
 const scriptgen = require('../scriptgen');
 const svc = require('../services/scriptgenService');
 
-function routes(db, log) {
+function routes(db, log, deps = {}) {
   const fail = (res, name, err) => {
     if (err.status === 400) return response.badRequest(res, err.message);
     log.error('scriptgen ' + name, { error: err.message });
@@ -12,7 +12,7 @@ function routes(db, log) {
     templates: (req, res) => response.success(res, { templates: scriptgen.listTemplates(), aspect_ratios: svc.ASPECT_RATIOS }),
     // POST /scriptgen/projects: create project + generate storyboard (synchronous; can take tens of seconds)
     createProject: async (req, res) => {
-      try { response.created(res, await svc.createProjectFromStory(db, log, req.body)); } catch (err) { fail(res, 'create', err); }
+      try { response.created(res, await svc.createProjectFromStory(db, log, req.body, deps)); } catch (err) { fail(res, 'create', err); }
     },
     // PUT /episodes/:episode_id/storyboards/order  { ids: [] }
     reorder: (req, res) => {

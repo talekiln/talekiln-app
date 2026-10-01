@@ -8,6 +8,7 @@
     "build": "prisma generate && tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "dev": "tsx watch src/main.ts",
+    "pretest": "prisma generate",
     "test": "node --import tsx --test \"test/*.test.ts\"",
     "test:pg": "node --import tsx --test --test-concurrency=1 \"test/*.test.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",

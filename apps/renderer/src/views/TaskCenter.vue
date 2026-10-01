@@ -15,7 +15,10 @@
         <el-table-column label="服务商" width="130">
           <template #default="{ row }">{{ row.provider_name || row.provider }}</template>
         </el-table-column>
-        <el-table-column prop="kind" label="类型" width="110" />
+        <el-table-column prop="kind" label="类型" width="90" />
+        <el-table-column label="对象" width="150">
+          <template #default="{ row }">{{ taskTarget(row) }}</template>
+        </el-table-column>
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="stateTagType(row.state)" size="small">{{ stateLabel(row.state) }}</el-tag>
@@ -65,6 +68,7 @@ import {
   FILTERS, filterStates, stateLabel, stateTagType, errorText, canRetry, canCancel,
   showConsoleLink, consoleUrl, formatTime, retryRequest, refreshInterval
 } from '@/utils/aiTaskView'
+import { taskTarget } from '@/utils/generationView'
 
 const router = useRouter()
 const tasks = ref([])

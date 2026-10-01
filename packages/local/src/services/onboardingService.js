@@ -4,7 +4,7 @@ const aiConfigService = require('./aiConfigService');
 const secrets = require('../secrets');
 
 const STEPS = ['welcome', 'provider', 'key', 'test', 'done'];
-const PROVIDERS = ['bailian', 'ark'];
+const enablement = require('../providers/enablement');
 const KEY = 'onboarding_state';
 
 function ensureSchema(db) {
@@ -21,17 +21,26 @@ function hasConfiguredKey(db) {
   return aiConfigService.listConfigs(db).some((c) => c.is_active && c.has_api_key);
 }
 
+/** Wizard steps for the current enablement: the provider-choice step is skipped when only one is enabled. */
+function stepsFor(providerIds = enablement.getEnabled()) {
+  return providerIds.length > 1 ? STEPS : STEPS.filter((s) => s !== 'provider');
+}
+
 /** needed = no key configured yet and the user has not dismissed the wizard. */
 function getStatus(db) {
   const st = readState(db);
   const hasKey = hasConfiguredKey(db);
   const dismissed = !!st.dismissed;
+  const enabled = enablement.getEnabled();
   return {
     needed: !hasKey && !dismissed,
     has_key: hasKey,
     dismissed,
     step: STEPS.includes(st.step) ? st.step : 'welcome',
-    provider: PROVIDERS.includes(st.provider) ? st.provider : null,
+    // With a single enabled provider it is implied, so the wizard never asks.
+    provider: enabled.includes(st.provider) ? st.provider : (enabled.length === 1 ? enabled[0] : null),
+    providers: enablement.listEnabledMeta().map((m) => ({ id: m.id, label: m.label })),
+    steps: stepsFor(enabled),
     config_id: Number.isInteger(st.config_id) ? st.config_id : null,
   };
 }
@@ -41,7 +50,7 @@ function saveState(db, patch) {
   const p = patch || {};
   const bad = (m) => { const e = new Error(m); e.status = 400; return e; };
   if (p.step !== undefined && !STEPS.includes(p.step)) throw bad('无效的步骤');
-  if (p.provider !== undefined && p.provider !== null && !PROVIDERS.includes(p.provider)) throw bad('无效的服务商');
+  if (p.provider !== undefined && p.provider !== null && !enablement.isEnabled(p.provider)) throw bad('无效的服务商');
   if (p.config_id !== undefined && p.config_id !== null && !Number.isInteger(p.config_id)) throw bad('无效的配置 ID');
   const next = { ...readState(db) };
   for (const k of ['step', 'provider', 'config_id']) if (p[k] !== undefined) next[k] = p[k];
@@ -74,4 +83,4 @@ async function testSavedConfig(db, configId, deps = {}) {
   return { ok: true };
 }
 
-module.exports = { STEPS, PROVIDERS, getStatus, saveState, testSavedConfig, hasConfiguredKey };
+module.exports = { STEPS, stepsFor, getStatus, saveState, testSavedConfig, hasConfiguredKey };

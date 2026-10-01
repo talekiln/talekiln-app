@@ -25,10 +25,9 @@ const { blobPath } = require('./download');
 
 const KINDS = Object.freeze(['image', 'video', 'tts']);
 const SERVICE_TYPES = { image: ['image', 'storyboard_image'], video: ['video'], tts: ['tts'] };
-const PROVIDER_ALIASES = {
-  bailian: ['bailian', 'dashscope', 'aliyun', 'qwen_image'],
-  ark: ['ark', 'volces', 'volcengine', 'volc'],
-};
+const { KNOWN_PROVIDERS, getEnabled } = require('../providers/enablement');
+// Config-provider names per queue provider; single source is providers/enablement.js.
+const PROVIDER_ALIASES = Object.fromEntries(Object.values(KNOWN_PROVIDERS).map((m) => [m.id, [...m.aliases]]));
 const SYNC_PREFIX = 'sync:';
 
 const encodeSync = (obj) => SYNC_PREFIX + Buffer.from(JSON.stringify(obj)).toString('base64url');
@@ -61,6 +60,83 @@ function pickConfig(listConfigs, provider, kind) {
   return null;
 }
 
+/**
+ * Any active config of the same provider that holds a key, regardless of service type. One 百炼 key serves
+ * text, image, video and CosyVoice, so a user who only saved the text config (the onboarding wizard does)
+ * can still run image/video/tts tasks. Returns null for ark tts, whose speech token is a separate credential.
+ */
+function pickSharedKeyConfig(listConfigs, provider, kind) {
+  if (provider === 'ark' && kind === 'tts') return null;
+  const names = PROVIDER_ALIASES[provider] || [provider];
+  for (const type of ['text', 'image', 'storyboard_image', 'video', 'tts']) {
+    for (const c of listConfigs(type) || []) {
+      if (c.is_active === false || !c.api_key) continue;
+      if (names.includes(String(c.provider || '').toLowerCase())) return c;
+    }
+  }
+  return null;
+}
+
+/**
+ * The saved default model may not fit the request (wan2.6-image only edits with references; the first-frame and
+ * image-to-video models need an image; the text-to-video model is the fallback). Returns undefined to let the
+ * adapter pick by request shape. An explicit params.model is never touched.
+ */
+function modelFitsRequest(provider, kind, model, params) {
+  if (provider !== 'bailian' || !model) return model;
+  if (kind === 'image') {
+    const hasRefs = Array.isArray(params.referenceImages) && params.referenceImages.some(Boolean);
+    return model === 'wan2.6-image' && !hasRefs ? undefined : model;
+  }
+  if (kind === 'video') {
+    const hasImage = !!(params.firstFrameUrl || params.imageUrl);
+    if (!hasImage && (model === 'wan2.2-kf2v-flash' || model === 'wan2.6-i2v-flash')) return undefined;
+    if (hasImage && model === 'wan2.6-t2v') return 'wan2.2-kf2v-flash';
+    return model;
+  }
+  return model;
+}
+
+const MIME_BY_EXT = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.bmp': 'image/bmp' };
+const MAX_INLINE_BYTES = 10 * 1024 * 1024; // DashScope limit for base64 image input
+const MEDIA_FIELDS = ['referenceImages', 'referenceUrls', 'imageUrl', 'firstFrameUrl', 'lastFrameUrl'];
+
+/** Content-addressed blobs carry no extension, so look at the magic bytes first. */
+function sniffMime(b) {
+  if (b.length > 3 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e) return 'image/png';
+  if (b.length > 2 && b[0] === 0xff && b[1] === 0xd8) return 'image/jpeg';
+  if (b.length > 11 && b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP') return 'image/webp';
+  return null;
+}
+
+/**
+ * Local images (saved character references, first frames) cannot be fetched by the vendor. Values that are not
+ * http(s)/data/oss URLs are resolved below the storage dir (relative path, /static/<rel>, or an absolute path inside it)
+ * and inlined as data: URIs. Unresolvable values are left alone so the vendor error stays visible.
+ */
+function inlineLocalMedia(params, storageDir) {
+  const conv = (v) => {
+    if (typeof v !== 'string' || !v || /^(https?:|data:|oss:)/i.test(v)) return v;
+    const rel = v.startsWith('/static/') ? v.slice('/static/'.length) : v;
+    const root = path.resolve(storageDir);
+    const abs = path.resolve(root, rel);
+    const within = path.relative(root, abs);
+    if (!within || within.startsWith('..') || path.isAbsolute(within)) return v; // never read outside the storage dir
+    let st;
+    try { st = fs.statSync(abs); } catch (_) { return v; }
+    if (!st.isFile()) return v;
+    if (st.size > MAX_INLINE_BYTES) throw new ProviderError(ERROR_CODES.INVALID_PARAMS, `本地图片超过 10MB，无法内联：${path.basename(abs)}`);
+    const buf = fs.readFileSync(abs);
+    return `data:${sniffMime(buf) || MIME_BY_EXT[path.extname(abs).toLowerCase()] || 'image/png'};base64,${buf.toString('base64')}`;
+  };
+  const out = { ...params };
+  for (const k of MEDIA_FIELDS) {
+    if (Array.isArray(out[k])) out[k] = out[k].map(conv);
+    else if (out[k] != null) out[k] = conv(out[k]);
+  }
+  return out;
+}
+
 function facadeConfigFor(provider, config) {
   const apiKey = config.api_key || '';
   const baseUrl = config.base_url || undefined;
@@ -90,11 +166,13 @@ function defaultModel(config) {
  */
 function createQueueProvider(provider, { storageDir, listConfigs, createProviders = require('../providers').createProviders }) {
   function resolve(kind) {
-    const config = pickConfig(listConfigs, provider, kind);
+    const own = pickConfig(listConfigs, provider, kind);
+    const config = own && own.api_key ? own : pickSharedKeyConfig(listConfigs, provider, kind);
+    const shared = config !== own;
     if (!config || !config.api_key) {
       throw new ProviderError(ERROR_CODES.INVALID_API_KEY, `未配置 ${provider} 的 ${kind} 服务或 Key`, { provider });
     }
-    return { config, facade: createProviders({ [provider]: facadeConfigFor(provider, config) }) };
+    return { config, shared, facade: createProviders({ [provider]: facadeConfigFor(provider, config) }) };
   }
 
   async function writeBlob(buf) {
@@ -113,9 +191,14 @@ function createQueueProvider(provider, { storageDir, listConfigs, createProvider
     async submit(task) {
       const kind = task.kind;
       if (!KINDS.includes(kind)) throw new ProviderError(ERROR_CODES.CAPABILITY_NOT_SUPPORTED, `kind ${kind}`, { provider });
-      const { config, facade } = resolve(kind);
-      const params = vendorParams(task);
-      if (!params.model) { const m = defaultModel(config); if (m) params.model = m; }
+      const { config, shared, facade } = resolve(kind);
+      let params = vendorParams(task);
+      // A borrowed config (other service type, same key) never lends its model name.
+      if (!params.model && !shared) {
+        const m = modelFitsRequest(provider, kind, defaultModel(config), params);
+        if (m) params.model = m;
+      }
+      if (kind === 'image' || kind === 'video') params = inlineLocalMedia(params, storageDir);
       if (kind === 'video') {
         const r = await facade.video.submit(provider, params);
         if (!r || !r.taskId) throw new ProviderError(ERROR_CODES.BAD_RESPONSE, 'missing video task id', { provider });
@@ -143,7 +226,8 @@ function createQueueProvider(provider, { storageDir, listConfigs, createProvider
       if (task.kind !== 'video') return { status: 'failed', errorCode: ERROR_CODES.BAD_RESPONSE, errorMessage: `unexpected vendor id for ${task.kind}` };
       const { facade } = resolve('video');
       const r = await facade.video.poll(provider, { taskId: id });
-      if (r.status === 'succeeded') return { status: 'succeeded', result: { url: r.videoUrl } };
+      // usage (billed duration / resolution) travels with the result so write-back can record the real clip length.
+      if (r.status === 'succeeded') return { status: 'succeeded', result: r.usage ? { url: r.videoUrl, usage: r.usage } : { url: r.videoUrl } };
       if (r.status === 'failed') {
         const e = r.error;
         return { status: 'failed', errorCode: e && e.code, errorMessage: e && e.message };
@@ -154,14 +238,14 @@ function createQueueProvider(provider, { storageDir, listConfigs, createProvider
 }
 
 /**
- * Provider map for createApp({ queueProviders }): one queue provider per phase-1 provider id.
+ * Provider map for createApp({ queueProviders }): one queue provider per enabled provider id (providers.enabled).
  * Providers are always present; a missing config/key surfaces as a readable INVALID_API_KEY task error.
  */
-function buildQueueProviders({ db, storageDir, listConfigs, createProviders, providers = Object.keys(PROVIDER_ALIASES) }) {
+function buildQueueProviders({ db, storageDir, listConfigs, createProviders, providers = getEnabled() }) {
   const list = listConfigs || ((type) => require('../services/aiConfigService').listConfigsInternal(db, type));
   const out = {};
   for (const p of providers) out[p] = createQueueProvider(p, { storageDir, listConfigs: list, createProviders });
   return out;
 }
 
-module.exports = { KINDS, createQueueProvider, buildQueueProviders, pickConfig, vendorParams, PROVIDER_ALIASES };
+module.exports = { KINDS, createQueueProvider, buildQueueProviders, pickConfig, pickSharedKeyConfig, modelFitsRequest, inlineLocalMedia, vendorParams, PROVIDER_ALIASES };

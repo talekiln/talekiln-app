@@ -178,21 +178,46 @@ function setVoice(g, shotId, { voice, speed }, opts) {
 }
 
 /**
+ * 记录镜头的生成输入（让它们进入 image/video 的 cacheKey）：
+ *   image_model / video_model（所选模型，空 = 'default'）、reference_hashes（锁定参考图的哈希，有序；空数组 = 清除）、
+ *   tail_frame_hash（尾帧哈希；空 = 清除）。没给的字段不动；写入的是节点参数，所以改了就让该镜头的 image/video/合成过期，
+ *   改回去则 cacheKey 回到原值（旧版本可零成本重新采用）。由生成服务与参考图锁定流程调用。
+ */
+function setShotReferences(g, shotId, { image_model, video_model, reference_hashes, tail_frame_hash } = {}, opts) {
+  U.need(g, shotId, 'shot');
+  const parts = G.partsOfShot(g, shotId);
+  const node = (kind, given) => {
+    if (given === undefined) return null;
+    if (!parts[kind]) throw U.intentError(`shot has no ${kind} node`);
+    return parts[kind];
+  };
+  const ops = [];
+  const empty = (v) => v === undefined ? undefined : (v === null || v === '' || (Array.isArray(v) && !v.length) ? null : v);
+  const set = (kind, key, value) => { const id = node(kind, value); if (id) ops.push(...U.paramOps(g, id, key, value)); };
+  set('image', 'model', image_model === undefined ? undefined : image_model || 'default');
+  set('video', 'model', video_model === undefined ? undefined : video_model || 'default');
+  set('image', 'reference_hashes', empty(reference_hashes));
+  set('video', 'tail_frame_hash', empty(tail_frame_hash));
+  return U.mkTx('setShotReferences', ops, opts);
+}
+
+/**
  * 记录一次生成结果：新增版本（带当前 cacheKey）并采用。asset 如 { ref, hash, kind }。
+ * metadata（可选）随版本保存：video 版本的 duration_ms（真实片长）；narration 版本的 duration_ms、voice、words（逐字时间戳）、cues（字幕块，相对镜头起点）。
  * 事务应用到产生它的那张图上才有意义（cacheKey 在此刻取）。
  */
-function recordGeneration(g, nodeId, { version_id, asset } = {}, opts) {
+function recordGeneration(g, nodeId, { version_id, asset, metadata } = {}, opts) {
   const n = U.need(g, nodeId);
   if (!G.GENERATED_TYPES.includes(n.type)) throw U.intentError(`${n.type} nodes have no generated versions`);
   const { cacheKeys } = require('../invalidation');
   const vid = version_id || `v_${(g.versions[nodeId] || []).length + 1}`;
   return U.mkTx('recordGeneration', [
-    { op: 'addVersion', node: nodeId, version: { id: vid, cache_key: cacheKeys(g)[nodeId], asset: asset ? structuredClone(asset) : null } },
+    { op: 'addVersion', node: nodeId, version: { id: vid, cache_key: cacheKeys(g)[nodeId], asset: asset ? structuredClone(asset) : null, ...(metadata ? { metadata: structuredClone(metadata) } : {}) } },
     { op: 'adoptVersion', node: nodeId, version_id: vid },
   ], opts, { version_id: vid });
 }
 
 module.exports = {
   addShotOps, removeShotNodesOps, setShotField, addShot, deleteShot, splitShot, mergeShots, reorderShots, moveShotToGroup,
-  regenerateShot, setVoice, recordGeneration,
+  regenerateShot, setVoice, setShotReferences, recordGeneration,
 };

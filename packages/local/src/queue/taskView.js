@@ -3,10 +3,13 @@ const { READABLE } = require('../providers/errors');
 const { SUBMIT_UNCERTAIN } = require('./aiTaskQueue');
 
 /** Vendor consoles (https only; the desktop shell opens https links in the system browser). */
-const VENDOR_CONSOLES = Object.freeze({
-  bailian: { name: '阿里云百炼', url: 'https://bailian.console.aliyun.com/' },
-  ark: { name: '火山方舟', url: 'https://console.volcengine.com/ark' },
-});
+const { KNOWN_PROVIDERS, isEnabled } = require('../providers/enablement');
+
+/** Console link of an enabled provider (disabled providers show no link), or null. */
+function vendorConsole(provider) {
+  const m = KNOWN_PROVIDERS[provider];
+  return m && isEnabled(provider) ? { name: m.label, url: m.consoleUrl } : null;
+}
 
 const UNCERTAIN_TEXT = '提交结果不确定：请求可能已到达服务商。为避免重复扣费未自动重试，请先到服务商控制台确认后再手动重试';
 
@@ -28,7 +31,7 @@ function parseJson(s) {
 
 /** DB row -> API shape. */
 function toView(row) {
-  const vendor = VENDOR_CONSOLES[row.provider] || null;
+  const vendor = vendorConsole(row.provider);
   return {
     id: row.id,
     provider: row.provider,
@@ -51,4 +54,4 @@ function toView(row) {
   };
 }
 
-module.exports = { VENDOR_CONSOLES, readableError, isUncertain, toView };
+module.exports = { vendorConsole, readableError, isUncertain, toView };
