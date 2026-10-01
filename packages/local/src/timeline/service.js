@@ -227,7 +227,10 @@ function createTimeline(db, episodeId) {
   return saveTimeline(db, { episode_id: Number(episodeId), tracks: emptyTracks() });
 }
 
-// ---------- clip operations (each = load, mutate, validate, save in one transaction) ----------
+// ---------- clip operations ----------
+// transforms.* 是对内存时间线的纯变换（不碰数据库）；下面的 db 版本 = load、变换、validate、save。
+// 项目图接管写入后（docs/kernel-design.md §6），路由层改用同一组 transforms 在内存里算出新时间线，
+// 再由 kernel/compat.js 翻译成内核事务，所以校验与报错和旧行为一致。
 
 function mutate(db, timelineId, fn) {
   return db.transaction(() => {
@@ -256,9 +259,8 @@ function prepareNewClip(kind, data) {
   return clip;
 }
 
-/** Add several clips to one track in a single transaction (all-or-nothing). */
-function addClips(db, timelineId, kind, list) {
-  return mutate(db, timelineId, (tl) => {
+const transforms = {
+  addClips(tl, kind, list) {
     const track = tl.tracks.find((t) => t.kind === kind);
     if (!track) throw new TimelineError(`unknown track kind: ${kind}`);
     const ids = [];
@@ -268,29 +270,20 @@ function addClips(db, timelineId, kind, list) {
       ids.push(clip.id);
     }
     return { clip_ids: ids };
-  });
-}
-
-function addClip(db, timelineId, kind, data) {
-  return mutate(db, timelineId, (tl) => {
+  },
+  addClip(tl, kind, data) {
     const track = tl.tracks.find((t) => t.kind === kind);
     if (!track) throw new TimelineError(`unknown track kind: ${kind}`);
     const clip = prepareNewClip(kind, data);
     track.clips.push(clip);
     return { clip_id: clip.id };
-  });
-}
-
-function moveClip(db, timelineId, clipId, { start_ms } = {}) {
-  return mutate(db, timelineId, (tl) => {
+  },
+  moveClip(tl, clipId, { start_ms } = {}) {
     if (!isInt(start_ms)) throw new TimelineError('start_ms must be an integer');
     findClip(tl, clipId).clip.start_ms = start_ms;
-  });
-}
-
-/** Trim to a new window; the source range follows (head trim shifts src_in). Either field may be omitted. */
-function trimClip(db, timelineId, clipId, { start_ms, duration_ms } = {}) {
-  return mutate(db, timelineId, (tl) => {
+  },
+  /** Trim to a new window; the source range follows (head trim shifts src_in). Either field may be omitted. */
+  trimClip(tl, clipId, { start_ms, duration_ms } = {}) {
     const { clip } = findClip(tl, clipId);
     const newStart = start_ms ?? clip.start_ms;
     const newDur = duration_ms ?? clip.duration_ms;
@@ -304,11 +297,8 @@ function trimClip(db, timelineId, clipId, { start_ms, duration_ms } = {}) {
     }
     clip.start_ms = newStart;
     clip.duration_ms = newDur;
-  });
-}
-
-function splitClip(db, timelineId, clipId, { at_ms } = {}) {
-  return mutate(db, timelineId, (tl) => {
+  },
+  splitClip(tl, clipId, { at_ms } = {}) {
     const { track, clip } = findClip(tl, clipId);
     if (!isInt(at_ms) || at_ms <= clip.start_ms || at_ms >= clip.start_ms + clip.duration_ms) {
       throw new TimelineError('at_ms must fall strictly inside the clip');
@@ -323,14 +313,31 @@ function splitClip(db, timelineId, clipId, { at_ms } = {}) {
     clip.duration_ms = firstDur;
     track.clips.push(second);
     return { clip_ids: [clip.id, second.id] };
-  });
-}
-
-function deleteClip(db, timelineId, clipId) {
-  return mutate(db, timelineId, (tl) => {
+  },
+  deleteClip(tl, clipId) {
     const { track } = findClip(tl, clipId);
     track.clips = track.clips.filter((c) => c.id !== clipId);
-  });
+  },
+};
+
+/** Add several clips to one track in a single transaction (all-or-nothing). */
+function addClips(db, timelineId, kind, list) {
+  return mutate(db, timelineId, (tl) => transforms.addClips(tl, kind, list));
+}
+function addClip(db, timelineId, kind, data) {
+  return mutate(db, timelineId, (tl) => transforms.addClip(tl, kind, data));
+}
+function moveClip(db, timelineId, clipId, args) {
+  return mutate(db, timelineId, (tl) => transforms.moveClip(tl, clipId, args));
+}
+function trimClip(db, timelineId, clipId, args) {
+  return mutate(db, timelineId, (tl) => transforms.trimClip(tl, clipId, args));
+}
+function splitClip(db, timelineId, clipId, args) {
+  return mutate(db, timelineId, (tl) => transforms.splitClip(tl, clipId, args));
+}
+function deleteClip(db, timelineId, clipId) {
+  return mutate(db, timelineId, (tl) => transforms.deleteClip(tl, clipId));
 }
 
 // ---------- storyboard assembly ----------
@@ -384,4 +391,5 @@ function assembleFromStoryboard(db, episodeId, opts = {}) {
 module.exports = {
   DEFAULT_MIX, normalizeMix, computeDuration, TRACK_KINDS, TimelineError, validateTimeline, createTimeline, loadTimeline, loadTimelineByEpisode,
   saveTimeline, addClip, addClips, moveClip, trimClip, splitClip, deleteClip, assembleFromStoryboard,
+  transforms, normalizeTimeline, getTimelineIdByEpisode, emptyTracks,
 };

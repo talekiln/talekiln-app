@@ -1,14 +1,17 @@
 'use strict';
 const multer = require('multer');
 const response = require('../response');
-const { MusicError, MAX_BYTES, attachMusic } = require('../music');
-const { TimelineError } = require('../timeline');
+const { MusicError, MAX_BYTES, planMusicClips } = require('../music');
+const timeline = require('../timeline');
+const { TimelineError, transforms } = timeline;
+const compat = require('../kernel/compat');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_BYTES } });
 
 /** REST handlers for the music library (F05) and attaching a track to a timeline. */
 function musicRoutes(db, library, log) {
   const fail = (res, name, err) => {
+    if (compat.handleError(res, err)) return;
     if (err instanceof MusicError || err instanceof TimelineError) return response.error(res, err.status, err.code, err.message);
     if (err && err.code === 'LIMIT_FILE_SIZE') return response.error(res, 413, 'FILE_TOO_LARGE', '音乐文件不能超过 50MB');
     log.error('music ' + name, { error: err && err.message });
@@ -42,7 +45,8 @@ function musicRoutes(db, library, log) {
       try {
         const b = req.body || {};
         if (!b.music_id) return response.badRequest(res, '需要 music_id');
-        response.created(res, attachMusic(db, library, Number(req.params.id), b.music_id, { start_ms: b.start_ms, loop: b.loop === true, volume: b.volume }));
+        const opts = { start_ms: b.start_ms, loop: b.loop === true, volume: b.volume };
+        response.created(res, compat.editTimeline(db, Number(req.params.id), (tl) => transforms.addClips(tl, 'music', planMusicClips(tl, library, b.music_id, opts))));
       } catch (e) { fail(res, 'attach', e); }
     },
   };
