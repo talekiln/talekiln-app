@@ -13,7 +13,9 @@
     "lint": "pnpm -r --if-present lint",
     "test": "pnpm -r --if-present test",
     "licenses:check": "node scripts/licenses-check.mjs",
-    "secrets:scan": "node scripts/secret-scan.mjs"
+    "secrets:scan": "node scripts/secret-scan.mjs",
+    "test:scripts": "node --test scripts/open-source-export.test.mjs",
+    "export:dry": "node scripts/open-source-export.mjs"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
