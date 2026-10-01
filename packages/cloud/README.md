@@ -83,16 +83,28 @@ curl localhost:3000/health
 ### `GET /.well-known/licence-jwks.json`
 公开，返回 ES256 公钥 JWKS（含 `kid`，不含私钥）。轮换密钥：新增 `LICENCE_KEY_ID` 与新私钥后发布（当前实现同时只发布一把公钥；平滑轮换需扩展为多 key）。
 
-### 管理（需 `role=ADMIN` 的访问令牌）
-- `POST /admin/invites` `{ plan?, expiresInDays? }` → `{ code, plan, expiresAt }`。邀请码为 72 位随机串。
-- `GET /admin/invites`：列出邀请码及使用情况。
+### 管理后台 API（独立认证）
+`POST /admin/auth/login` `{ email, password }`（仅 `role=ADMIN` 且未禁用；按 IP 与邮箱限流）→ `{ token, expiresIn(2h), admin }`。管理员令牌使用独立密钥（`ADMIN_JWT_SECRET`，未设置则由访问令牌密钥派生）和 `aud=talekiln-admin`，普通用户令牌不能访问 `/admin/*`，反之亦然；每次请求回查账号仍是未禁用的管理员。其余接口均需 `Authorization: Bearer <管理员令牌>`：
+
+- `POST /admin/invites` `{ plan?, expiresInDays?, count?(1..200) }` → 邀请码数组；`GET /admin/invites?status=unused|used|expired|revoked`；`POST /admin/invites/:id/revoke`（仅未使用的）。
+- `GET /admin/users`、`GET /admin/users/:id`（含设备与授权视图：套餐、权益、有效期、宽限天数）、`POST /admin/users/:id/disable|enable`（禁用即吊销全部刷新令牌，并拒绝登录/续期；管理员账号不可禁用）。
+- `GET|PUT /admin/announcements`、`GET|PUT /admin/catalog`（整体替换，zod 校验；存于 `Setting` 表）。客户端读取 `GET /public/announcements`、`GET /public/catalog`（只含启用项）。
+- `GET /admin/stats/overview?days=14`：DAU、项目数、导出数、失败数按天序列，失败码排行，引导步骤到达数，账号/邀请码计数。
+- `GET /admin/feedback`、`GET /admin/feedback/:id/diagnostic`（下载诊断包 zip）。
+
+### 匿名统计 `POST /telemetry`（客户端须在用户同意后才上报）
+`{ installId, appVersion?, events: [{ name, code?, step? }] }`，一次最多 50 条，每 IP 每分钟 120 次。`name` 白名单：`app_open, onboarding_step, connect_test, project_created, export_done, export_failed, task_failed`；`code` 只允许大写蛇形错误码（如 `ENCODER_FAIL`）；`step` 只允许 `[a-z0-9_]`。请求体 `strict`：出现任何其他字段（提示词、路径、Key、邮箱……）整个请求以 400 拒绝。服务端不记录 IP、账号，事件时间取服务器接收时间。
+
+### 反馈 `POST /feedback`
+`{ message(<=4000), contact?, taskId?, installId?, appVersion?, diagnostic?(zip 的 base64) }`。诊断包解码后上限 `MAX_DIAGNOSTIC_BYTES`（默认 1.5MB，超出 413；必须以 zip 魔数开头）；请求体上限 2.5MB（其余路径 100KB）；每 IP 每 10 分钟 `FEEDBACK_RATE_LIMIT` 条（默认 5，超出 429）。文字会再做一遍服务端脱敏。当前诊断包直接存数据库 `bytea`（原方案是 OSS 临时凭证直传，量大后再换）。
 
 ## 数据库
 
-Schema：`prisma/schema.prisma`；迁移已检入 `prisma/migrations/`（`pnpm prisma migrate deploy` 应用）。表：`Account`、`InviteCode`、`Device`、`RefreshToken`。
+Schema：`prisma/schema.prisma`；迁移已检入 `prisma/migrations/`（`pnpm prisma migrate deploy` 应用）。表：`Account`、`InviteCode`、`Device`、`RefreshToken`、`Setting`、`TelemetryEvent`、`Feedback`。
 
 ## 已知限制 / 后续
 
-- 未实现登录限流、邮箱验证、找回密码。
+- 限流为单实例内存实现；用户登录接口尚未限流；未实现邮箱验证、找回密码。
+- 统计概览在应用内聚合 `since(day)` 的事件行（≤90 天），数据量大后应改为数据库聚合/预汇总。
 - 邀请码激活为"先建账号、原子抢码、失败回滚账号"，不是单事务；极端崩溃下可能留下无邀请码关联的账号。
 - Prisma 仓储与迁移 SQL 需要真实 PostgreSQL 做集成验证（单元测试覆盖的是内存仓储上的同一套服务逻辑）。
