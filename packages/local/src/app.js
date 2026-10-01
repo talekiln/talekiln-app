@@ -108,7 +108,8 @@ function createApp(opts = {}) {
   // 持久化 AI 任务队列 + worker（由 server.js / 桌面主进程调用 aiQueue.worker.start()）
   const aiQueue = createAiQueue({ config, db, log, storageRoot, providers: opts.queueProviders || buildQueueProviders({ db, storageDir: storageRoot }), onTaskFinished: opts.onTaskFinished });
 
-  app.use('/api/v1', setupRouter(config, db, log, aiQueue, { storageRoot }));
+  const coreProvider = opts.getCore ? null : require('./export/coreProvider').createCoreProvider({ endpoint: process.env.LYCORE_ENDPOINT });
+  app.use('/api/v1', setupRouter(config, db, log, aiQueue, { storageRoot, exporter: opts.exporter, getCore: opts.getCore || (coreProvider && coreProvider.getCore) }));
 
   // 前端静态资源（sxy：web/dist）；Electron 打包时可设 WEB_DIST_PATH
   const webDist = process.env.WEB_DIST_PATH || path.join(process.cwd(), '..', 'frontweb', 'dist');

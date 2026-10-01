@@ -340,6 +340,26 @@ function setupRouter(cfg, db, log, aiQueue, extras = {}) {
   r.post('/timelines/:id/clips', timelines.addClip);
   r.patch('/timelines/:id/clips/:clip_id', timelines.patchClip);
 
+  // ---------- export / render (G06) and AIGC marking settings (G04) ----------
+  {
+    let exporter = null;
+    if (extras.storageRoot && (extras.exporter || extras.getCore)) {
+      const { createExportService } = require('../export/service');
+      exporter = extras.exporter || createExportService(db, {
+        getCore: extras.getCore, storageRoot: extras.storageRoot,
+        ffmpegPath: require('../utils/ffmpegPath').getFfmpegPath(), ffmpegDir: extras.ffmpegDir || null,
+      });
+    }
+    const exp = require('./export')(db, exporter, log);
+    r.get('/settings/aigc', exp.getAigc);
+    r.put('/settings/aigc', exp.putAigc);
+    r.get('/export/options', exp.options);
+    r.post('/export/start', exp.start);
+    r.get('/export/:id/status', exp.status);
+    r.post('/export/:id/cancel', exp.cancel);
+    r.post('/export/:id/open-folder', exp.openFolder);
+  }
+
   // ---------- music library (F05) ----------
   if (extras.storageRoot) {
     const library = require('../music').createMusicLibrary(db, { storageRoot: extras.storageRoot });
