@@ -24,6 +24,7 @@ const sceneModelMapRoutes = require('./sceneModelMap');
 const timelineRoutes = require('./timelines');
 const scriptgenRoutes = require('./scriptgen');
 const workbenchRoutes = require('./workbench');
+const onboardingRoutes = require('./onboarding');
 
 function setupRouter(cfg, db, log, aiQueue) {
   const r = express.Router();
@@ -52,6 +53,7 @@ function setupRouter(cfg, db, log, aiQueue) {
   const promptOverrides = promptOverridesRoutes.routes(db, log);
   const scriptgen = scriptgenRoutes(db, log);
   const workbench = workbenchRoutes(db, log);
+  const onboarding = onboardingRoutes(db, log, cfg);
 
   // ---------- dramas ----------
   r.get('/dramas', drama.listDramas);
@@ -252,6 +254,13 @@ function setupRouter(cfg, db, log, aiQueue) {
   r.post('/images/upload', images.upload);
   r.get('/images/:id', images.get);
   r.delete('/images/:id', images.delete);
+
+  // ---------- onboarding wizard / bundled sample ----------
+  r.get('/onboarding/status', onboarding.status);
+  r.put('/onboarding/state', onboarding.saveState);
+  r.post('/onboarding/test', onboarding.test);
+  r.get('/samples', onboarding.listSamples);
+  r.post('/samples/:id/seed', onboarding.seedSample);
 
   // ---------- reference locks / shot workbench ----------
   r.get('/reference-locks', workbench.listLocks);

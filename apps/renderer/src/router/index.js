@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { shouldShowOnboarding } from '@/utils/onboarding'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -8,6 +9,12 @@ const router = createRouter({
       name: 'list',
       component: () => import('@/views/FilmList.vue'),
       meta: { title: '项目列表' }
+    },
+    {
+      path: '/onboarding',
+      name: 'onboarding',
+      component: () => import('@/views/Onboarding.vue'),
+      meta: { title: '首次配置' }
     },
     {
       path: '/new-project',
@@ -90,9 +97,19 @@ const router = createRouter({
   ]
 })
 
-router.beforeEach((to) => {
+// 每次打开应用只检查一次：首页且还没配 Key、也没点过“跳过”时，进入首次引导
+let onboardingChecked = false
+router.beforeEach(async (to) => {
   if (to.meta.title) {
     document.title = `${to.meta.title} - LocalMiniDrama`
+  }
+  if (!onboardingChecked && to.name === 'list') {
+    onboardingChecked = true
+    try {
+      const res = await fetch('/api/v1/onboarding/status')
+      const body = res.ok ? await res.json() : null
+      if (shouldShowOnboarding(body && body.data)) return { name: 'onboarding' }
+    } catch (_) { /* 服务未就绪时不拦截 */ }
   }
   return true
 })

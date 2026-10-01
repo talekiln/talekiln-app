@@ -33,3 +33,5 @@
 | A09 lycore 进程守护 | 已做（Linux 验证） | client/supervisor.js：core.hello 探测、退避重启、上限后上报、干净退出；未接入 desktop 主进程 |
 | A10 ffmpeg 供应 | 部分 | 下载/校验/续传已做并测试；清单为 TODO 占位，需填真实 LGPL 构建与 sha256，见 docs/ffmpeg-lgpl.md |
 | B04 licence.status | 已做（自测令牌） | ES256/JWKS/宽限期；已用 node:crypto 签发的令牌互通，未用云端真实令牌验证 |
+| C06 首次引导向导 | 已做（headless Chromium 截图验证） | 欢迎→选服务商→粘贴 Key→连通测试→完成；可跳过、可续接，配好 Key 后不再出现；“获取 Key”按钮走 getKeyReferralUrl 占位函数（推广跳转待接）；连通测试复用 aiConfigService.testConnection，真 Key 联通未验证；Electron 内未跑 |
+| C08 内置示例项目 | 已做（headless Chromium 截图验证） | POST /api/v1/samples/:id/seed 本地生成 5 镜分镜 + 脚本生成的占位图/提示音，幂等，不调用任何 AI；首页“试试示例项目”入口；音频暂未在界面播放 |
