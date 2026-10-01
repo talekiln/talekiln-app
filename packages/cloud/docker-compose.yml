@@ -1,0 +1,38 @@
+# 用法：复制 .env.example 为 .env 并填写后，在 packages/cloud 下执行 docker compose up --build
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: talekiln
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 设置 POSTGRES_PASSWORD}
+      POSTGRES_DB: talekiln
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U talekiln"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: ../..
+      dockerfile: packages/cloud/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://talekiln:${POSTGRES_PASSWORD}@postgres:5432/talekiln
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?请在 .env 设置 JWT_ACCESS_SECRET}
+      LICENCE_PRIVATE_KEY_PEM: ${LICENCE_PRIVATE_KEY_PEM:?请在 .env 设置 LICENCE_PRIVATE_KEY_PEM}
+      LICENCE_KEY_ID: ${LICENCE_KEY_ID:-lic-1}
+      LICENCE_TTL_DAYS: ${LICENCE_TTL_DAYS:-7}
+      LICENCE_GRACE_DAYS: ${LICENCE_GRACE_DAYS:-14}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:
