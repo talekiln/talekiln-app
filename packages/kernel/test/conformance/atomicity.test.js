@@ -107,6 +107,8 @@ for (const story of S.loadStories()) {
       'timeline.addMusic(no asset)': () => timeline.addMusic(g, { start_ms: 0, duration_ms: 1 }),
       'timeline.addMusic(zero duration)': () => timeline.addMusic(g, { asset_ref: 'a', start_ms: 0, duration_ms: 0 }),
       'canvas.moveNode(missing)': () => canvas.moveNode(g, 'nope', { x: 1, y: 1 }),
+      'canvas.setNodeParam(unknown param)': () => canvas.setNodeParam(g, s0, ['nope'], 1),
+      'canvas.setNodeParam(bad value)': () => canvas.setNodeParam(g, O.chain(g, s0).image, ['seed'], 'x'),
       'canvas.moveNode(NaN)': () => canvas.moveNode(g, s0, { x: NaN, y: 1 }),
       'canvas.connectNodes(wrong types)': () => canvas.connectNodes(g, O.chain(g, s0).video, s0),
       'canvas.connectNodes(cannot infer port)': () => canvas.connectNodes(g, O.chain(g, s0).video, O.chain(g, s0).narration),

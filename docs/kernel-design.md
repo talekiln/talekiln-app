@@ -33,8 +33,8 @@ Node { id, type, params, legacy_id? }
 |---|---|---|---|
 | `script_line` | 剧本里的一行（旁白、对白、动作、场景标题） | `kind`, `speaker`, `text` | — |
 | `shot` | 一个镜头（分镜行） | `title, description, location, time, shot_type, angle, movement, image_prompt, video_prompt, characters[], duration_ms` | 来自若干 `script_line` 的 `derives` 边 |
-| `image` | 首帧图生成 | `model, seed` | 来自 `shot` |
-| `video` | 视频生成 | `model, seed` | 来自 `image` 和 `shot` |
+| `image` | 首帧图生成 | `model, seed`；生成输入 `reference_hashes[]`（可选，锁定参考图哈希，有序） | 来自 `shot` |
+| `video` | 视频生成 | `model, seed`；生成输入 `tail_frame_hash`（可选） | 来自 `image` 和 `shot` |
 | `narration` | 配音 | `voice, speed` | 来自 `script_line` |
 | `compose` | 合成（每集一个） | `segments[]`, `music[]`, `fps`, `size`, `aigc_label` | 来自各镜头的 `video`、`narration` |
 
@@ -55,7 +55,8 @@ Node { id, type, params, legacy_id? }
   - 剧本：`rewriteLine, insertLine, deleteLine, splitLine, mergeLines, reorderLines`
   - 分镜：`setShotField, splitShot, mergeShots, reorderShots, moveShotToGroup, addShot, deleteShot, regenerateShot`
   - 时间线：`trimSegment, moveSegment（跨镜头边界 = 改镜头顺序，同镜头内 = 改 gap）, splitSegment, deleteSegment, setTransition, addMusic`
-  - 画布：`moveNode（只改 layout）, connectNodes, disconnectNodes, addNodeAt, deleteNode`
+  - 画布：`moveNode（只改 layout）, setNodeParam（属性面板改参数）, connectNodes, disconnectNodes, addNodeAt, deleteNode`
+  - 生成输入（服务内部用，不对 REST 放行）：`setShotReferences`，见 §13
 - `regenerateShot` = 给 image/video 节点换种子（`setParam seed`），下游变过期，不覆盖旧版本。
 - `splitShot` 现实：克隆镜头及其 image/video/narration，行按位置分配，两边的 video 都变过期（需重新生成，要花钱）；文档里写明，不假装能复用同一段视频。
 
@@ -65,7 +66,7 @@ Node { id, type, params, legacy_id? }
 
 - 过期 = 没有采用版本，或采用版本的 `cacheKey` ≠ 当前 key。
 - `staleSet(graph)` 为纯函数；每次事务返回 `{ invalidated: [...], revalidated: [...] }`（相对事务前）。
-- 场景缓存键（对接 G02）：`sceneKey(shot) = sha256{ 采用的 video 版本资产 hash, 该镜头所有 segments 的 in/out/transition, 旁白采用版本 hash }`；音乐不在其中。
+- 场景缓存键（对接 G02）：`sceneKey(shot)` = 该镜头各视频片段按 plan.rs 场景键字段取的摘要（素材 hash、in/out、烧进画面的字幕文字与样式、旁白素材与相对时间）；音乐、gap、转场不在其中。以 §13 的对照为准，早期写法（含转场、不含字幕）已作废。
 
 ## 5. 投影（纯函数 graph → 视图模型）
 
@@ -159,7 +160,7 @@ Node { id, type, params, legacy_id? }
 | `GET /episodes/:id/graph` | 全图 + `stale` 集合 + `seq` + `can_undo/can_redo` |
 | `GET /episodes/:id/views/{script,shots,timeline,canvas}` | 四个视图（`shot` 同 `shots`） |
 | `POST /episodes/:id/tx` | `{tx_id, label, ops}` 原始 op 事务 |
-| `POST /episodes/:id/intent` | `{view, name, args, tx_id?}`；只放行规格 §3 的 25 个意图，`setVoice`/`recordGeneration`/`moveNodes` 等未放行 |
+| `POST /episodes/:id/intent` | `{view, name, args, tx_id?}`；只放行规格 §3 的 26 个意图（K4 起含 `canvas.setNodeParam`），`setVoice`/`recordGeneration`/`setShotReferences`/`moveNodes` 等未放行 |
 | `POST /episodes/:id/undo`、`/redo` | `{tx_id?}` |
 | `POST /episodes/:id/import-legacy` | 首次 201，已存在 200 |
 
@@ -270,3 +271,34 @@ Node { id, type, params, legacy_id? }
 - 选择 `{kind: line|shot|segment|node, id}` 切换视图时不变，各视图用 `focusIn(view, selection)` 找对应对象（行 → 第一个关联镜头 → 第一个视频片段 → 画布节点）。
 - 顶栏撤销 / 重做 / Ctrl+Z / Ctrl+Shift+Z = 内核历史；时间线页保留编辑器自己的 Ctrl+Z（走 `PUT /timelines` 改道后同样进内核历史）。分镜表、时间线编辑器保存完成后刷新共享 store，被顶栏撤销 / 重做后重新读取各自的旧表数据。
 - 局限：画布没有新增节点 / 场景组改名的界面；分镜页与时间线页的内部数据仍来自旧表（物化），不是投影直读；画布未存 layout 的节点用显示用的自动布局（不写回图）。
+
+## 14. K4：生成输入进 cacheKey、画布改参数意图、sceneKey 对照 G02
+
+代码：`packages/kernel/src/{graph,projections}.js`、`intents/{canvas,shot,util}.js`、`packages/local/src/kernel/inputs.js`、`generation/service.js`；测试：一致性套件新增 4 个场景、`kernel/test/sceneKeyG02.test.js`、`local/test/generation.test.js` 新增一组。
+
+### 14.1 生成输入是节点参数
+- 以前锁定的参考图、尾帧、所选模型只进队列幂等键，不进 cacheKey，改了它们新鲜的节点仍显示“新鲜”。现在是节点自己的参数：`image.model`、`image.reference_hashes[]`、`video.model`、`video.tail_frame_hash`（后两个可选参数，空 = 参数不存在，所以与旧图的 cacheKey 完全兼容，设置再清除回到原 key）。**不是特例**：和 `seed`、`voice` 一样走 `params -> cacheKey`，预言机（嵌套签名里本来就含 params）自动覆盖。
+- 意图 `shot.setShotReferences(shot, { image_model, video_model, reference_hashes, tail_frame_hash })`：没给的字段不动，空数组 / null / 空串 = 清除，值没变不产生 op。校验表 `NODE_PARAM_RULES`（graph.js）与画布共用。
+- 效果（一致性场景 `change_references / change_tail_frame / change_image_model / change_video_model`，分镜入口 `setShotReferences`、画布入口 `setNodeParam`，两入口终态必须相同）：改参考图或出图模型 -> 该镜头 image + video + 合成过期；改尾帧或视频模型 -> video + 合成过期；其余镜头、配音不动；生成一次后改回去，cacheKey 回到最初的值，最初的版本 v_1 直接重新采用（不新增版本 = 零成本）。
+- 写入方：生成服务在估算/建任务前同步（估算只在副本上演算，建任务前提交一个事务）：先写参考图哈希与出图模型，在这张图上做计划得到首帧形态（决定尾帧是否生效、选哪种视频模型），再写尾帧与视频模型。参考图锁定/解除（`PUT/DELETE /reference-locks/:type/:id`）和尾帧绑定（`bindStoryboardFrameImage` 的尾帧分支）在改完旧表后调 `syncReferences`，所以界面上的“过期”立刻出现（只写参考图与尾帧，不碰模型）。其余直接写 `last_frame_*` 列的入口（见 12.5）不同步，由下次估算/建任务前的同步兜底。
+- 任务 `_gen.inputs` 记录建任务时的输入，写回时进版本的 `metadata.inputs`。
+- **模型基线**：改动之前导入/生成的版本不知道当时用了哪个模型。首次把“所选模型”记进参数时，原本新鲜的采用版本被改记到新 key（别名版本 `rb_<key前12位>`，`source:'rebase'`，`rebased_from`，资产与元数据照搬，`metadata.inputs.model` 记下现值），不会让已有素材平白过期、白白重做花钱；版本已记录模型后，换模型一律是真实变化。参考图与尾帧的变化永远是真实变化（旧素材没带过这些输入）。没有记录模型的旧版本，在提示词/上游/参考图/尾帧与现在一致时也算缓存命中（采用时同样改记成别名）。
+- 顺带修了 I1 的一个字段名错误：生成服务写版本元数据用的是 `meta`，内核（真实片长投影）读的是 `metadata`，所以生成视频的真实时长一直没进时间线；现统一为 `metadata`。
+
+### 14.2 `canvas.setNodeParam(g, nodeId, path, value)`
+- 只允许该节点类型白名单里的顶层参数（`NODE_PARAM_RULES`：script_line 的 kind/speaker/text；shot 的各文字字段、characters、duration_ms；image 的 model/seed/reference_hashes；video 的 model/seed/tail_frame_hash；narration 的 voice/speed；compose 的 fps/size/aigc_label）并校验取值；`segments / music / subtitle_overrides` 拒绝（有时间线意图）。可选参数用 `null` 清除，必填参数清除或类型不对 -> `INTENT`（REST 400）。值没变 = 空事务。镜头 `duration_ms` 委托给 `setShotField`（片段联动）。事务标签 `setNodeParam`。
+- REST `POST /episodes/:id/intent` 白名单加入 `canvas.setNodeParam`（args：`node_id, path, value`），错误码沿用 `INTENT`，错误码表无需新增。一致性套件的 `canvasEdit` 已改为调用它（原来是一条裸 `setParam` 事务）。
+
+### 14.3 sceneKey 对照真实 G02 渲染计划
+`render.plan`（`packages/core/src/plan.rs`）按**视频片段**切场景；场景键 = 渲染器版本 + 输出设置 + 视频（素材身份、srcIn/srcOut、音量）+ 与该场景时间重叠的字幕（相对起止、文字、样式）+ 重叠的旁白（相对起点、时长、素材身份、srcIn、音量）。对照后的发现与修正：
+
+| 发现 | 处理 |
+|---|---|
+| 字幕文字、样式**会**进 G02 场景键（字幕是烧进画面的），旧 sceneKey 不含 -> 改字幕文字/样式后内核说“场景没变”，G02 其实要重渲染 | 内核 sceneKey 纳入字幕文字、样式与相对时间 |
+| 转场（`style.transition`）G02 完全不读，渲染器也没实现转场；旧 sceneKey 含转场 -> 内核说变了，G02 没变 | 转场移出 sceneKey；等渲染器实现转场时，plan.rs 与内核要同时加回（并升 `RENDERER_VERSION`） |
+| G02 用片段的有效 in/out（已按真实片长伸缩），旧 sceneKey 用存储的 segments | 改用 `effectiveSegments` 同一份时间线推导 |
+| 旧 sceneKey 只看 video 资产，时间线在没有视频时用首帧图当素材 | 与 `timelineView` 同规则：视频，否则图片 |
+| G02 是每片段一个场景键，内核是每镜头一个键 | 镜头键 = 它所有片段场景键依据字段的摘要；对照测试逐镜头比较“变没变”，不要求键值相同 |
+| gap 是 G02 里独立的“空场景”，不属于任何镜头 | gap 不进镜头键；对照测试显示改 gap 不改任何镜头的两种键 |
+
+对照测试 `kernel/test/sceneKeyG02.test.js`：用真实 `lycore` 二进制（`cargo build` 得到 `packages/core/target/*/lycore`）的 `render.plan`，素材换成内容 = `asset.hash` 的临时文件（`hashContent` 模式）。17 种编辑，两边逐镜头一致：对白文字、对白改动作行、字幕样式、裁剪、切分、改时长、重新生成视频、重新配音 -> 两边都变；音乐、画布移动、转场、镜头标题、生成输入参数、语速参数、镜头重排、改别的镜头的 gap、删别的镜头 -> 两边都不变。没有二进制时只跑按 plan.rs 字段写的 JS 移植；有二进制时还校验该移植与真实 `render.plan` 逐键一致。
