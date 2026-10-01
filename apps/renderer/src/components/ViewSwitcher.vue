@@ -18,6 +18,7 @@
     </div>
     <span class="spacer" />
     <slot />
+    <el-button size="small" title="节点版本与操作历史" data-test="open-history" @click="openHistory">历史</el-button>
     <el-tooltip :content="staleTip" placement="bottom">
       <el-tag :type="views.staleTotal ? 'warning' : 'success'" size="small" effect="light" data-test="stale-badge">
         {{ views.staleTotal ? `待生成 / 已过期 ${views.staleTotal}` : '全部最新' }}
@@ -36,6 +37,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { useProjectViewsStore } from '@/stores/projectViews'
 import { VIEWS, viewLocation, viewOfRoute } from '@/utils/projectViews'
+import { openHistory } from '@/composables/useHistoryDrawer'
 
 const route = useRoute()
 const router = useRouter()

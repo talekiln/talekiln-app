@@ -6,8 +6,19 @@
       </el-button>
       <h1>快捷键设置</h1>
       <div class="ks-spacer" />
-      <el-button size="small" @click="resetAll">全部恢复默认</el-button>
+      <el-button size="small" data-test="ks-reset-all" @click="resetAll">全部恢复预设</el-button>
     </header>
+
+    <div class="ks-tools" data-test="ks-tools">
+      <span class="ks-label">键位预设</span>
+      <el-select :model-value="presetId" size="small" style="width: 200px" data-test="ks-preset" @change="onPreset">
+        <el-option v-for="p in presets" :key="p.id" :label="p.label" :value="p.id" />
+      </el-select>
+      <div class="ks-spacer" />
+      <el-button size="small" data-test="ks-export" @click="doExport">导出 JSON</el-button>
+      <el-button size="small" data-test="ks-import" @click="fileInput?.click()">导入 JSON</el-button>
+      <input ref="fileInput" type="file" accept="application/json,.json" hidden data-test="ks-import-file" @change="onImportFile">
+    </div>
 
     <el-alert
       v-if="conflicts.length"
@@ -32,7 +43,7 @@
           <el-button v-if="recording !== a.id" size="small" text type="primary" @click="startRecord(a.id)">+ 添加</el-button>
           <el-tag v-else type="warning">请按下新的组合键… (Esc 取消)</el-tag>
         </span>
-        <el-button size="small" text :disabled="!isCustom(a.id)" @click="resetAction(a.id)">恢复默认</el-button>
+        <el-button size="small" text :disabled="!isCustom(a.id)" @click="resetAction(a.id)">恢复预设</el-button>
       </div>
     </section>
     <p class="ks-note">Ctrl + 滚轮：缩放时间线（固定手势，不可改）。分镜工作台快捷键已注册，处理逻辑随工作台上线。</p>
@@ -41,15 +52,20 @@
 
 <script setup>
 import { ref, computed, onBeforeUnmount } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { useKeymap } from '@/composables/useKeymap'
-import { eventToCombo, formatCombo, SCOPE_TIMELINE, SCOPE_WORKBENCH } from '@/utils/keymap'
+import { eventToCombo, formatCombo, SCOPE_TIMELINE, SCOPE_WORKBENCH, SCOPE_GLOBAL } from '@/utils/keymap'
 
-const { actions, keymap, overrides, conflicts, setBinding, resetAction, resetAll, conflictsFor } = useKeymap()
+const {
+  actions, keymap, overrides, conflicts, setBinding, resetAction, resetAll, conflictsFor,
+  presetId, presets, setPreset, exportJSON, importJSON,
+} = useKeymap()
+const fileInput = ref(null)
 const recording = ref(null)
 
 const groups = computed(() => [
+  { scope: SCOPE_GLOBAL, title: '全局', actions: actions.filter((a) => a.scope === SCOPE_GLOBAL) },
   { scope: SCOPE_TIMELINE, title: '时间线编辑', actions: actions.filter((a) => a.scope === SCOPE_TIMELINE) },
   { scope: SCOPE_WORKBENCH, title: '分镜工作台（AI）', actions: actions.filter((a) => a.scope === SCOPE_WORKBENCH) },
 ])
@@ -57,6 +73,38 @@ const groups = computed(() => [
 const conflictSet = computed(() => new Set(conflicts.value.flatMap((c) => c.actions.map((id) => `${id}|${c.combo}`))))
 const isConflict = (id, combo) => conflictSet.value.has(`${id}|${combo}`)
 const isCustom = (id) => !!overrides.value[id]
+
+async function onPreset(id) {
+  if (id === presetId.value) return
+  if (Object.keys(overrides.value).length) {
+    try {
+      await ElMessageBox.confirm('切换预设会清除你的自定义键位，确定吗？（可先导出 JSON 备份）', '切换键位预设', { type: 'warning' })
+    } catch (_) {
+      return
+    }
+  }
+  setPreset(id)
+  ElMessage.success('已切换预设')
+}
+
+function doExport() {
+  const blob = new Blob([exportJSON()], { type: 'application/json' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = 'talekiln-keymap.json'
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+}
+
+async function onImportFile(e) {
+  const f = e.target.files?.[0]
+  e.target.value = ''
+  if (!f) return
+  const r = importJSON(await f.text())
+  if (!r.ok) return ElMessage.error(`导入失败：${r.error}`)
+  if (r.warnings.length) ElMessage.warning(`已导入，但有提示：${r.warnings.slice(0, 3).join('；')}`)
+  else ElMessage.success('键位已导入')
+}
 
 function removeKey(id, combo) {
   setBinding(id, keymap.value[id].filter((c) => c !== combo))
@@ -98,6 +146,7 @@ onBeforeUnmount(stopRecord)
 .ks-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .ks-header h1 { margin: 0; font-size: 18px; color: var(--text-bright); }
 .ks-spacer { flex: 1; }
+.ks-tools { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .ks-group h2 { font-size: 14px; color: var(--text-muted); margin: 18px 0 6px; }
 .ks-row { display: flex; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border-color); }
 .ks-label { flex: 0 0 220px; font-size: 13px; }
