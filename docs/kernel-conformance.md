@@ -4,10 +4,10 @@
 
 ## 1. 结论
 
-- 场景 × 入口视图 × 故事共 **910** 次执行（34 个场景，13 个样例故事，另有 176 次“不同入口终态必须一致”的等价性比较），**失败 0**，另有 26 次因故事形状不适用而跳过（见第 4 节）。
+- 场景 × 入口视图 × 故事共 **1014** 次执行（38 个场景，13 个样例故事，另有 228 次“不同入口终态必须一致”的等价性比较），**失败 0**，另有 26 次因故事形状不适用而跳过（见第 4 节）。
 - 每次执行的**每一步**之后检查 I1–I8，并做逐步撤销/重做、重复 tx_id、独立预言机比对；执行结束再做整段撤销重做链和“每个事务边界崩溃重放”。
 - 套件抓到 **2 个内核缺陷**，均已修复并各有回归测试（第 6 节）。
-- 其余套件：来回一圈 + 意图足迹 + 携带表 16/16；事务原子性 + 意图错误处理 26/26；随机会话（3 个种子 × 13 故事 × 18 步） 3/3；套件自检（变异）与缺陷回归 12/12。
+- 其余套件：来回一圈 + 意图足迹 + 携带表 16/16；事务原子性 + 意图错误处理 26/26；随机会话（3 个种子 × 13 故事 × 18 步） 3/3；套件自检（变异）与缺陷回归 14/14。
 
 ## 2. 每一步检查的不变量
 
@@ -29,8 +29,8 @@
 
 | 场景 | 说明 | script | shot | timeline | canvas | equiv |
 |---|---|---|---|---|---|---|
-| `rewrite_line` | 改写一行台词（旁白/对白） | 13/13<br>`rewriteLine` | 13/13<br>`rewriteLine` | 13/13<br>`rewriteLine` | 13/13<br>`setParam` | 13/13<br>`graph` |
-| `change_line_kind` | 把台词行改成动作行（对白 -> action） | 13/13<br>`rewriteLine` | 13/13<br>`rewriteLine` | 13/13<br>`rewriteLine` | 13/13<br>`setParam` | 13/13<br>`graph` |
+| `rewrite_line` | 改写一行台词（旁白/对白） | 13/13<br>`rewriteLine` | 13/13<br>`rewriteLine` | 13/13<br>`rewriteLine` | 13/13<br>`setNodeParam` | 13/13<br>`graph` |
+| `change_line_kind` | 把台词行改成动作行（对白 -> action） | 13/13<br>`rewriteLine` | 13/13<br>`rewriteLine` | 13/13<br>`rewriteLine` | 13/13<br>`setNodeParam` | 13/13<br>`graph` |
 | `split_line` | 拆一行台词为两行 | 13/13<br>`splitLine` | — | — | — | — |
 | `merge_lines` | 合并两行相邻台词 | 12/12（1 个故事不适用）<br>`mergeLines` | — | — | — | — |
 | `reorder_lines` | 反转一个场景里的行顺序 | 12/12（1 个故事不适用）<br>`reorderLines` | — | — | — | — |
@@ -43,11 +43,11 @@
 | `move_shot_across_scenes` | 跨场景移动镜头（全局顺序改变：A 的首个镜头 -> B 的末尾） | — | 12/12（1 个故事不适用）<br>`moveShotToGroup` | 12/12（1 个故事不适用）<br>`moveSegment(cross-scene)` | — | 12/12<br>`graph` |
 | `delete_shot` | 删除一个镜头（分镜删除 = 画布删节点 = 时间线删最后一个片段） | — | 13/13<br>`deleteShot` | 26/26<br>`deleteSegment(last)` `splitSegment+deleteSegment×2` | 13/13<br>`deleteNode(shot)` | 13/13<br>`graph` |
 | `add_shot` | 新增镜头（分镜新增 = 画布新建节点） | — | 13/13<br>`addShot` | — | 13/13<br>`addNodeAt(shot)` | 13/13<br>`graph-no-layout` |
-| `set_shot_title` | 改镜头字段（标题/画面提示词） | — | 13/13<br>`setShotField` | — | 13/13<br>`setParam` | 13/13<br>`graph` |
+| `set_shot_title` | 改镜头字段（标题/画面提示词） | — | 13/13<br>`setShotField` | — | 13/13<br>`setNodeParam` | 13/13<br>`graph` |
 | `set_shot_duration` | 改镜头时长（片段跟随；被裁过的片段裁进新时长） | — | 39/39<br>`grow-then-shrink` `shrink-with-split-segments` `shrink-under-trimmed-segment` | — | — | — |
-| `regenerate_shot` | 单镜头重新生成（只有该镜头的 image/video 链 + 合成过期，旧版本保留） | — | 13/13<br>`regenerateShot` | — | 13/13<br>`setParam(seed)` | 13/13<br>`graph` |
-| `regenerate_video_only` | 只重新生成视频（图片保持新鲜） | — | 13/13<br>`regenerateShot(video)` | — | 13/13<br>`setParam(seed)` | 13/13<br>`graph` |
-| `change_voice` | 换音色（只有该镜头的配音 + 合成过期） | — | 13/13<br>`setVoice` | — | 13/13<br>`setParam(voice)` | 13/13<br>`graph` |
+| `regenerate_shot` | 单镜头重新生成（只有该镜头的 image/video 链 + 合成过期，旧版本保留） | — | 13/13<br>`regenerateShot` | — | 13/13<br>`setNodeParam(seed)` | 13/13<br>`graph` |
+| `regenerate_video_only` | 只重新生成视频（图片保持新鲜） | — | 13/13<br>`regenerateShot(video)` | — | 13/13<br>`setNodeParam(seed)` | 13/13<br>`graph` |
+| `change_voice` | 换音色（只有该镜头的配音 + 合成过期） | — | 13/13<br>`setVoice` | — | 13/13<br>`setNodeParam(voice)` | 13/13<br>`graph` |
 | `timeline_trim` | 时间线裁剪片段 | — | — | 13/13<br>`trimSegment` | — | — |
 | `timeline_split_segment` | 时间线切分片段 / 删除其中一半 | — | — | 13/13<br>`splitSegment+deleteSegment` | — | — |
 | `timeline_reorder_within_shot` | 切分后在同一镜头内交换两个片段 | — | — | 13/13<br>`splitSegment+moveSegment` | — | — |
@@ -58,13 +58,17 @@
 | `canvas_connect_disconnect` | 画布连线 / 断线 | — | — | — | 39/39<br>`line->shot 断开再连回` `image->video 断开再连回` `连线替换单连接端口` | — |
 | `canvas_delete_node` | 画布删除生成节点（image / video / narration） | — | — | — | 39/39<br>`deleteNode(image)` `deleteNode(video)` `deleteNode(narration)` | — |
 | `canvas_rewire` | 画布重连：删 image、新建 image、接回 shot 和 video | — | — | — | 13/13<br>`delete+addNodeAt+connect×2` | — |
+| `change_references` | 改锁定的参考图（只有该镜头的 image + video + 合成过期；改回去零成本重新采用旧版本） | — | 13/13<br>`setShotReferences` | — | 13/13<br>`setNodeParam` | 13/13<br>`graph` |
+| `change_tail_frame` | 改尾帧（只有该镜头的 video + 合成过期，首帧图保持新鲜） | — | 13/13<br>`setShotReferences` | — | 13/13<br>`setNodeParam` | 13/13<br>`graph` |
+| `change_image_model` | 换出图模型（该镜头的 image + video + 合成过期） | — | 13/13<br>`setShotReferences` | — | 13/13<br>`setNodeParam` | 13/13<br>`graph` |
+| `change_video_model` | 换视频模型（只有该镜头的 video + 合成过期） | — | 13/13<br>`setShotReferences` | — | 13/13<br>`setNodeParam` | 13/13<br>`graph` |
 | `adopt_old_version` | 采用旧版本（版本回退）：版本不被覆盖，采用旧版本后按 key 判断新鲜 | — | 13/13<br>`regenerate+generate+adoptVersion` | — | — | — |
 | `reorder_after_split` | 先切分片段，再跨镜头边界重排（时间线）或改镜头顺序（分镜）：多片段镜头整体移动 | — | 11/11（2 个故事不适用）<br>`splitSegment(timeline)+reorderShots` | 11/11（2 个故事不适用）<br>`splitSegment+moveSegment(cross-boundary)` | — | 11/11<br>`graph` |
 | `compose_created_late` | 项目还没有合成节点时先编辑，再从画布新建 compose（片段补齐、接线补齐） | 13/13<br>`rewriteLine -> addNodeAt(compose)` | 13/13<br>`addShot -> addNodeAt(compose)` | 13/13<br>`addNodeAt(compose) -> trim/split/music` | 13/13<br>`deleteNode(narration) -> addNodeAt(compose)` | — |
 | `mixed_session_undo_redo` | 四种视图混合编辑的会话 + 批量撤销/重做（分四种起手视图） | 12/12（1 个故事不适用）<br>`lead:script` | 12/12（1 个故事不适用）<br>`lead:shot` | 12/12（1 个故事不适用）<br>`lead:timeline` | 12/12（1 个故事不适用）<br>`lead:canvas` | — |
 | `crash_reload_mid_session` | 会话中途崩溃重载（快照 + 日志重放）后继续编辑（分四种起手视图） | 12/12（1 个故事不适用）<br>`lead:script` | 12/12（1 个故事不适用）<br>`lead:shot` | 12/12（1 个故事不适用）<br>`lead:timeline` | 12/12（1 个故事不适用）<br>`lead:canvas` | — |
 
-按入口视图的执行次数：script 126，shot 275，timeline 212，canvas 297（合计 910）。
+按入口视图的执行次数：script 126，shot 327，timeline 212，canvas 349（合计 1014）。
 
 ## 4. 不适用（跳过）
 
@@ -118,13 +122,14 @@
 | 行说话人 / 行类型 | ✓ | （摘要） |  | ✓ |
 | 场景标题 group.title | ✓ | ✓ |  | ✓ |
 | 镜头标题/描述/提示词/角色/时长 |  | ✓ |  | ✓ |
-| image/video/narration 参数（种子、模型、音色） |  | （摘要） |  | ✓ |
+| image/video/narration 参数（种子、音色） |  | （摘要） |  | ✓ |
+| 生成输入：模型、锁定参考图哈希、尾帧哈希（K4 起是节点参数，进 cacheKey） |  | （摘要） |  | ✓ |
 | 片段 in/out |  | （用时） | ✓ | ✓ |
 | 片段 gap_before_ms |  |  | ✓ | ✓ |
-| 片段转场 |  | （场景缓存键） | ✓ | ✓ |
+| 片段转场（G02 不渲染转场，不进场景缓存键） |  |  | ✓ | ✓ |
 | 音乐 |  |  | ✓ | ✓ |
 | compose.fps / size / aigc_label |  |  |  | ✓ |
-| 字幕样式覆盖 |  |  | ✓ | ✓ |
+| 字幕样式覆盖 |  | （场景缓存键） | ✓ | ✓ |
 | 画布坐标 layout |  |  |  | ✓ |
 | 镜头顺序（group.children） | ✓ | ✓ | ✓ | ✓ |
 
@@ -134,16 +139,16 @@
 
 **覆盖**：
 - 全部 4 个视图的全部意图至少各被执行过一次（足迹测试要求每个导出的意图都有声明）；
-- 任务要求的场景：改台词、拆/合/排镜头、跨场景移动、时间线裁剪/切分/跨镜头边界移动、转场、加音乐、画布移动（不改过期集合）、连线/断线/删节点、单镜头重新生成（只有该镜头链 + 合成过期，旧版本保留）、换音色、混合会话撤销重做（四种起手视图）、中途崩溃重载（四种起手视图）；另有版本回退、没有 compose 时先编辑再新建 compose、先切分再重排；
-- 同一件事从不同视图做必须得到同一张图（镜头重排 = 移动到组 = 时间线跨边界移动；删镜头 = 画布删节点 = 时间线删最后一个片段；改台词 = 四个视图入口；重新生成/换音色/改镜头字段 = 分镜意图 = 画布属性编辑）；
+- 任务要求的场景：改台词、拆/合/排镜头、跨场景移动、时间线裁剪/切分/跨镜头边界移动、转场、加音乐、画布移动（不改过期集合）、连线/断线/删节点、单镜头重新生成（只有该镜头链 + 合成过期，旧版本保留）、换音色、改锁定参考图 / 尾帧 / 换出图模型 / 换视频模型（只让该镜头对应的节点 + 合成过期，改回去零成本命中旧版本）、混合会话撤销重做（四种起手视图）、中途崩溃重载（四种起手视图）；另有版本回退、没有 compose 时先编辑再新建 compose、先切分再重排；
+- 同一件事从不同视图做必须得到同一张图（镜头重排 = 移动到组 = 时间线跨边界移动；删镜头 = 画布删节点 = 时间线删最后一个片段；改台词 = 四个视图入口；重新生成/换音色/改镜头字段/生成输入 = 分镜意图 = 画布 `canvas.setNodeParam`）；
 - 事务原子性、对乱参数只抛 KernelError、随机会话（3 个种子，另在开发时用同一随机驱动额外跑过种子 4–18，均通过）。
 
 **没覆盖 / 已知缺口**：
 - **没有验证物化后的旧表**（I8 只验证 `toLegacyRows` 内部一致）：`materialize` / `importLegacy` / SQLite 快照与日志表在 `packages/local/src/kernel` 另一条任务线，这里是纯内核，快照/日志用“规范 JSON + 事务数组”模拟，没有真实的磁盘写入、事务中途断电、并发写入；
-- **画布没有“改参数”意图**：画布属性面板编辑（改种子、音色、台词、镜头字段）在套件里用一条纯 `setParam` 事务代替（`canvasEdit`），它是否应成为正式意图（带校验、带 label）需要内核补一个；
+- 画布属性面板编辑（K4 已补）：正式意图 `canvas.setNodeParam`（白名单 + 取值校验，带标签的事务），套件里的 `canvasEdit` 只是把一次面板编辑的多个参数合进一个事务；`segments / music / subtitle_overrides` 不能从这里改（有各自的时间线意图）；
 - 视图是**数据模型**，不是 UI：没有测拖拽、选择、焦点、增量渲染，也没有测真实 UI 在视图间切换时的状态保持；
 - 没有多人协作、并发事务冲突；没有超大图（几千节点）的性能测试（单图最大约 50 个节点）；
-- 场景缓存键 `sceneKey` 只测了“哪些编辑会/不会改它”（裁剪、转场、gap、音乐、重新生成），没有对接真实 G02 渲染计划；字幕文字改动**不**改场景缓存键（规格如此），若 G02 把字幕烧进场景缓存，这是个需要产品确认的点；
+- 场景缓存键 `sceneKey` 与真实 G02 渲染计划的对照（K4 已做）在 `packages/kernel/test/sceneKeyG02.test.js`（调 lycore `render.plan`，没有二进制时退回按 plan.rs 字段写的 JS 移植）：17 种编辑的“哪些镜头的场景变了”两边完全一致。因对照而改了内核：字幕文字/样式进场景缓存键（字幕是烧进画面的），转场移出（G02 目前不渲染转场，不进场景键）。这条套件**不在**一致性矩阵里，矩阵只用内核自己的 sceneKey 做“哪些编辑会/不会改它”的断言；
 - 故事是 10 个真实分镜表 + 3 个手写边界，没有真实的“用户手写剧本→生成”长链，也没有 50+ 镜头的长片；真实输出里没有多镜头共用一行、一行挂多个镜头的情形（只有手写边界故事里的一镜多行与未挂行；`insert_line` 等场景会制造一行挂一个镜头）；
 - `adoptVersion` / `addVersion` / `setGroupTitle` 等没有对应意图的原子 op 只通过原始事务覆盖（版本回退场景、携带表）；
 - 随机会话的画布连线只在“图校验不报错”时采用，被图校验拒绝的随机连线不计入。

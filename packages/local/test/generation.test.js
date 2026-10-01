@@ -13,6 +13,8 @@ const { createSpendService } = require('../src/spend');
 const { createGenerationService, GenerationError } = require('../src/generation');
 const generationRoutes = require('../src/routes/generation');
 const { seededDb, sbRows, log } = require('./helpers/kernelDb');
+const referenceLocks = require('../src/services/referenceLockService');
+const kernelInputs = require('../src/kernel/inputs');
 
 const FAKE_CONFIGS = [{ provider: 'dashscope', api_key: 'fake-key-not-real', is_active: true, service_type: 'text' }];
 
@@ -61,7 +63,8 @@ async function harness({ behavior, crash, withCore = true, db: existing } = {}) 
   const worker = createWorker({ queue, store: taskStore, config: {}, onTaskFinished: (t) => { spend.recordFinished(t); if (gen) gen.onTaskFinished(t); }, onError() {} });
   const probed = [];
   const getCore = withCore ? async () => ({ call: async (m, args) => { probed.push([m, args.path]); return { durationSec: 4.8 }; } }) : null;
-  gen = createGenerationService({ db, store: taskStore, worker: { wake() {} }, spend, storageRoot: storageDir, getCore, listConfigs: () => FAKE_CONFIGS, log });
+  const catalog = { models: [] };
+  gen = createGenerationService({ db, store: taskStore, worker: { wake() {} }, spend, storageRoot: storageDir, getCore, listConfigs: () => FAKE_CONFIGS, catalogModels: () => catalog.models, log });
   const drain = async () => {
     for (let i = 0; i < 30 && worker.unfinishedCount() > 0; i++) { await worker.runOnce(); await gen.idle(); }
     await worker.runOnce();
@@ -72,7 +75,7 @@ async function harness({ behavior, crash, withCore = true, db: existing } = {}) 
   const rowOf = (shotId) => db.prepare('SELECT * FROM storyboards WHERE id = ?').get(graph().nodes[shotId].legacy_id);
   const edit = (shotId, patch, id) => store.commit(db, episodeId, (g) => kernel.intents.shot.setShotField(g, shotId, patch, { tx_id: id }), { tx_id: id });
   const taskCount = () => db.prepare('SELECT COUNT(*) n FROM ai_tasks').get().n;
-  return { db, ep: episodeId, dir, storageDir, taskStore, queue, worker, spend, gen, provider, probed, drain, shots, graph, rowOf, edit, taskCount, getCore };
+  return { catalog, db, ep: episodeId, dir, storageDir, taskStore, queue, worker, spend, gen, provider, probed, drain, shots, graph, rowOf, edit, taskCount, getCore };
 }
 
 describe('生成编排：估算与建任务', () => {
@@ -125,8 +128,7 @@ describe('生成编排：估算与建任务', () => {
     const legacyId = h.graph().nodes[s1].legacy_id;
     const cid = h.db.prepare('SELECT id FROM characters LIMIT 1').get().id;
     h.db.prepare('INSERT INTO reference_locks (entity_type, entity_id, local_path, locked_at) VALUES (?, ?, ?, ?)').run('character', cid, 'media/char-ref.png', 'now');
-    h.edit(s1, { image_prompt: '改过的提示词' }, 'e1');
-    h.db.prepare('UPDATE storyboards SET characters = ? WHERE id = ?').run(JSON.stringify([cid]), legacyId);
+    h.edit(s1, { image_prompt: '改过的提示词', characters: [cid] }, 'e1'); // 经内核写（物化会按图覆盖旧表的 characters 列）
     h.gen.create(h.ep, { shots: [s1], kind: 'image' });
     const p = JSON.parse(h.db.prepare("SELECT params FROM ai_tasks WHERE kind = 'image'").get().params);
     assert.deepEqual(p.referenceImages, ['/static/media/char-ref.png']);
@@ -177,7 +179,9 @@ describe('生成编排：估算与建任务', () => {
     const r = h.gen.create(h.ep, { shots: [s1], kind: 'image' });
     assert.equal(r.tasks.length, 0);
     assert.equal(h.taskCount(), tasksBefore, '命中缓存不建任务');
-    assert.equal(kernel.adoptedVersion(h.graph(), imgNode).id, v0, '采用回旧版本');
+    const back = kernel.adoptedVersion(h.graph(), imgNode);
+    assert.ok(back.id === v0 || back.rebased_from === v0, '采用回旧版本（导入的旧版本不知道当时的输入，改记成当前 key 的别名版本，资产相同）');
+    assert.equal(back.asset.ref, kernel.adoptedVersion(store.openProject(h.db, h.ep).graph, imgNode).asset.ref);
     assert.equal(h.gen.status(h.ep).shots[0].image.state, 'fresh');
   });
 
@@ -211,11 +215,14 @@ describe('生成编排：估算与建任务', () => {
     const h = await harness();
     const [s1] = h.shots();
     const imgNode = kernel.partsOfShot(h.graph(), s1).image;
+    const v0 = kernel.adoptedVersion(h.graph(), imgNode).id;
     const r = h.gen.create(h.ep, { shots: [s1], kind: 'image', regenerate: true });
     assert.equal(r.tasks.length, 1);
     assert.equal(h.graph().nodes[imgNode].params.seed, 1);
     await h.drain();
-    assert.equal(h.graph().versions[imgNode].length, 2);
+    const vs = h.graph().versions[imgNode];
+    assert.ok(vs.length >= 2 && vs.some((v) => v.id === v0), '旧版本保留（首次同步生成输入时可能多一条改记版本）');
+    assert.notEqual(kernel.adoptedVersion(h.graph(), imgNode).id, v0);
   });
 });
 
@@ -267,8 +274,8 @@ describe('写回内核', () => {
     assert.equal(v.asset.kind, 'video');
     assert.ok(v.asset.ref.startsWith('/static/blobs/'));
     assert.equal(v.asset.hash.length, 64);
-    assert.equal(v.meta.duration_ms, 4800, '用 lycore media.probe 的真实时长');
-    assert.equal(v.meta.duration_source, 'probe');
+    assert.equal(v.metadata.duration_ms, 4800, '用 lycore media.probe 的真实时长');
+    assert.equal(v.metadata.duration_source, 'probe');
     assert.equal(h.probed[0][0], 'media.probe');
     assert.ok(h.probed[0][1].startsWith(h.storageDir));
     assert.equal(h.gen.status(h.ep).shots[0].video.duration_ms, 4800);
@@ -285,8 +292,8 @@ describe('写回内核', () => {
     h.gen.create(h.ep, { shots: [s1], kind: 'video' });
     await h.drain();
     const v = kernel.adoptedVersion(h.graph(), kernel.partsOfShot(h.graph(), s1).video);
-    assert.equal(v.meta.duration_ms, 5000);
-    assert.equal(v.meta.duration_source, 'provider');
+    assert.equal(v.metadata.duration_ms, 5000);
+    assert.equal(v.metadata.duration_source, 'provider');
   });
 
   it('图片成功：采用新图并写到旧表的 local_path', async () => {
@@ -311,8 +318,8 @@ describe('写回内核', () => {
     const before = kernel.adoptedVersion(h.graph(), imgNode).id;
     const rowBefore = h.rowOf(s1);
     h.edit(s1, { image_prompt: '会失败的改动' }, 'e1');
-    const seq = store.openProject(h.db, h.ep).seq;
     const r = h.gen.create(h.ep, { shots: [s1], kind: 'image' });
+    const seq = store.openProject(h.db, h.ep).seq; // 建任务前的输入同步已提交；之后的任务失败不能再写内核
     await h.drain();
     assert.equal(h.taskStore.get(r.tasks[0].task_id).state, 'failed');
     assert.equal(store.openProject(h.db, h.ep).seq, seq, '失败不写内核');
@@ -410,6 +417,145 @@ describe('崩溃恢复', () => {
     const rec2 = await h.gen.recoverFinished();
     assert.equal(rec2[0].adopted, false);
     assert.equal(rec2[0].reason, 'already_recorded');
+  });
+});
+
+describe('生成输入进 cacheKey：锁定参考图、尾帧、所选模型', () => {
+  const states = (h) => h.gen.status(h.ep).shots.map((s) => [s.image.state, s.video.state]);
+  /** 先把全部镜头生成一遍（顺便完成“首次记录所选模型”的基线），得到全新鲜的起点。 */
+  async function baseline(h) {
+    h.gen.create(h.ep, { shots: 'all', kind: 'both' });
+    await h.drain();
+    assert.equal(h.gen.status(h.ep).counts.fresh, 5);
+  }
+
+  it('首次记录所选模型不会让导入的新鲜素材变过期（改记，不建任务、不花钱）', async () => {
+    const h = await harness();
+    const imgs = () => h.gen.status(h.ep).shots.map((s) => s.image.state);
+    assert.deepEqual(imgs(), Array(5).fill('fresh'), '示例项目导入的首帧图都是新鲜的');
+    const r = h.gen.create(h.ep, { shots: 'all', kind: 'image' });
+    assert.equal(r.tasks.length, 0, '图片不重做');
+    assert.deepEqual(imgs(), Array(5).fill('fresh'));
+    const node = kernel.partsOfShot(h.graph(), h.shots()[0]).image;
+    assert.equal(h.graph().nodes[node].params.model, 'wan2.6-t2i', '所选模型已记进节点参数');
+    assert.equal(kernel.adoptedVersion(h.graph(), node).source, 'rebase', '采用的是改记版本，原版本保留');
+    assert.equal(h.graph().versions[node].length, 2);
+    // 之后换模型就是真实变化：版本已记录模型
+    h.catalog.models = [{ provider: 'bailian', service_type: 'image', id: 'img-b' }];
+    assert.equal(h.gen.preview(h.ep, { shots: 'all', kind: 'image' }).counts.create, 5);
+  });
+
+  it('锁定参考图：只有用到它的镜头的 image + video 过期；解除后 key 回到原值，仍是新鲜', async () => {
+    const h = await harness();
+    await baseline(h);
+    const [s1] = h.shots();
+    h.db.prepare('UPDATE storyboards SET scene_id = 77 WHERE id = ?').run(h.graph().nodes[s1].legacy_id); // scene_id 不在图里，直接写旧表
+    referenceLocks.setLock(h.db, 'scene', 77, { local_path: 'media/scene-77.png' });
+    const r = kernelInputs.syncReferences(h.db);
+    assert.equal(r.length, 1);
+    assert.equal(r[0].applied, true);
+    const st = states(h);
+    assert.deepEqual(st[0], ['stale', 'stale'], '用到参考图的镜头：图和视频都过期');
+    assert.ok(st.slice(1).every((x) => x[0] === 'fresh' && x[1] === 'fresh'), '其它镜头不受影响');
+    const node = kernel.partsOfShot(h.graph(), s1).image;
+    assert.deepEqual(h.graph().nodes[node].params.reference_hashes, [kernelInputs.hashRef('/static/media/scene-77.png')]);
+    // 解除 -> 参数删除 -> key 回到锁定前的值 -> 仍采用着旧版本 = 新鲜
+    referenceLocks.clearLock(h.db, 'scene', 77);
+    kernelInputs.syncReferences(h.db);
+    assert.ok(!('reference_hashes' in h.graph().nodes[node].params));
+    assert.deepEqual(states(h)[0], ['fresh', 'fresh']);
+    // 再次同步没有变化 = 不写内核
+    assert.equal(kernelInputs.syncReferences(h.db)[0].applied, false);
+  });
+
+  it('锁定后真的生成一版，再解除：旧版本是缓存命中，零成本重新采用', async () => {
+    const h = await harness();
+    await baseline(h);
+    const [s1] = h.shots();
+    h.db.prepare('UPDATE storyboards SET scene_id = 77 WHERE id = ?').run(h.graph().nodes[s1].legacy_id);
+    referenceLocks.setLock(h.db, 'scene', 77, { local_path: 'media/scene-77.png' });
+    const made = h.gen.create(h.ep, { shots: [s1], kind: 'both' });
+    assert.equal(made.tasks.length, 1, '先出图（接着自动出视频）');
+    await h.drain();
+    const p = h.db.prepare("SELECT params FROM ai_tasks WHERE kind = 'image' ORDER BY rowid DESC").get();
+    assert.deepEqual(JSON.parse(p.params).referenceImages, ['/static/media/scene-77.png']);
+    assert.equal(h.gen.status(h.ep).counts.fresh, 5);
+    referenceLocks.clearLock(h.db, 'scene', 77);
+    kernelInputs.syncReferences(h.db);
+    assert.deepEqual(states(h)[0], ['stale', 'stale']);
+    const tasksBefore = h.taskCount();
+    const pre = h.gen.preview(h.ep, { shots: [s1], kind: 'both' });
+    assert.deepEqual(pre.items.map((i) => i.action), ['cache_hit', 'cache_hit']);
+    assert.equal(pre.billable, 0);
+    const r = h.gen.create(h.ep, { shots: [s1], kind: 'both' });
+    assert.equal(r.tasks.length, 0);
+    assert.equal(h.taskCount(), tasksBefore);
+    assert.equal(h.gen.status(h.ep).counts.fresh, 5);
+  });
+
+  it('参考图锁定 / 解除的 REST 路由：改完旧表立刻同步进图，受影响镜头马上过期', async () => {
+    const h = await harness();
+    await baseline(h);
+    const [s1] = h.shots();
+    h.db.prepare('UPDATE storyboards SET scene_id = 78 WHERE id = ?').run(h.graph().nodes[s1].legacy_id);
+    const wb = require('../src/routes/workbench')(h.db, log);
+    const res = { code: 200, status(c) { this.code = c; return this; }, json(b) { this.body = b; return this; } };
+    wb.setLock({ params: { type: 'scene', id: '78' }, body: { local_path: 'media/scene-78.png' } }, res);
+    assert.equal(res.code, 200);
+    assert.deepEqual(states(h)[0], ['stale', 'stale']);
+    assert.ok(states(h).slice(1).every((x) => x[0] === 'fresh' && x[1] === 'fresh'));
+    wb.clearLock({ params: { type: 'scene', id: '78' } }, res);
+    assert.deepEqual(states(h)[0], ['fresh', 'fresh']);
+  });
+
+  it('尾帧：只有该镜头的 video 过期，首帧图保持新鲜；改回去恢复', async () => {
+    const h = await harness();
+    await baseline(h);
+    const [s1] = h.shots();
+    const id = h.graph().nodes[s1].legacy_id;
+    h.db.prepare('UPDATE storyboards SET last_frame_local_path = ? WHERE id = ?').run('media/tail-9.png', id);
+    kernelInputs.syncReferences(h.db);
+    assert.deepEqual(states(h)[0], ['fresh', 'stale']);
+    assert.ok(states(h).slice(1).every((x) => x[0] === 'fresh' && x[1] === 'fresh'));
+    h.db.prepare('UPDATE storyboards SET last_frame_local_path = NULL WHERE id = ?').run(id);
+    kernelInputs.syncReferences(h.db);
+    assert.deepEqual(states(h)[0], ['fresh', 'fresh']);
+    // 经队列生成：尾帧在任务参数里，版本记录了当时的输入
+    h.db.prepare('UPDATE storyboards SET last_frame_local_path = ? WHERE id = ?').run('media/tail-9.png', id);
+    const r = h.gen.create(h.ep, { shots: [s1], kind: 'video' });
+    assert.equal(r.tasks.length, 1);
+    assert.equal(JSON.parse(h.db.prepare("SELECT params FROM ai_tasks WHERE kind = 'video' ORDER BY rowid DESC").get().params).lastFrameUrl, '/static/media/tail-9.png');
+    await h.drain();
+    const v = kernel.adoptedVersion(h.graph(), kernel.partsOfShot(h.graph(), s1).video);
+    assert.equal(v.metadata.inputs.tail_frame_hash, kernelInputs.hashRef('/static/media/tail-9.png'));
+    assert.equal(h.gen.status(h.ep).counts.fresh, 5);
+  });
+
+  it('所选模型：换模型 = 该镜头 image + video 过期（估算只在副本上演算，不写库）；换回来命中旧版本', async () => {
+    const h = await harness();
+    h.catalog.models = [{ provider: 'bailian', service_type: 'image', id: 'wan2.6-t2i' }, { provider: 'bailian', service_type: 'video', id: 'wan2.6-t2v' }, { provider: 'bailian', service_type: 'video', id: 'wan2.2-kf2v-flash' }];
+    await baseline(h);
+    const imgNode = kernel.partsOfShot(h.graph(), h.shots()[0]).image;
+    assert.equal(h.graph().nodes[imgNode].params.model, 'wan2.6-t2i', '所选模型已记进节点参数');
+    // 目录里这个服务商的出图模型换了：新的选择必须让所有镜头的图和视频过期
+    h.catalog.models = [{ provider: 'bailian', service_type: 'image', id: 'img-b' }, ...h.catalog.models.filter((m) => m.service_type === 'video')];
+    const seq = store.openProject(h.db, h.ep).seq;
+    const pre = h.gen.preview(h.ep, { shots: 'all', kind: 'both' });
+    assert.equal(store.openProject(h.db, h.ep).seq, seq, '估算不写内核');
+    assert.deepEqual(pre.items.filter((i) => i.kind === 'image').map((i) => [i.action, i.model]), Array(5).fill(['create', 'img-b']));
+    const made = h.gen.create(h.ep, { shots: 'all', kind: 'both' });
+    assert.equal(made.tasks.length, 5);
+    await h.drain();
+    assert.equal(h.graph().nodes[imgNode].params.model, 'img-b');
+    assert.equal(h.gen.status(h.ep).counts.fresh, 5);
+    // 换回来：旧版本的 key 与现在相同 -> 缓存命中，不建任务
+    h.catalog.models = [{ provider: 'bailian', service_type: 'image', id: 'wan2.6-t2i' }, ...h.catalog.models.filter((m) => m.service_type === 'video')];
+    const tasksBefore = h.taskCount();
+    const back = h.gen.create(h.ep, { shots: 'all', kind: 'both' });
+    assert.equal(back.tasks.length, 0);
+    assert.equal(h.taskCount(), tasksBefore);
+    assert.equal(h.graph().nodes[imgNode].params.model, 'wan2.6-t2i');
+    assert.equal(h.gen.status(h.ep).counts.fresh, 5);
   });
 });
 

@@ -8,7 +8,7 @@ const NODE_TYPE_VERSION = { script_line: 1, shot: 1, image: 1, video: 1, narrati
 /**
  * 全部节点的 cacheKey：sha256(canonical{ type, node_version, params, inputs })。
  * inputs 按端口排序（lines 端口按剧本顺序）；binds 边不参与；narration 的 lines 输入由绑定镜头的行推导。
- * layout、legacy_id 不参与。compose 的 params 含 segments/music，所以裁剪也会改它的 key；
+ * layout、legacy_id 不参与。生成输入（image.model/reference_hashes、video.model/tail_frame_hash）是节点自己的参数，和 seed、voice 一样进 key。compose 的 params 含 segments/music，所以裁剪也会改它的 key；
  * compose 的 key 还含全项目镜头顺序（片段数组里跨镜头的相对顺序无意义，顺序存在 group.children 里），否则重排镜头不会让合成过期。
  */
 function cacheKeys(g) {
@@ -81,18 +81,4 @@ function snapshotStale(g) {
   return { keys, stale: staleSet(g, keys), types: Object.fromEntries(Object.entries(g.nodes).map(([id, n]) => [id, n.type])) };
 }
 
-/**
- * 场景缓存键（对接 G02）：sha256{ 采用的 video 版本资产 hash, 该镜头所有 segments 的 in/out/transition, 旁白采用版本 hash }。
- * 音乐、gap、字幕文字不在其中。
- */
-function sceneKey(g, shotId) {
-  const parts = G.partsOfShot(g, shotId);
-  const hash = (id) => { const v = id && G.adoptedVersion(g, id); return v && v.asset ? v.asset.hash ?? null : null; };
-  return G.sha256(G.canonicalJSON({
-    video: hash(parts.video),
-    segments: G.segmentsOfShot(g, shotId).map((s) => ({ in_ms: s.in_ms, out_ms: s.out_ms, transition: s.transition ?? null })),
-    narration: hash(parts.narration),
-  }));
-}
-
-module.exports = { NODE_TYPE_VERSION, cacheKeys, nodeState, staleSet, diffStale, snapshotStale, sceneKey };
+module.exports = { NODE_TYPE_VERSION, cacheKeys, nodeState, staleSet, diffStale, snapshotStale };

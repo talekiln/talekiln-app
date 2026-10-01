@@ -10,13 +10,15 @@
  *             物化到旧表；失败 -> 图不动，旧版本保留，只有队列里的任务状态变化。
  *   status    每镜头 none / queued / running / stale / fresh / failed。
  *
- * 尚未进入 cacheKey 的输入（锁定的参考图、尾帧、所选模型）只进幂等键，不会让“新鲜”的节点变成过期。
+ * 锁定的参考图、尾帧、所选模型是节点自己的参数（image.model/reference_hashes、video.model/tail_frame_hash，见 kernel/inputs.js），
+ * 估算/建任务前先经内核事务同步进图，所以它们进 cacheKey：改了会让该镜头的 image + video + 合成过期，改回去命中旧版本。
+ * 幂等键仍带上它们（防御性，与 cacheKey 重复无害）。
  */
 const path = require('node:path');
 const kernel = require('@talekiln/kernel');
 const store = require('../kernel/store');
 const legacy = require('../kernel/legacy');
-const referenceLocks = require('../services/referenceLockService');
+const inputs = require('../kernel/inputs');
 const { chooseProvider, pickModel } = require('./models');
 
 const { KernelError } = kernel;
@@ -117,8 +119,9 @@ function createGenerationService({
    * 在图 g 上为一组镜头做计划。纯读：不写库、不建任务。
    * 每项 action：fresh（已新鲜）| cache_hit（有同 key 旧版本，改采用）| create（建任务）| chain（接在首帧之后建）| blocked。
    */
-  function planGraph(g, ep, shotIds, kinds) {
+  function planGraph(g, ep, shotIds, kinds, contexts = null) {
     const keys = kernel.cacheKeys(g);
+    const legacy = inputs.legacyKeys(g);
     const dramaId = episodeRow(ep).drama_id;
     const items = [];
     const sbRow = db.prepare('SELECT * FROM storyboards WHERE id = ?');
@@ -135,7 +138,14 @@ function createGenerationService({
       const base = { shot_id: shotId, storyboard_id: legacyId };
 
       const nodeState = (kind) => kernel.nodeState(g, parts[kind], keys);
-      const cacheVersion = (nodeId) => (g.versions[nodeId] || []).find((v) => v.cache_key === keys[nodeId] && v.asset && v.asset.ref) || null;
+      // 缓存命中：同 key 的旧版本；或没有记录模型的旧版本（当时用的模型未知）且提示词/上游/参考图/尾帧与现在一致（改记到当前 key 后采用）
+      const cacheVersion = (nodeId) => {
+        const list = g.versions[nodeId] || [];
+        const usable = (v) => v.asset && v.asset.ref;
+        const unknownModel = (v) => !(v.metadata && v.metadata.inputs && 'model' in v.metadata.inputs) && !list.some((x) => x.rebased_from === v.id); // 改记过的旧版本，模型假设已经落定在别名版本上
+        return list.find((v) => v.cache_key === keys[nodeId] && usable(v))
+          || list.find((v) => unknownModel(v) && v.cache_key === legacy[nodeId] && usable(v)) || null;
+      };
 
       // 首帧图
       let imageItem = null;
@@ -150,11 +160,13 @@ function createGenerationService({
           else if (cacheVersion(node)) imageItem = { ...it, action: 'cache_hit', version_id: cacheVersion(node).id, ref: cacheVersion(node).asset.ref };
           else if (!(shot.image_prompt || shot.description)) imageItem = { ...it, action: 'blocked', reason: 'no_prompt' };
           else {
-            const refs = legacyId != null ? referenceLocks.collectLockedRefsForStoryboard(db, legacyId).slice(0, 4) : [];
+            const refs = inputs.shotInputs(db, g, shotId).refs;
             const { provider, ready } = providerFor.image;
-            const model = pickModel({ provider, kind: 'image', hasRefs: refs.length > 0, listConfigs: list, catalogModels: catalog });
+            const saved = g.nodes[node].params.model; // 已同步进图的所选模型；'default' = 交给适配器挑
+            const model = saved && saved !== 'default' ? saved : pickModel({ provider, kind: 'image', hasRefs: refs.length > 0, listConfigs: list, catalogModels: catalog });
             imageItem = {
               ...it, action: 'create', provider, provider_ready: ready, model: model || null, refs,
+              inputs: { model: model || null, reference_hashes: refs.map(inputs.hashRef), tail_frame_hash: null },
               spec: { provider, kind: 'image', params: buildParams('image', { shot, refs, model, projectId: dramaId }) },
             };
           }
@@ -162,7 +174,29 @@ function createGenerationService({
         items.push(imageItem);
       }
 
-      // 视频
+      // 视频：首帧来源 / 尾帧 / 模型（与动作无关，所以同步输入时也能单独取到）
+      const videoCtx = () => {
+        const warnings = [];
+        let firstFrame = null;
+        let chained = false;
+        if (imageItem && imageItem.action === 'create') chained = true;
+        else if (imageItem && imageItem.action === 'cache_hit') firstFrame = imageItem.ref;
+        else {
+          firstFrame = adoptedRef(g, parts.image);
+          if (firstFrame && parts.image && nodeState('image') !== 'fresh') warnings.push('first_frame_stale');
+        }
+        const tailFrame = row ? (row.last_frame_local_path ? staticRef(row.last_frame_local_path) : (row.last_frame_image_url || null)) : null;
+        const hasFrame = chained || !!firstFrame;
+        const saved = g.nodes[parts.video].params.model; // 已同步进图的所选模型；'default' = 没选/交给适配器
+        const model = saved && saved !== 'default' ? saved : pickModel({ provider: providerFor.video.provider, kind: 'video', hasFrame, listConfigs: list, catalogModels: catalog });
+        return { warnings, firstFrame, chained, tailFrame: hasFrame ? tailFrame : null, hasFrame, model };
+      };
+      if (contexts && parts.video) {
+        // 同步用：不看已存模型，按“此刻的请求形态”选模型
+        const c = videoCtx();
+        const fresh = pickModel({ provider: providerFor.video.provider, kind: 'video', hasFrame: c.hasFrame, listConfigs: list, catalogModels: catalog });
+        contexts[shotId] = { hasFrame: c.hasFrame, tail_frame_hash: c.tailFrame ? inputs.hashRef(c.tailFrame) : null, model: fresh || null };
+      }
       if (kinds.includes('video')) {
         const node = parts.video;
         if (!node) {
@@ -176,29 +210,51 @@ function createGenerationService({
         if (hit) { items.push({ ...it, action: 'cache_hit', version_id: hit.id, ref: hit.asset.ref }); continue; }
         if (!(shot.video_prompt || shot.description)) { items.push({ ...it, action: 'blocked', reason: 'no_prompt' }); continue; }
 
-        const warnings = [];
-        let firstFrame = null;
-        let chained = false;
-        if (imageItem && (imageItem.action === 'create')) { chained = true; imageItem.then_video = true; }
-        else if (imageItem && imageItem.action === 'cache_hit') firstFrame = imageItem.ref;
-        else {
-          firstFrame = adoptedRef(g, parts.image);
-          if (firstFrame && parts.image && nodeState('image') !== 'fresh') warnings.push('first_frame_stale');
-        }
-        const tailFrame = row ? (row.last_frame_local_path ? staticRef(row.last_frame_local_path) : (row.last_frame_image_url || null)) : null;
-        const hasFrame = chained || !!firstFrame;
+        const { warnings, firstFrame, chained, tailFrame, hasFrame, model } = videoCtx();
+        if (chained) imageItem.then_video = true;
         const seconds = Math.min(VIDEO_MAX_SEC, Math.max(VIDEO_MIN_SEC, Math.round((shot.duration_ms || kernel.DEFAULT_SHOT_MS) / 1000)));
         const { provider, ready } = providerFor.video;
-        const model = pickModel({ provider, kind: 'video', hasFrame: hasFrame, listConfigs: list, catalogModels: catalog });
-        const params = buildParams('video', { shot, firstFrame, tailFrame: hasFrame ? tailFrame : null, model, projectId: dramaId, seconds });
+        const params = buildParams('video', { shot, firstFrame, tailFrame, model, projectId: dramaId, seconds });
         items.push({
           ...it, action: chained ? 'chain' : 'create', provider, provider_ready: ready, model: model || null,
-          mode: hasFrame ? 'first_frame' : 'text', first_frame: firstFrame, tail_frame: hasFrame ? tailFrame : null, warnings,
+          mode: hasFrame ? 'first_frame' : 'text', first_frame: firstFrame, tail_frame: tailFrame, warnings,
+          inputs: { model: model || null, reference_hashes: [], tail_frame_hash: tailFrame ? inputs.hashRef(tailFrame) : null },
           spec: { provider, kind: 'video', params },
         });
       }
     }
     return items;
+  }
+
+  /** 同步进节点参数的模型选择（与 planGraph 里没有已存模型时的选择同一规则）。 */
+  function modelPicker() {
+    const catalog = catalogModels() || [];
+    const prov = {};
+    for (const k of KINDS) prov[k] = chooseProvider(list, k).provider;
+    return {
+      image: ({ hasRefs }) => pickModel({ provider: prov.image, kind: 'image', hasRefs, listConfigs: list, catalogModels: catalog }),
+      video: ({ hasFrame }) => pickModel({ provider: prov.video, kind: 'video', hasFrame, listConfigs: list, catalogModels: catalog }),
+    };
+  }
+
+  /**
+   * 让节点参数与“此刻会发给服务商的输入”一致的事务（没有变化返回 null）：先写出图的参考图哈希与模型，
+   * 在这张图上做计划得到视频的首帧形态（决定尾帧是否生效、选哪种视频模型），再写视频的尾帧与模型。
+   * 一个事务（含首次基线改记，见 kernel/inputs.js）；估算时只在副本上演算，建任务前才提交。
+   */
+  function syncTx(g, ep, ids, kinds, tx_id) {
+    const ops1 = inputs.inputOps(db, g, ids, { models: { image: modelPicker().image }, tail: false });
+    const g1 = ops1.length ? kernel.applyTx(g, { tx_id: 'sim1', ops: ops1 }).graph : g;
+    const ctx = {};
+    planGraph(g1, ep, ids, kinds, ctx);
+    const ops2 = [];
+    for (const id of ids) {
+      if (!ctx[id]) continue;
+      ops2.push(...kernel.intents.shot.setShotReferences(g1, id, { video_model: ctx[id].model || 'default', tail_frame_hash: ctx[id].tail_frame_hash }).ops);
+    }
+    const ops = [...ops1, ...ops2];
+    if (!ops.length) return null;
+    return { tx_id: tx_id || `gen-inputs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`, label: 'generation inputs', ops: [...ops, ...inputs.rebaseOps(g, ops)] };
   }
 
   /** 把计划项变成幂等键：cacheKey + 其余未进 key 的输入。 */
@@ -230,7 +286,9 @@ function createGenerationService({
     const { graph } = openGraph(ep);
     const ids = resolveShots(graph, shots);
     let g = graph;
-    if (regenerate) g = kernel.applyTx(graph, regenerateTx(graph, ids, kinds)).graph; // 只在副本上演算
+    const sync = syncTx(graph, ep, ids, kinds);
+    if (sync) g = kernel.applyTx(g, sync).graph; // 只在副本上演算：估算不写库
+    if (regenerate) g = kernel.applyTx(g, regenerateTx(g, ids, kinds)).graph; // 只在副本上演算
     const items = planGraph(g, ep, ids, kinds);
     const billable = items.filter((i) => i.action === 'create' || i.action === 'chain');
     const check = spend.checkBatch(billable.map((i) => i.spec));
@@ -276,7 +334,7 @@ function createGenerationService({
       ...spec.params,
       _gen: {
         episode_id: item.episode_id, shot_id: item.shot_id, storyboard_id: item.storyboard_id, node: item.node, kind: item.kind,
-        cache_key: item.cache_key, ...(item.then_video ? { then_video: true } : {}),
+        cache_key: item.cache_key, ...(item.inputs ? { inputs: item.inputs } : {}), ...(item.then_video ? { then_video: true } : {}),
       },
     };
     let k = key;
@@ -305,11 +363,14 @@ function createGenerationService({
     if (!hits.length) return;
     store.commit(db, ep, (g) => {
       const keys = kernel.cacheKeys(g);
+      const legacy = inputs.legacyKeys(g);
       const ops = [];
       for (const h of hits) {
         if (!g.nodes[h.node]) continue;
-        const v = (g.versions[h.node] || []).find((x) => x.id === h.version_id && x.cache_key === keys[h.node]);
-        if (v && g.adopted[h.node] !== v.id) ops.push({ op: 'adoptVersion', node: h.node, version_id: v.id });
+        const v = (g.versions[h.node] || []).find((x) => x.id === h.version_id);
+        if (!v) continue;
+        if (v.cache_key === keys[h.node]) { if (g.adopted[h.node] !== v.id) ops.push({ op: 'adoptVersion', node: h.node, version_id: v.id }); }
+        else if (!(v.metadata && v.metadata.inputs && 'model' in v.metadata.inputs) && !(g.versions[h.node] || []).some((x) => x.rebased_from === v.id) && v.cache_key === legacy[h.node]) ops.push(...inputs.aliasOps(g, h.node, v, keys[h.node], { model: g.nodes[h.node].params.model }));
       }
       return { tx_id: `gen-hit-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`, label: 'generation cache hit', ops };
     });
@@ -321,7 +382,10 @@ function createGenerationService({
    */
   function create(ep, args = {}, opts = {}) {
     const kinds = kindsOf(args.kind);
-    openGraph(ep);
+    const opened = openGraph(ep);
+    // 先把锁定参考图 / 尾帧 / 所选模型同步进图（一个内核事务）：它们进 cacheKey，之后的计划、幂等键、任务的 cache_key 都基于同步后的图
+    const syncIds = resolveShots(opened.graph, args.shots);
+    if (syncTx(opened.graph, ep, syncIds, kinds)) store.commit(db, ep, (g) => syncTx(g, ep, syncIds, kinds) || { tx_id: `gen-inputs-noop-${Date.now().toString(36)}`, label: 'noop', ops: [] });
     if (args.regenerate) {
       const { graph } = store.openProject(db, ep);
       const ids = resolveShots(graph, args.shots);
@@ -382,6 +446,7 @@ function createGenerationService({
     const asset = { ref, kind: gen.kind, hash: file ? file.sha256 : kernel.sha256(`ref:${ref}`) };
     if (file) { asset.size = file.size; asset.path = file.path; }
     const meta = { task_id: task.id, provider: task.provider };
+    if (gen.inputs) meta.inputs = gen.inputs;
     const params = parseJson(task.params) || {};
     if (params.model) meta.model = params.model;
     if (gen.kind === 'video') {
@@ -420,7 +485,7 @@ function createGenerationService({
         const adopt = gen.cache_key === cur || !adoptedFresh;
         const ops = [];
         if (!(g.versions[gen.node] || []).some((v) => v.id === vid)) {
-          ops.push({ op: 'addVersion', node: gen.node, version: { id: vid, cache_key: gen.cache_key, asset, meta, source: `ai-task:${task.id}` } });
+          ops.push({ op: 'addVersion', node: gen.node, version: { id: vid, cache_key: gen.cache_key, asset, metadata: meta, source: `ai-task:${task.id}` } });
         }
         if (adopt) ops.push({ op: 'adoptVersion', node: gen.node, version_id: vid });
         adoptedNow = adopt;
@@ -496,7 +561,7 @@ function createGenerationService({
       const mine = (byNode.get(nodeId) || []).filter((x) => x.gen.cache_key === keys[nodeId]);
       const active = mine.find((x) => ACTIVE.has(x.t.state));
       const adoptedV = kernel.adoptedVersion(g, nodeId);
-      const base = { kernel: kstate, version_id: adoptedV ? adoptedV.id : null, duration_ms: adoptedV && adoptedV.meta ? adoptedV.meta.duration_ms ?? null : null };
+      const base = { kernel: kstate, version_id: adoptedV ? adoptedV.id : null, duration_ms: adoptedV && adoptedV.metadata ? adoptedV.metadata.duration_ms ?? null : null };
       if (kstate !== 'fresh' && active) {
         return { ...base, state: active.t.state === 'queued' ? 'queued' : 'running', task_id: active.t.id, task_state: active.t.state };
       }

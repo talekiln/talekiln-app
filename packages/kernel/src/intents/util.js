@@ -108,6 +108,21 @@ function placeShotOps(g, shotId, toGroup, { beforeShot, afterShot, index } = {})
   return Object.keys(children).map((gid) => ({ op: 'setChildren', group: gid, ids: children[gid] }));
 }
 
+/** 单个参数的 setParam / unset op；值与当前相同则不产生 op。null（仅 optional 参数）= 清除。 */
+function paramOps(g, nodeId, key, value) {
+  const n = g.nodes[nodeId];
+  const rule = (G.NODE_PARAM_RULES[n.type] || {})[key];
+  if (!rule) throw intentError(`${n.type} has no editable param ${key}`);
+  const has = Object.prototype.hasOwnProperty.call(n.params, key);
+  if (value === null || value === undefined) {
+    if (!rule.optional) throw intentError(`${n.type}.${key} cannot be cleared`);
+    return has ? [{ op: 'setParam', node: nodeId, path: [key], unset: true }] : [];
+  }
+  const err = rule.check(value);
+  if (err) throw intentError(`${n.type}.${key} ${err}`);
+  return has && JSON.stringify(n.params[key]) === JSON.stringify(value) ? [] : [{ op: 'setParam', node: nodeId, path: [key], value: structuredClone(value) }];
+}
+
 module.exports = {
-  intentError, mkTx, makeAlloc, need, needGroup, edgeOp, insertAmong, permuteAmong, composeOf, findSegment, segOp, placeShotOps,
+  paramOps, intentError, mkTx, makeAlloc, need, needGroup, edgeOp, insertAmong, permuteAmong, composeOf, findSegment, segOp, placeShotOps,
 };
