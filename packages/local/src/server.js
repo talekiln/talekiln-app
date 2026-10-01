@@ -25,7 +25,7 @@ if (process.env.TALEKILN_DEV_SECRET_KEY) {
     filePath: require('path').join(process.cwd(), 'data', 'secrets.enc.json'),
   });
 }
-const { app, config } = createApp({ secretStore });
+const { app, config, aiQueue } = createApp({ secretStore });
 const port = Number(process.env.PORT) || config.server?.port || 5679;
 const host = '127.0.0.1';
 
@@ -35,10 +35,12 @@ const server = app.listen(port, host, () => {
   logger.info('API:       http://localhost:' + port + '/api/v1');
   logger.info('Health:    http://localhost:' + port + '/health');
   logger.info('Server is ready!');
+  aiQueue.worker.start();
 });
 
 function shutdown() {
   logger.info('Shutting down server...');
+  aiQueue.worker.stop();
   server.close(() => {
     closeDb();
     logger.info('Server exited');

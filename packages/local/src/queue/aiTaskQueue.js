@@ -19,10 +19,12 @@ const SUBMIT_UNCERTAIN = 'SUBMIT_UNCERTAIN';
  *   limits: { default: n, [provider]: n }      per-provider concurrency (E02 may extend)
  *   backoff(provider, err, attempt) -> ms      used when no Retry-After is present
  *   hooks.onRateLimit({ provider, retryAfterMs, taskId })
+ *   jitter(ms) -> ms                            applied to the 429 wait (Retry-After or backoff)
+ *   pollDelay(task) -> ms                       delay before the next poll of a still-running task
  *   crash(point): called at 'before_submit' | 'after_submit' | 'after_id_write'
  *   maxPollErrors
  */
-function createAiTaskQueue({ store, providers, limits = {}, now = () => Date.now(), backoff, hooks = {}, crash = () => {}, maxPollErrors = 5 }) {
+function createAiTaskQueue({ store, providers, limits = {}, now = () => Date.now(), backoff, jitter = (ms) => ms, pollDelay = null, hooks = {}, crash = () => {}, maxPollErrors = 5 }) {
   const pausedUntil = new Map(); // provider -> epoch ms (429 backoff, shared by all tasks of the provider)
   const defaultBackoff = (p, err, attempt) => Math.min(60000, 1000 * 2 ** Math.max(0, attempt - 1));
   const computeBackoff = backoff || defaultBackoff;
@@ -45,7 +47,7 @@ function createAiTaskQueue({ store, providers, limits = {}, now = () => Date.now
 
   function noteRateLimit(task, err, attempt) {
     const ms = retryAfterMs(err);
-    const wait = ms != null ? ms : computeBackoff(task.provider, err, attempt);
+    const wait = Math.max(0, Math.round(jitter(ms != null ? ms : computeBackoff(task.provider, err, attempt))));
     const until = now() + wait;
     pausedUntil.set(task.provider, Math.max(pausedUntil.get(task.provider) || 0, until));
     if (hooks.onRateLimit) hooks.onRateLimit({ provider: task.provider, retryAfterMs: wait, taskId: task.id });
@@ -106,7 +108,7 @@ function createAiTaskQueue({ store, providers, limits = {}, now = () => Date.now
     }
     if (r.status === 'succeeded') await finish(task.id, r.result);
     else if (r.status === 'failed') store.fail(task.id, r.errorCode && ERROR_CODES[r.errorCode] ? r.errorCode : ERROR_CODES.TASK_FAILED, r.errorMessage);
-    else store.transition(task.id, 'polling', 'polling', { next_attempt_at: null, poll_attempts: 0 });
+    else store.transition(task.id, 'polling', 'polling', { next_attempt_at: pollDelay ? now() + pollDelay(task) : null, poll_attempts: 0 });
   }
 
   async function finish(id, result) {
