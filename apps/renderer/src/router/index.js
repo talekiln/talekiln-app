@@ -64,6 +64,12 @@ const router = createRouter({
       meta: { title: '自由创作' }
     },
     {
+      path: '/task-center',
+      name: 'task-center',
+      component: () => import('@/views/TaskCenter.vue'),
+      meta: { title: '任务中心' }
+    },
+    {
       path: '/media-library',
       name: 'media-library',
       component: () => import('@/views/MediaLibrary.vue'),
