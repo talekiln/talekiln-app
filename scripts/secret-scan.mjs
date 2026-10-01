@@ -11,6 +11,7 @@ const PATTERNS = [
   ['长 Bearer 令牌', /Bearer\s+[A-Za-z0-9._-]{24,}/],
   ['百炼 CLI 安装令牌', /\bo1_[A-Za-z0-9_-]{30,}/],
   ['带签名的下载链接', /[?&](Signature|X-Amz-Signature|OSSAccessKeyId)=/],
+  ['百炼工作空间域名', /\bws-[a-z0-9]{12,}\.[a-z0-9-]+\.maas\.aliyuncs\.com/i],
 ];
 const files = execFileSync('git', ['ls-files'], { encoding: 'utf8' }).split('\n').filter(Boolean);
 const bad = [];
