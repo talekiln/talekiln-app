@@ -301,7 +301,7 @@ function onToggleMute() {
   if (!store.toggleMute()) ElMessage.warning('请先选中一个片段以指定轨道')
 }
 
-const stub = (name) => () => { ElMessage.info(`${name}（分镜工作台功能即将上线）`) }
+const stub = (name) => () => { ElMessage.info(`${name}：请在分镜工作台页面使用`) }
 
 const onKeydown = createKeyHandler({
   'play.toggle': () => togglePlay(),

@@ -22,6 +22,18 @@ const router = createRouter({
       meta: { title: '分镜表' }
     },
     {
+      path: '/project/:dramaId/library',
+      name: 'reference-library',
+      component: () => import('@/views/ReferenceLibrary.vue'),
+      meta: { title: '角色与场景库' }
+    },
+    {
+      path: '/project/:dramaId/shot/:shotId',
+      name: 'shot-workbench',
+      component: () => import('@/views/ShotWorkbench.vue'),
+      meta: { title: '分镜工作台' }
+    },
+    {
       path: '/drama/:id',
       name: 'drama-detail',
       component: () => import('@/views/DramaDetail.vue'),
