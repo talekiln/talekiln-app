@@ -185,4 +185,24 @@ Node 客户端助手位于 `client/index.js`（CommonJS，无依赖）：`connec
 
 客户端：`renderStart(params)` / `renderStatus(id)` / `renderCancel(id)` / `renderWait(id, onProgress)` / `onNotification(fn)`。
 
+## 进程守护（桌面主进程）
+
+`client/supervisor.js`（经 `require('@talekiln/core').createSupervisor` 导出）：
+
+```js
+const sup = createSupervisor({ bin, endpoint, logDir, env: { LYCORE_FFMPEG_DIR }, maxRestarts: 5,
+  backoff: { baseMs: 500, factor: 2, maxMs: 30000 }, healthIntervalMs: 5000, healthFailures: 3 });
+sup.on('restart', ({ attempt, delayMs, reason }) => {});
+sup.on('failed', ({ restarts, reason }) => { /* 超过上限：提示用户，不再重试 */ });
+await sup.start();            // 首次 core.hello 成功后 resolve；超过重启上限则 reject
+await sup.call('media.probe', { path });
+await sup.stop();             // 关连接 -> SIGTERM（Windows 为终止进程）-> 超时强杀
+```
+
+- 状态：`stopped → starting → running → backoff → starting …`，超过 `maxRestarts` 进入 `failed`；`stop()` 经 `stopping` 回到 `stopped`。
+- 健康探测：每 `healthIntervalMs` 调一次 `core.hello`（超时 `healthTimeoutMs`），连续 `healthFailures` 次失败视为挂死，杀掉后走重启。
+- 退避：第 n 次重启前等待 `baseMs * factor^(n-1)`，上限 `maxMs`；稳定运行超过 `resetAfterMs`（默认 60 秒）后计数清零。
+- 重启后 RPC 连接会重建，进行中的调用以 `connection closed` 失败，渲染任务需由上层按 `jobId` 重新发起。
+- 测试：`client/supervisor.test.js`（假子进程 + 假连接）、`client/supervisor.integration.test.js`（真实二进制，强杀后恢复）。
+
 解析器的单元测试使用 `src/fixtures/` 下的 ffprobe/ffmpeg 输出样本。
