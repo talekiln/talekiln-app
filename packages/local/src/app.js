@@ -39,7 +39,9 @@ function createApp(opts = {}) {
   // 密钥存储由主进程注入；未注入则不可用（拒绝保存 key，绝不降级为明文）
   const secrets = require('./secrets');
   if (opts.secretStore) secrets.setSecretStore(opts.secretStore);
-  const config = loadConfig();
+  const config = opts.config ? { ...loadConfig(), ...opts.config } : loadConfig(); // opts.config：顶层键覆盖（测试/脚本调快轮询）
+  // 对外开放的服务商：config.yaml providers.enabled（默认仅百炼）；测试可用 opts.enabledProviders 覆盖
+  require('./providers/enablement').configureEnabled(opts.enabledProviders || config);
   const db = getDb(config.database);
   const { runMigrationsAndEnsure } = require('./db/migrate.js');
   runMigrationsAndEnsure(db);

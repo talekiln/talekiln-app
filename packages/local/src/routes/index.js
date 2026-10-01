@@ -256,6 +256,7 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
   r.delete('/images/:id', images.delete);
 
   // ---------- onboarding wizard / bundled sample ----------
+  r.get('/providers', onboarding.providers);
   r.get('/onboarding/status', onboarding.status);
   r.put('/onboarding/state', onboarding.saveState);
   r.post('/onboarding/test', onboarding.test);

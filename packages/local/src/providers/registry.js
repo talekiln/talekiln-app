@@ -1,13 +1,16 @@
 'use strict';
-const { CAPABILITIES, PHASE1_PROVIDERS } = require('./capabilities');
+const { CAPABILITIES } = require('./capabilities');
+const enablement = require('./enablement');
 const { ProviderError, ERROR_CODES } = require('./errors');
 
 /**
  * Adapter shape: { id, label, capabilities: { 'text.stream': fn, ... }, probes?: { 'text.stream': fn, ... } }.
- * Adapters outside PHASE1_PROVIDERS may be registered but are never listed or resolvable.
+ * Adapters of providers that are not enabled (providers/enablement.js) may be registered but are never listed
+ * or resolvable. `enabledIds` pins a fixed set; by default the live process-wide setting is read on every call.
  */
-function createRegistry(phase1 = PHASE1_PROVIDERS) {
+function createRegistry(enabledIds) {
   const adapters = new Map();
+  const phase1 = { includes: (id) => (enabledIds ? enabledIds.includes(id) : enablement.isEnabled(id)) };
   return {
     register(adapter) {
       if (!adapter || !adapter.id || !adapter.capabilities || typeof adapter.capabilities !== 'object') {
