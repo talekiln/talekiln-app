@@ -27,9 +27,37 @@ function scriptView(g) {
   };
 }
 
-/** 一个镜头的使用时长：各片段（out-in）之和；没有片段时退回生成时长。 */
-function usedMs(g, shotId) {
+/** 采用版本的 metadata.duration_ms（正整数）或 null。 */
+function metaDuration(g, nodeId) {
+  const v = nodeId && G.adoptedVersion(g, nodeId);
+  const d = v && v.metadata ? v.metadata.duration_ms : null;
+  return Number.isInteger(d) && d > 0 ? d : null;
+}
+
+/** 镜头视频的真实片长（采用的 video 版本 metadata.duration_ms，由生成写回时记录）；未知为 null。 */
+function realVideoMs(g, shotId) {
+  return metaDuration(g, G.partsOfShot(g, shotId).video);
+}
+
+/**
+ * 镜头的有效片段：存的 segments 是相对“目标时长”的；已知真实片长 R 时投影到 R 上：
+ * 到末尾（out == 目标时长）的片段延伸/收缩到 R，其余裁到 R 以内。不改存储，只改投影。
+ */
+function effectiveSegments(g, shotId) {
   const segs = G.segmentsOfShot(g, shotId);
+  const R = realVideoMs(g, shotId);
+  if (!R) return segs;
+  const T = g.nodes[shotId].params.duration_ms ?? G.DEFAULT_SHOT_MS;
+  return segs.map((s) => {
+    const inMs = Math.min(s.in_ms, R - 1);
+    const outMs = s.out_ms === T ? R : Math.min(s.out_ms, R);
+    return { ...s, in_ms: inMs, out_ms: Math.max(outMs, inMs + 1) };
+  });
+}
+
+/** 一个镜头的使用时长：各有效片段（out-in）之和；没有片段时退回生成时长。 */
+function usedMs(g, shotId) {
+  const segs = effectiveSegments(g, shotId);
   return segs.length ? segs.reduce((a, s) => a + (s.out_ms - s.in_ms), 0) : g.nodes[shotId].params.duration_ms ?? G.DEFAULT_SHOT_MS;
 }
 
@@ -51,6 +79,7 @@ function shotView(g) {
           dialogue: G.shotDialogue(g, id),
           line_ids: G.linesOfShot(g, id),
           planned_ms: n.params.duration_ms ?? G.DEFAULT_SHOT_MS,
+          real_ms: realVideoMs(g, id),
           used_ms: usedMs(g, id),
           segment_count: segs.length,
           image: stateOf(g, parts.image, keys),
@@ -87,6 +116,7 @@ function timelineView(g) {
   if (cid) {
     const params = g.nodes[cid].params;
     const overrides = params.subtitle_overrides || {};
+    const keys = cacheKeys(g);
     let cursor = 0;
     for (const shotId of G.shotOrder(g)) {
       const shot = g.nodes[shotId];
@@ -97,7 +127,7 @@ function timelineView(g) {
       const asset = va && va.ref ? { ref: va.ref, kind: 'video' } : ia && ia.ref ? { ref: ia.ref, kind: 'image' } : null;
       let first = null;
       let last = null;
-      for (const s of G.segmentsOfShot(g, shotId)) {
+      for (const s of effectiveSegments(g, shotId)) {
         cursor += s.gap_before_ms;
         const dur = s.out_ms - s.in_ms;
         if (first === null) first = cursor;
@@ -113,15 +143,27 @@ function timelineView(g) {
       const span = last - first;
       const spoken = G.spokenLines(g, shotId);
       const text = G.shotDialogue(g, shotId).trim();
-      if (text) {
-        tracks.subtitle.clips.push(clip(`sub_${shotId}`, first, span, {
-          storyboard_id: sb, text, style: spoken.length && overrides[spoken[0]] ? plain(overrides[spoken[0]]) : null,
-        }));
-      }
       const na = adoptedAsset(g, parts.narration);
+      const nv = parts.narration && G.adoptedVersion(g, parts.narration);
+      // 字幕：旁白新鲜（采用版本的 cacheKey 等于当前 key，即行文字没变）且版本带字幕块 -> 按词对齐的多条字幕；
+      // 否则退回“整镜一条、文字取自行”的字幕。字幕文字的唯一事实源仍是 script_line；字幕块是该次配音的时间产物。
+      const cues = nv && nv.metadata && Array.isArray(nv.metadata.cues) && nodeState(g, parts.narration, keys) === 'fresh' ? nv.metadata.cues : null;
+      const subStyle = spoken.length && overrides[spoken[0]] ? plain(overrides[spoken[0]]) : null;
+      if (text && cues && cues.length) {
+        cues.forEach((c, i) => {
+          const start = Math.max(0, Math.min(span, c.start_ms));
+          const end = Math.max(start, Math.min(span, c.end_ms));
+          if (end - start <= 0) return;
+          tracks.subtitle.clips.push(clip(`sub_${shotId}_${i + 1}`, first + start, end - start, { storyboard_id: sb, text: c.text, style: subStyle }));
+        });
+      } else if (text) {
+        tracks.subtitle.clips.push(clip(`sub_${shotId}`, first, span, { storyboard_id: sb, text, style: subStyle }));
+      }
       if (na && na.ref) {
-        tracks.narration.clips.push(clip(`nar_${shotId}`, first, span, {
-          src_in_ms: 0, src_out_ms: span, asset_ref: na.ref, asset_kind: 'audio', storyboard_id: sb,
+        const audioMs = metaDuration(g, parts.narration);
+        const nd = audioMs ? Math.min(span, audioMs) : span;
+        tracks.narration.clips.push(clip(`nar_${shotId}`, first, nd, {
+          src_in_ms: 0, src_out_ms: nd, asset_ref: na.ref, asset_kind: 'audio', storyboard_id: sb,
         }));
       }
     }
@@ -214,4 +256,4 @@ function toLegacyRows(g) {
   return { storyboards, timeline: timelineView(g) };
 }
 
-module.exports = { scriptView, shotView, timelineView, canvasView, toLegacyRows, autoLayout, usedMs };
+module.exports = { scriptView, shotView, timelineView, canvasView, toLegacyRows, autoLayout, usedMs, effectiveSegments, realVideoMs };

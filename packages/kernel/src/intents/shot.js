@@ -179,15 +179,16 @@ function setVoice(g, shotId, { voice, speed }, opts) {
 
 /**
  * 记录一次生成结果：新增版本（带当前 cacheKey）并采用。asset 如 { ref, hash, kind }。
+ * metadata（可选）随版本保存：video 版本的 duration_ms（真实片长）；narration 版本的 duration_ms、voice、words（逐字时间戳）、cues（字幕块，相对镜头起点）。
  * 事务应用到产生它的那张图上才有意义（cacheKey 在此刻取）。
  */
-function recordGeneration(g, nodeId, { version_id, asset } = {}, opts) {
+function recordGeneration(g, nodeId, { version_id, asset, metadata } = {}, opts) {
   const n = U.need(g, nodeId);
   if (!G.GENERATED_TYPES.includes(n.type)) throw U.intentError(`${n.type} nodes have no generated versions`);
   const { cacheKeys } = require('../invalidation');
   const vid = version_id || `v_${(g.versions[nodeId] || []).length + 1}`;
   return U.mkTx('recordGeneration', [
-    { op: 'addVersion', node: nodeId, version: { id: vid, cache_key: cacheKeys(g)[nodeId], asset: asset ? structuredClone(asset) : null } },
+    { op: 'addVersion', node: nodeId, version: { id: vid, cache_key: cacheKeys(g)[nodeId], asset: asset ? structuredClone(asset) : null, ...(metadata ? { metadata: structuredClone(metadata) } : {}) } },
     { op: 'adoptVersion', node: nodeId, version_id: vid },
   ], opts, { version_id: vid });
 }

@@ -63,6 +63,23 @@ function resolveProvider(db, preferred) {
   return { kind, cfg: { [kind]: { apiKey: row.api_key, ...(row.base_url ? { baseUrl: row.base_url } : {}) } }, model: row.default_model || model };
 }
 
+/** Save the storyboard's characters into `characters` (+ episode_characters) so the library and reference locks see them. */
+function persistCharacters(db, dramaId, episodeId, storyboard, now) {
+  const ins = db.prepare('INSERT INTO characters (drama_id, name, role, description, appearance, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+  const link = db.prepare('INSERT OR IGNORE INTO episode_characters (episode_id, character_id) VALUES (?, ?)');
+  const seen = new Set();
+  const ids = [];
+  (storyboard.characters || []).forEach((c, i) => {
+    const name = String((c && c.name) || '').trim();
+    if (!name || seen.has(name)) return;
+    seen.add(name);
+    const id = Number(ins.run(dramaId, name, c.role || null, c.description || null, c.appearance || null, i, now, now).lastInsertRowid);
+    link.run(episodeId, id);
+    ids.push(id);
+  });
+  return ids;
+}
+
 function persist(db, log, req, storyboard) {
   const now = new Date().toISOString();
   const run = db.transaction(() => {
@@ -80,20 +97,24 @@ function persist(db, log, req, storyboard) {
     for (const shot of storyboard.shots) {
       storyboardService.createStoryboard(db, log, { episode_id: episodeId, ...shotToRow(shot, storyboard) });
     }
-    return { drama_id: drama.id, episode_id: episodeId };
+    const characterIds = persistCharacters(db, drama.id, episodeId, storyboard, now);
+    // 每个生成的项目一开始就有项目图（script_line / shot / group 节点）；同一个 SQLite 事务，失败整体回滚
+    const graph = require('../kernel/legacy').importLegacy(db, episodeId);
+    return { drama_id: drama.id, episode_id: episodeId, character_ids: characterIds, graph: { created: graph.created, shots: graph.shots, lines: graph.lines, groups: graph.groups } };
   });
   return run();
 }
 
-async function createProjectFromStory(db, log, body) {
+/** deps (tests): { resolveProvider, createProviders } */
+async function createProjectFromStory(db, log, body, deps = {}) {
   const v = validateRequest(body);
   if (!v.ok) { const e = new Error(v.errors.join('；')); e.status = 400; throw e; }
-  const prov = resolveProvider(db, v.value.provider);
+  const prov = (deps.resolveProvider || resolveProvider)(db, v.value.provider);
   if (!prov) {
     const e = new Error(`未找到可用的文本模型配置（${enablement.enabledLabels()}），请先在 AI 配置中添加`);
     e.status = 400; e.code = 'NO_TEXT_PROVIDER'; throw e;
   }
-  const providers = createProviders(prov.cfg);
+  const providers = (deps.createProviders || createProviders)(prov.cfg);
   const r = await scriptgen.generateStoryboard(providers, { ...v.value, provider: prov.kind, model: v.value.model || prov.model });
   const ids = persist(db, log, v.value, r.storyboard);
   return { ...ids, attempts: r.attempts, usage: r.usage };
