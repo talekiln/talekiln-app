@@ -16,7 +16,4 @@
  */
 const CAPABILITIES = Object.freeze(['text.stream', 'image.generate', 'video.submit', 'video.poll', 'tts.synthesize']);
 
-/** Providers exposed in phase 1. Everything else stays hidden from the registry. */
-const PHASE1_PROVIDERS = Object.freeze(['bailian', 'ark']);
-
-module.exports = { CAPABILITIES, PHASE1_PROVIDERS };
+module.exports = { CAPABILITIES };

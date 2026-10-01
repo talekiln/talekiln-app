@@ -2,6 +2,7 @@ const path = require('path');
 const response = require('../response');
 const onboarding = require('../services/onboardingService');
 const samples = require('../services/sampleProjectService');
+const enablement = require('../providers/enablement');
 
 function storageRootOf(cfg) {
   const p = cfg && cfg.storage && cfg.storage.local_path;
@@ -18,6 +19,8 @@ function routes(db, log, cfg) {
   };
   return {
     status: (req, res) => { try { response.success(res, onboarding.getStatus(db)); } catch (e) { fail(res, 'status', e); } },
+    /** GET /providers: providers enabled by config.yaml providers.enabled (the UI shows nothing else). */
+    providers: (req, res) => response.success(res, enablement.listEnabledMeta().map((m) => ({ id: m.id, label: m.label, aliases: [...m.aliases] }))),
     saveState: (req, res) => { try { response.success(res, onboarding.saveState(db, req.body)); } catch (e) { fail(res, 'state', e); } },
     test: async (req, res) => {
       try { response.success(res, await onboarding.testSavedConfig(db, req.body && req.body.config_id)); } catch (e) { fail(res, 'test', e); }

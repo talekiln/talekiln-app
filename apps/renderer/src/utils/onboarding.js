@@ -2,6 +2,9 @@
 
 export const STEPS = ['welcome', 'provider', 'key', 'test', 'done']
 
+/** 服务端没给 providers 字段时的默认：只开放百炼（与 config.yaml 默认一致）。 */
+const DEFAULT_PROVIDER_IDS = ['bailian']
+
 export const STEP_LABELS = {
   welcome: '欢迎',
   provider: '选择服务商',
@@ -48,17 +51,39 @@ export function getProvider(id) {
   return PROVIDERS.find((p) => p.id === id) || null
 }
 
-export function stepIndex(step) {
-  const i = STEPS.indexOf(step)
+/**
+ * 当前向导里可见的服务商：服务端 status.providers（config.yaml providers.enabled）与本地资料取交集，
+ * 缺省按只开放百炼。新增服务商只需在 PROVIDERS 加资料并在服务端开启，这里不用改。
+ */
+export function visibleProviders(status) {
+  const ids = Array.isArray(status && status.providers) && status.providers.length
+    ? status.providers.map((p) => (typeof p === 'string' ? p : p.id))
+    : DEFAULT_PROVIDER_IDS
+  return PROVIDERS.filter((p) => ids.includes(p.id))
+}
+
+/** 只开放一个服务商时隐含选定它，向导不再询问。 */
+export function impliedProvider(status) {
+  const v = visibleProviders(status)
+  return v.length === 1 ? v[0].id : null
+}
+
+/** 向导步骤：只开放一个服务商时去掉“选择服务商”。 */
+export function stepsFor(status) {
+  return visibleProviders(status).length > 1 ? STEPS : STEPS.filter((s) => s !== 'provider')
+}
+
+export function stepIndex(step, steps = STEPS) {
+  const i = steps.indexOf(step)
   return i < 0 ? 0 : i
 }
 
-export function nextStep(step) {
-  return STEPS[Math.min(stepIndex(step) + 1, STEPS.length - 1)]
+export function nextStep(step, steps = STEPS) {
+  return steps[Math.min(stepIndex(step, steps) + 1, steps.length - 1)]
 }
 
-export function prevStep(step) {
-  return STEPS[Math.max(stepIndex(step) - 1, 0)]
+export function prevStep(step, steps = STEPS) {
+  return steps[Math.max(stepIndex(step, steps) - 1, 0)]
 }
 
 /**
@@ -69,10 +94,14 @@ export function prevStep(step) {
  */
 export function resumeStep(status) {
   const s = status || {}
+  const steps = stepsFor(s)
+  const provider = s.provider || impliedProvider(s)
+  // 被隐藏的“选择服务商”步骤：已经隐含选定，直接去填写 Key
   let step = STEPS.includes(s.step) ? s.step : 'welcome'
-  if (s.has_key && stepIndex(step) < stepIndex('test')) step = 'test'
-  if ((step === 'test') && !s.config_id) step = s.provider ? 'key' : 'provider'
-  if ((step === 'key') && !s.provider) step = 'provider'
+  if (!steps.includes(step)) step = 'key'
+  if (s.has_key && stepIndex(step, STEPS) < stepIndex('test', STEPS)) step = 'test'
+  if ((step === 'test') && !s.config_id) step = provider ? 'key' : 'provider'
+  if ((step === 'key') && !provider) step = 'provider'
   if (step === 'done' && !s.has_key) step = 'welcome'
   return step
 }

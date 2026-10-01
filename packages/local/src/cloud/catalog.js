@@ -9,6 +9,7 @@ const path = require('path');
 const { getGlobalSetting, setGlobalSetting } = require('../services/settingsService');
 const { verifyEs256, peekHeader, catalogVersion } = require('./jws');
 const { createJwksProvider } = require('./jwks');
+const { isEnabled } = require('../providers/enablement');
 
 const CACHE_KEY = 'cloud.catalog_cache';
 const BUNDLED_PRICES_PATH = path.join(__dirname, '..', '..', 'configs', 'prices.json');
@@ -41,6 +42,11 @@ function validCatalog(c) {
     && c.prices && typeof c.prices === 'object' && typeof c.prices.version === 'string'
     && c.prices.providers && typeof c.prices.providers === 'object'
     && c.models.every((m) => m && typeof m.id === 'string' && typeof m.provider === 'string' && SERVICE_TYPES.includes(m.service_type));
+}
+
+/** Providers not enabled (providers.enabled) never show up in the model catalog; prices stay for history/estimates. */
+function visibleOnly(list) {
+  return (list || []).filter((x) => x && isEnabled(x.provider || x.id));
 }
 
 function activeAnnouncements(list, nowMs) {
@@ -104,13 +110,13 @@ function createCatalogService({ db, http, log = {}, now = () => Date.now(), bund
       return {
         source: 'cloud', version: c.version, sample_prices: c.catalog.prices.sample !== false,
         fetched_at: new Date(c.fetched_at || 0).toISOString(),
-        providers: c.catalog.providers, models: c.catalog.models, prices: c.catalog.prices,
+        providers: visibleOnly(c.catalog.providers), models: visibleOnly(c.catalog.models), prices: c.catalog.prices,
         announcements: activeAnnouncements(c.catalog.announcements, now()),
       };
     }
     const prices = bundled();
     const b = bundledCatalog(prices);
-    return { source: 'bundled', version: prices.version || null, sample_prices: prices.sample !== false, fetched_at: null, ...b };
+    return { source: 'bundled', version: prices.version || null, sample_prices: prices.sample !== false, fetched_at: null, ...b, providers: visibleOnly(b.providers), models: visibleOnly(b.models) };
   }
 
   /** 供花费估算器使用：已验证的云端价格表，否则内置。 */

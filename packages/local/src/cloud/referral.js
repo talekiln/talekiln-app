@@ -7,16 +7,15 @@
  */
 const { isConfiguredBaseUrl, parseBaseUrl } = require('./http');
 
-const DIRECT_KEY_PAGES = {
-  bailian: 'https://bailian.console.aliyun.com/',
-  ark: 'https://console.volcengine.com/ark',
-  agnes: 'https://platform.agnes-ai.com/settings/apiKeys',
-};
+const { KNOWN_PROVIDERS, isEnabled } = require('../providers/enablement');
+
+// Official key pages per known provider; only enabled providers resolve (see providers/enablement.js).
+const DIRECT_KEY_PAGES = Object.fromEntries(Object.values(KNOWN_PROVIDERS).map((m) => [m.id, m.keyPageUrl]));
 const CODE_RE = /^[a-z0-9_-]{1,40}$/;
 
 function resolveKeyPage({ baseUrl, provider, src = 'addkey' }) {
   const code = String(provider || '').toLowerCase();
-  if (!CODE_RE.test(code)) return null;
+  if (!CODE_RE.test(code) || !isEnabled(code)) return null;
   if (isConfiguredBaseUrl(baseUrl)) {
     const root = parseBaseUrl(baseUrl);
     if (root.protocol === 'https:') {

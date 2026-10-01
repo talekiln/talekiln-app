@@ -7,6 +7,8 @@ const express = require('express');
 const Database = require('better-sqlite3');
 const { createAiTaskStore } = require('../src/queue');
 const aiTaskRoutes = require('../src/routes/aiTasks');
+// 方舟代码保留但默认隐藏（providers.enabled 默认只有 bailian）；本文件测试方舟，所以显式开启。
+require('../src/providers/enablement').configureEnabled(['bailian', 'ark']);
 
 const MIGRATION = fs.readFileSync(path.join(__dirname, '..', 'migrations', '23_ai_tasks.sql'), 'utf8');
 
