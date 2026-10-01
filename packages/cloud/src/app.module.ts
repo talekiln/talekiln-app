@@ -2,7 +2,14 @@ import { Module, type OnApplicationShutdown, Inject, Injectable, type Provider }
 import { PrismaClient } from '@prisma/client';
 import { AuthController, CatalogController, DeviceController, HealthController, LicenceController, ReferralController } from './http/controllers';
 import { AdminAuthController, AdminController, PublicController } from './http/admin.controllers';
+import { AdminBillingController, OrderController, PaymentNotifyController, PlanController, SubscriptionController } from './http/billing.controllers';
 import { AccessGuard, AdminGuard } from './http/guard';
+import { createProviders } from './payments/registry';
+import type { PaymentProviders } from './payments/provider';
+import { BillingService } from './services/billing.service';
+import { loadBillingOptions } from './services/billing.config';
+import { EntitlementService } from './services/entitlement.service';
+import { PlanService } from './services/plan.service';
 import { createPrismaRepositories } from './domain/prisma.repositories';
 import { REPOS, type Repositories } from './domain/repositories';
 import { AdminAuthService } from './services/admin-auth.service';
@@ -20,6 +27,7 @@ import { TokenService } from './services/token.service';
 
 export { CONFIG };
 const PRISMA = Symbol('PRISMA');
+const PAYMENT_PROVIDERS = Symbol('PAYMENT_PROVIDERS');
 
 @Injectable()
 class PrismaShutdown implements OnApplicationShutdown {
@@ -51,14 +59,23 @@ export function createAppModule(opts: ModuleOptions = {}) {
     controllers: [
       HealthController, AuthController, DeviceController, LicenceController,
       AdminAuthController, AdminController, PublicController, CatalogController, ReferralController,
+      PlanController, OrderController, SubscriptionController, PaymentNotifyController, AdminBillingController,
     ],
     providers: [
       ...infra,
       { provide: RateLimiter, useFactory: () => new RateLimiter() },
       { provide: TokenService, useFactory: (r: Repositories, c: AppConfig) => new TokenService(r, c), inject: [REPOS, CONFIG] },
-      { provide: AuthService, useFactory: (r: Repositories, t: TokenService) => new AuthService(r, t), inject: [REPOS, TokenService] },
-      { provide: DeviceService, useFactory: (r: Repositories) => new DeviceService(r), inject: [REPOS] },
-      { provide: LicenceService, useFactory: (r: Repositories, c: AppConfig) => new LicenceService(r, c), inject: [REPOS, CONFIG] },
+      { provide: EntitlementService, useFactory: (r: Repositories) => new EntitlementService(r), inject: [REPOS] },
+      { provide: DeviceService, useFactory: (r: Repositories, e: EntitlementService) => new DeviceService(r, undefined, e), inject: [REPOS, EntitlementService] },
+      { provide: AuthService, useFactory: (r: Repositories, t: TokenService, d: DeviceService) => new AuthService(r, t, undefined, undefined, d), inject: [REPOS, TokenService, DeviceService] },
+      { provide: LicenceService, useFactory: (r: Repositories, c: AppConfig, e: EntitlementService) => new LicenceService(r, c, undefined, e), inject: [REPOS, CONFIG, EntitlementService] },
+      { provide: PAYMENT_PROVIDERS, useFactory: (c: AppConfig) => createProviders(process.env, c.accessSecret), inject: [CONFIG] },
+      { provide: PlanService, useFactory: (r: Repositories) => new PlanService(r), inject: [REPOS] },
+      {
+        provide: BillingService,
+        useFactory: (r: Repositories, p: PaymentProviders, e: EntitlementService) => new BillingService(r, p, loadBillingOptions(), undefined, e),
+        inject: [REPOS, PAYMENT_PROVIDERS, EntitlementService],
+      },
       { provide: AdminAuthService, useFactory: (r: Repositories, c: AppConfig) => new AdminAuthService(r, c), inject: [REPOS, CONFIG] },
       { provide: AdminService, useFactory: (r: Repositories, c: AppConfig) => new AdminService(r, c), inject: [REPOS, CONFIG] },
       { provide: StatsService, useFactory: (r: Repositories) => new StatsService(r), inject: [REPOS] },
