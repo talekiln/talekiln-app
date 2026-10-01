@@ -8,11 +8,11 @@
  * Verified against a real cn-beijing workspace key on 2026-10-01 (recorded responses in
  * test/fixtures/bailian/live_*): compat-mode chat + SSE, wan2.6-t2i / wan2.6-image / z-image-turbo
  * image, CosyVoice (cosyvoice-v2, longxiaochun_v2) WebSocket protocol, invalid key, unknown model,
- * task-level FAILED. Workspace keys (sk-ws-…) must use the workspace host for both HTTP and WebSocket.
+ * task-level FAILED, video success for wan2.6-t2v (720P) and wan2.2-kf2v-flash (480P)
+ * (video_url expires after 24 h; download it promptly). Workspace keys (sk-ws-…) must use the workspace host for both HTTP and WebSocket.
  *
  * Still UNVERIFIED (cannot be triggered with a funded, fully-enabled key):
  *  - Arrearage / Model.AccessDenied strings (taken from the public error-code page, matched loosely).
- *  - Video submit/poll success path (costs real money; not run yet).
  */
 const { ProviderError, ERROR_CODES } = require('../errors');
 
@@ -211,7 +211,11 @@ function createBailianAdapter(cfg = {}) {
       case 'RUNNING': return { status: 'running' };
       case 'SUCCEEDED': {
         if (!out.video_url) throw new ProviderError(ERROR_CODES.BAD_RESPONSE, '成功但无 video_url', { provider: 'bailian' });
-        return { status: 'succeeded', videoUrl: out.video_url };
+        // Verified: usage carries billed duration and resolution (t2v: size + SR, kf2v: SR only).
+        const result = { status: 'succeeded', videoUrl: out.video_url };
+        if (data.usage) result.usage = data.usage;
+        if (out.actual_prompt) result.actualPrompt = out.actual_prompt;
+        return result;
       }
       case 'FAILED':
       case 'CANCELED':
