@@ -6,7 +6,7 @@
 
 1. **只用 LGPL 构建**：configure 不得含 `--enable-gpl`、`--enable-version3` 以外的 GPL 开关，也不得含 `--enable-nonfree`。因此不带 libx264/libx265（H.264 软件编码）；硬件编码器（NVENC/QSV/AMF/Media Foundation）属 LGPL 可用范围。`libx264` 兜底在 LGPL 构建中不可用，渲染流水线会按 `encoder.detect` 的结果回退，所有编码器都不可用时返回 -32032。若产品要求软编兜底，需另行评估许可（例如商业授权或让用户自行安装）。
 2. **独立进程、动态使用**：lycore 只通过 `ffmpeg` / `ffprobe` **可执行文件的子进程**调用，不静态或动态链接 libav*。ffmpeg 保持为可单独替换的文件，用户可以换成自己编译的版本（`LYCORE_FFMPEG_DIR` 或 `ffmpegDir` 参数指向的目录）。
-3. **不随安装包内置，首次使用时下载**（见下）。这样安装包本身不含 ffmpeg；但应用向用户分发 ffmpeg 的行为同样需要履行下列义务。
+3. **随安装包内置**（`scripts/ffmpeg-pin.json` 固定 BtbN win64-lgpl 构建的地址与 sha256，构建时由 `scripts/fetch-ffmpeg.mjs` 下载校验，放入 `<安装目录>/resources/lycore/ffmpeg/`，LICENSE 一并随附）。首次使用时下载的路径保留为后备。无论哪种，应用向用户分发 ffmpeg 都需要履行下列义务。注意：BtbN autobuild 的旧版本可能被上游清理，发布前应把该文件转存到自有存储并更新固定地址。
 
 ## 供应方式（`packages/core/client/ffmpeg-provision.js`）
 
