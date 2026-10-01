@@ -18,6 +18,7 @@ jobs:
       - run: pnpm secrets:scan
       - run: pnpm test
       - run: pnpm build
+      - run: pnpm --filter @talekiln/admin build
 
   package:
     needs: test

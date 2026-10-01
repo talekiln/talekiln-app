@@ -7,6 +7,7 @@ export interface Account {
   passwordHash: string;
   role: Role;
   plan: string;
+  disabledAt: Date | null;
   createdAt: Date;
 }
 
@@ -19,6 +20,7 @@ export interface InviteCode {
   expiresAt: Date | null;
   usedAt: Date | null;
   usedById: string | null;
+  revokedAt: Date | null;
 }
 
 export interface Device {
@@ -44,7 +46,9 @@ export interface RefreshTokenRecord {
 }
 
 export interface AccountRepository {
-  create(a: Omit<Account, 'id' | 'createdAt'>): Promise<Account>;
+  create(a: Omit<Account, 'id' | 'createdAt' | 'disabledAt'> & { disabledAt?: Date | null }): Promise<Account>;
+  list(): Promise<Account[]>;
+  setDisabled(id: string, at: Date | null): Promise<void>;
   findById(id: string): Promise<Account | null>;
   findByEmail(email: string): Promise<Account | null>;
   delete(id: string): Promise<void>;
@@ -54,6 +58,9 @@ export interface InviteRepository {
   create(i: { code: string; plan: string; createdBy: string | null; expiresAt: Date | null }): Promise<InviteCode>;
   findByCode(code: string): Promise<InviteCode | null>;
   list(): Promise<InviteCode[]>;
+  findById(id: string): Promise<InviteCode | null>;
+  /** 仅当邀请码未使用且未吊销时吊销，返回是否成功。 */
+  revoke(id: string, now: Date): Promise<boolean>;
   /** 原子地标记使用：仅当 usedAt 为空且未过期时成功，返回是否抢到。 */
   consume(code: string, accountId: string, now: Date): Promise<boolean>;
 }
@@ -75,10 +82,53 @@ export interface RefreshTokenRepository {
   revokeAllForAccount(accountId: string, now: Date): Promise<void>;
 }
 
+export interface SettingRepository {
+  get<T = unknown>(key: string): Promise<T | null>;
+  set(key: string, value: unknown): Promise<void>;
+}
+
+export interface TelemetryRow {
+  at: Date;
+  day: string;
+  installId: string;
+  name: string;
+  code: string | null;
+  step: string | null;
+}
+
+export interface TelemetryRepository {
+  addMany(rows: TelemetryRow[]): Promise<void>;
+  /** 返回 day >= fromDay（含）的事件，day 为 YYYY-MM-DD（UTC）。 */
+  since(fromDay: string): Promise<TelemetryRow[]>;
+}
+
+export interface FeedbackRecord {
+  id: string;
+  createdAt: Date;
+  accountId: string | null;
+  installId: string | null;
+  contact: string | null;
+  message: string;
+  taskId: string | null;
+  appVersion: string | null;
+  diagnostic: Buffer | null;
+  diagnosticSize: number;
+}
+
+export interface FeedbackRepository {
+  create(f: Omit<FeedbackRecord, 'id' | 'createdAt'>): Promise<FeedbackRecord>;
+  /** 列表不带诊断包内容。 */
+  list(limit: number): Promise<Omit<FeedbackRecord, 'diagnostic'>[]>;
+  findById(id: string): Promise<FeedbackRecord | null>;
+}
+
 export const REPOS = Symbol('REPOS');
 export interface Repositories {
   accounts: AccountRepository;
   invites: InviteRepository;
   devices: DeviceRepository;
   refreshTokens: RefreshTokenRepository;
+  settings: SettingRepository;
+  telemetry: TelemetryRepository;
+  feedback: FeedbackRepository;
 }
