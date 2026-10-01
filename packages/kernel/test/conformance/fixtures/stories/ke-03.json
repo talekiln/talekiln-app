@@ -1,0 +1,90 @@
+{
+  "id": "ke-03",
+  "origin": "recorded-real",
+  "source": "packages/local/test/fixtures/scriptgen/recorded/ke-03.json (scriptgen samples, model qwen-plus)",
+  "templateId": "knowledge-explainer",
+  "durationSec": 30,
+  "aspectRatio": "9:16",
+  "story": "为什么切洋葱会流泪？洋葱细胞破裂后释放酶，产生一种挥发性的含硫化合物，刺激眼睛，泪腺分泌眼泪来冲洗。冷藏洋葱或用锋利的刀可以减轻。",
+  "storyboard": {
+    "title": "切洋葱为什么流泪？",
+    "logline": "洋葱细胞破裂后释放刺激性气体，触发眼睛自我保护机制。",
+    "characters": [],
+    "scenes": [
+      {
+        "id": "s1",
+        "name": "厨房台面近景",
+        "description": "明亮现代厨房，浅蓝与薄荷绿配色，9:16竖构图，柔和顶光"
+      },
+      {
+        "id": "s2",
+        "name": "洋葱细胞微观示意图",
+        "description": "抽象透明洋葱切片背景，叠加扁平化细胞结构图，清爽蓝白主色调"
+      },
+      {
+        "id": "s3",
+        "name": "眼睛与泪腺反应示意图",
+        "description": "简笔风格人眼侧面剖视图，泪腺、神经通路、泪管清晰标注，浅紫灰底"
+      },
+      {
+        "id": "s4",
+        "name": "缓解方法对比图",
+        "description": "左右分屏：左为冷藏洋葱+冰晶图标，右为锋利刀具特写，背景统一浅青色"
+      }
+    ],
+    "shots": [
+      {
+        "sceneId": "s1",
+        "characterIds": [],
+        "visual": "一颗完整紫皮洋葱放在木质砧板上，旁边一把闪亮厨刀，一滴水珠正从洋葱表面滑落，右上角浮现问号气泡",
+        "camera": "中景，静止",
+        "dialogue": {
+          "speaker": "narrator",
+          "text": "切洋葱时，为什么总会忍不住流泪？"
+        },
+        "durationSec": 6,
+        "imagePrompt": "Flat illustration, 9:16 vertical frame, light blue and mint green color palette. A whole purple-skinned onion on a wooden cutting board, beside it a shiny stainless steel kitchen knife. One water droplet sliding down the onion surface. A cartoon-style question mark bubble floating in upper right corner. Clean infographic style, no text overlay.",
+        "videoPrompt": "Water droplet slides slowly down onion surface; subtle shimmer on knife blade"
+      },
+      {
+        "sceneId": "s2",
+        "characterIds": [],
+        "visual": "放大洋葱细胞结构：外层细胞壁破裂，释放小圆点状酶分子（标'Alliinase'），与含硫物质碰撞生成挥发性'催泪因子'（LF）气体分子向上飘散",
+        "camera": "Close-up, slight zoom-in",
+        "dialogue": {
+          "speaker": "narrator",
+          "text": "洋葱细胞破裂，酶与硫化合物反应，生成挥发性‘催泪因子’。"
+        },
+        "durationSec": 8,
+        "imagePrompt": "Flat illustration, white background with soft blue grid lines. Cross-section of onion cell: intact cells on left, ruptured cells on right. Enzyme molecules labeled 'Alliinase' (blue circles) colliding with sulfur compounds (yellow triangles), producing floating tear-inducing factor (LF) gas molecules (red teardrop-shaped particles) rising upward. All elements simplified, infographic style, no text beyond labels.",
+        "videoPrompt": "Red LF particles float upward from ruptured cells; gentle pulse animation on collision zone"
+      },
+      {
+        "sceneId": "s3",
+        "characterIds": [],
+        "visual": "人眼侧面剖视图：LF气体接触角膜，触发神经信号传至脑干，激活泪腺分泌泪水，泪水经泪管流下",
+        "camera": "Medium close-up, static",
+        "dialogue": {
+          "speaker": "narrator",
+          "text": "它刺激角膜神经，大脑立刻命令泪腺冲洗——眼泪就来了。"
+        },
+        "durationSec": 8,
+        "imagePrompt": "Flat illustration, light lavender-gray background. Side-view schematic of human eye: cornea (outer layer), trigeminal nerve (orange line) connecting to brainstem, lacrimal gland (blue almond shape above eye), tear duct (curved blue tube). Red LF particles touching cornea; blue tear drops flowing down duct. Clear labels only for 'Cornea', 'Nerve', 'Lacrimal Gland', 'Tear Duct'. No facial features beyond eye outline.",
+        "videoPrompt": "Red LF particles make contact with cornea; blue tear drops begin flowing downward along duct"
+      },
+      {
+        "sceneId": "s4",
+        "characterIds": [],
+        "visual": "左右分屏：左侧是带冰晶特效的冷藏洋葱（温度计显示4°C），右侧是锋利刀刃切开洋葱截面，截面光滑无汁液飞溅",
+        "camera": "Wide static frame",
+        "dialogue": {
+          "speaker": "narrator",
+          "text": "冷藏降低酶活性，锋利刀减少细胞损伤——试试看！"
+        },
+        "durationSec": 8,
+        "imagePrompt": "Flat illustration, pale aqua background. Split-screen layout: left side shows a purple onion with subtle ice crystal texture and small thermometer icon reading '4°C'; right side shows a sharp silver knife slicing cleanly through an onion cross-section — smooth cut surface, no bursting cells or juice splatter. Both sides include checkmark icons. Infographic style, no text except '4°C' and checkmarks.",
+        "videoPrompt": "Ice crystals shimmer faintly on left onion; knife glides smoothly across right onion in one motion"
+      }
+    ]
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "id": "edge-multiline",
+  "origin": "hand-written",
+  "note": "边界：一个镜头挂多行（含动作、场景标题）、一行不挂任何镜头、一个没有镜头的场景、长独白、短镜头（手写，非 AI 输出）",
+  "scenes": [
+    {
+      "title": "旧书店",
+      "lines": [
+        { "kind": "scene_heading", "speaker": "", "text": "旧书店 · 午后" },
+        { "kind": "narration", "speaker": "", "text": "老板在柜台后打盹，阳光落在一排发黄的书脊上。" },
+        { "kind": "dialogue", "speaker": "小林", "text": "老板，这本书还有第二册吗？" },
+        { "kind": "action", "speaker": "", "text": "老板抬起头，推了推眼镜。" },
+        { "kind": "dialogue", "speaker": "老板", "text": "有是有，不过得等到明天，我得去仓库里翻一翻，那里堆得比山还高，你确定要等吗？还是先把这一册带走，下次再来也行。" },
+        { "kind": "narration", "speaker": "", "text": "这一行故意不挂任何镜头。" }
+      ],
+      "shots": [
+        { "title": "书脊特写", "description": "阳光下的书脊", "location": "旧书店", "duration_ms": 1000, "legacy_id": 2101, "lines": [0, 1] },
+        { "title": "问答", "description": "两人隔着柜台", "location": "旧书店", "duration_ms": 6000, "legacy_id": 2102, "lines": [2, 3, 4] }
+      ]
+    },
+    {
+      "title": "空场",
+      "lines": [
+        { "kind": "scene_heading", "speaker": "", "text": "空场 · 一个暂时没有镜头的场景" }
+      ],
+      "shots": []
+    },
+    {
+      "title": "夜里",
+      "lines": [
+        { "kind": "narration", "speaker": "", "text": "第二天夜里，仓库的灯亮到很晚。" },
+        { "kind": "dialogue", "speaker": "老板", "text": "找到了。" }
+      ],
+      "shots": [
+        { "title": "仓库", "description": "堆满纸箱的仓库", "location": "仓库", "duration_ms": 3000, "legacy_id": 2103, "lines": [0] },
+        { "title": "递书", "description": "老板递出书", "location": "仓库", "duration_ms": 2000, "legacy_id": 2104, "lines": [1] }
+      ]
+    }
+  ]
+}
