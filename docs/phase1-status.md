@@ -30,3 +30,7 @@
 | G03/G05 渲染导出 | 已做（Linux 真 ffmpeg 测过） | 硬件编码器、Windows 路径、取消需 Windows 真机 |
 | B01–B03 云端账号与授权 | 已做（无数据库验证） | 迁移与 Prisma 仓库待真 Postgres 验证 |
 | D04/D05 角色库与镜头工作台 | 已做（未在浏览器打开） | 锁定参考图对火山经典路径可能无效 |
+| H04 自动更新 | 已做（未跑 Electron） | electron-updater 接入，纯逻辑有测试；更新源为占位，须配 publisherName 才启用；见 docs/auto-update.md |
+| H05 签名与误报清单 | 部分 | docs/release-signing.md；CI 签名步骤为骨架，未在真实 Secrets 下跑过 |
+| H06 统一错误码与脱敏 | 已做 | error-codes.json 为唯一来源，local 响应与 toast 共用；脱敏补 Bearer/sk-/LTAI/签名链接/刷新令牌/许可证 JWT；见 docs/error-codes.md |
+| I01 测试矩阵 | 已做（文档） | docs/test-matrix.md；真机项均待测 |

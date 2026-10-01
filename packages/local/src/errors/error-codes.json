@@ -2,7 +2,7 @@
   "version": 1,
   "note": "统一错误码表（唯一数据源）。local 服务响应与渲染进程 toast 共用；新增错误码必须先加在这里，test/errorCodes.test.js 会校验与代码中的常量一致。message 面向用户，action 为建议操作。core 的数字码以字符串作键。",
   "entries": {
-    "INVALID_API_KEY": { "scope": "provider", "message": "API Key 无效或已过期，请检查设置中的 Key", "action": "到「设置 → AI 服务」重新填写 Key，并点「连通测试」确认" },
+    "INVALID_API_KEY": { "scope": "provider", "message": "API Key 无效或已过期，请检查设置中的 Key", "action": "在设置里重新填写 Key，并点「连通测试」确认" },
     "MODEL_NOT_ENABLED": { "scope": "provider", "message": "该模型未开通或无权限，请在服务商控制台开通后重试", "action": "打开服务商控制台开通该模型，或在设置里换一个已开通的模型" },
     "INSUFFICIENT_BALANCE": { "scope": "provider", "message": "账户余额不足或已欠费，请充值后重试", "action": "到服务商控制台充值，到账后在任务中心点「重试」" },
     "RATE_LIMITED": { "scope": "provider", "message": "请求过于频繁或额度受限，请稍后重试", "action": "无需操作，任务会自动退避重试；长期出现请降低并发或联系服务商提额" },
@@ -12,7 +12,7 @@
     "BAD_RESPONSE": { "scope": "provider", "message": "服务商返回格式异常", "action": "稍后重试；反复出现请在反馈中附上日志" },
     "PROVIDER_NOT_AVAILABLE": { "scope": "provider", "message": "该服务商暂未开放", "action": "在设置中改用「百炼」或「方舟」" },
     "CAPABILITY_NOT_SUPPORTED": { "scope": "provider", "message": "该服务商不支持此能力", "action": "在设置中为该功能换一个支持的服务商或模型" },
-    "SPEND_LIMIT": { "scope": "provider", "message": "已达到费用上限，任务未提交。请在设置中调整单次/月度上限后重试", "action": "到「设置 → 费用」调整单次或月度上限，然后重新提交" },
+    "SPEND_LIMIT": { "scope": "provider", "message": "已达到费用上限，任务未提交。请在设置中调整单次/月度上限后重试", "action": "调整单次或月度费用上限后重新提交（费用设置界面尚未提供时，请联系管理员调整）" },
     "UNKNOWN": { "scope": "provider", "message": "未知错误", "action": "稍后重试；反复出现请在反馈中附上日志" },
 
     "SUBMIT_UNCERTAIN": { "scope": "local", "message": "提交结果不确定：请求可能已到达服务商。为避免重复扣费未自动重试，请先到服务商控制台确认后再手动重试", "action": "先到服务商控制台确认是否已产生该任务；确认没有后再强制重试" },
