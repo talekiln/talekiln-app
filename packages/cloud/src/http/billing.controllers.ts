@@ -1,7 +1,8 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, Post, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Param, Post, Put, Query, Req, Res, UseGuards, UseInterceptors } from '@nestjs/common';
 import type { Response } from 'express';
 import { z } from 'zod';
-import { AccessGuard, AdminGuard, type AdminRequest, type AuthedRequest } from './guard';
+import { AuditInterceptor } from './audit.interceptor';
+import { AccessGuard, AdminGuard, Require, type AdminRequest, type AuthedRequest } from './guard';
 import { errorStatus } from './filter';
 import { BillingService } from '../services/billing.service';
 import { PlanService } from '../services/plan.service';
@@ -80,6 +81,7 @@ const refundBody = z.object({ reason: z.string().max(200).optional() }).default(
 /** 管理侧：订单、退款、发票、套餐。接口风格与 AdminController 一致（AdminGuard + JSON）。 */
 @Controller('admin')
 @UseGuards(AdminGuard)
+@UseInterceptors(AuditInterceptor)
 export class AdminBillingController {
   constructor(
     @Inject(BillingService) private readonly billing: BillingService,
@@ -94,7 +96,7 @@ export class AdminBillingController {
     });
   }
   @Get('orders/:id') order(@Param('id') id: string) { return this.billing.orderDetail(id); }
-  @Post('orders/:id/refund') @HttpCode(200)
+  @Post('orders/:id/refund') @HttpCode(200) @Require('billing:refund')
   refund(@Req() req: AdminRequest, @Param('id') id: string, @Body() b: unknown) {
     return this.billing.refundOrder(req.admin!.accountId, id, refundBody.parse(b ?? {}).reason);
   }
@@ -113,11 +115,11 @@ export class AdminBillingController {
   @Post('invoices/:id/void') @HttpCode(200) voidInvoice(@Param('id') id: string) { return this.billing.voidInvoice(id); }
 
   @Get('plans') listPlans() { return this.plans.listAdmin(); }
-  @Post('plans') createPlan(@Body() b: unknown) { return this.plans.create(b); }
-  @Post('plans/:code/versions') addVersion(@Param('code') code: string, @Body() b: unknown) {
+  @Post('plans') @Require('billing:plans') createPlan(@Body() b: unknown) { return this.plans.create(b); }
+  @Post('plans/:code/versions') @Require('billing:plans') addVersion(@Param('code') code: string, @Body() b: unknown) {
     return this.plans.addVersion(code, b);
   }
-  @Put('plans/:code/enabled') @HttpCode(204)
+  @Put('plans/:code/enabled') @HttpCode(204) @Require('billing:plans')
   async setEnabled(@Param('code') code: string, @Body() b: unknown) {
     await this.plans.setEnabled(code, z.object({ enabled: z.boolean() }).parse(b).enabled);
   }

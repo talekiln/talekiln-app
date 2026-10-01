@@ -3,19 +3,25 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { api, errorText } from '../api.js'
 import { EVENT_LABEL, FEEDBACK_NOTE, STEP_LABEL, barPercent, formatBytes, formatTime } from '../format.js'
+import { funnelRows } from '../ops.js'
+import { can } from '../permissions.js'
+import { me } from '../session.js'
 
 const days = ref(14)
 const data = ref(null)
 const feedback = ref([])
+const funnel = ref(null)
+const canDiag = computed(() => can(me.value, 'feedback:diagnostic'))
 const loading = ref(false)
 
 const maxDau = computed(() => (data.value ? Math.max(0, ...data.value.series.map((s) => s.dau)) : 0))
+const funnelView = computed(() => (funnel.value ? funnelRows(funnel.value.stages) : []))
 const maxFail = computed(() => (data.value ? Math.max(0, ...data.value.series.map((s) => s.failures)) : 0))
 
 async function load() {
   loading.value = true
   try {
-    ;[data.value, feedback.value] = await Promise.all([api.overview(days.value), api.listFeedback()])
+    ;[data.value, feedback.value, funnel.value] = await Promise.all([api.overview(days.value), api.listFeedback(), api.funnel(days.value)])
   } catch (e) {
     ElMessage.error(errorText(e))
   } finally {
@@ -60,6 +66,31 @@ onMounted(load)
         <div class="card"><div class="n">{{ data.totals.projects }}</div><div class="l">新建项目数</div></div>
         <div class="card"><div class="n">{{ data.totals.exports }}</div><div class="l">导出成功数</div></div>
         <div class="card"><div class="n">{{ data.totals.failures }}</div><div class="l">失败事件数</div></div>
+      </div>
+
+      <div v-if="funnel" class="section">
+        <h3>推广漏斗（{{ funnel.from }} ～ {{ funnel.to }}，UTC）</h3>
+        <el-table :data="funnelView" size="small" border>
+          <el-table-column prop="label" label="阶段" width="170" />
+          <el-table-column label="人数 / 次数" min-width="220">
+            <template #default="{ row }">
+              <div style="display: flex; align-items: center; gap: 8px">
+                <div class="bar" :style="{ width: row.width * 0.6 + '%' }" />
+                <span>{{ row.count }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="fromPrev" label="相对上一阶段" width="130" />
+          <el-table-column prop="fromFirst" label="相对点击" width="110" />
+        </el-table>
+        <p class="muted">
+          各阶段按时间窗分别汇总，不是逐人追踪：推广点击不带账号，遥测是匿名的，所以后一阶段可以大于前一阶段（自然流量），
+          比率只适合看趋势。“已激活”= 窗口内注册且登记过设备的账号；“首次导出”= 到达首次导出步骤的去重安装数。
+        </p>
+        <el-table v-if="funnel.byCode.length" :data="funnel.byCode" size="small" border style="max-width: 360px">
+          <el-table-column label="推广码"><template #default="{ row }"><span class="mono">{{ row.code }}</span></template></el-table-column>
+          <el-table-column prop="clicks" label="点击" width="90" />
+        </el-table>
       </div>
 
       <div class="section">
@@ -117,7 +148,7 @@ onMounted(load)
         <el-table-column prop="appVersion" label="版本" width="80" />
         <el-table-column label="诊断包" width="130">
           <template #default="{ row }">
-            <el-button v-if="row.diagnosticSize" link type="primary" @click="download(row)">下载 {{ formatBytes(row.diagnosticSize) }}</el-button>
+            <el-button v-if="row.diagnosticSize && canDiag" link type="primary" @click="download(row)">下载 {{ formatBytes(row.diagnosticSize) }}</el-button>
             <span v-else class="muted">无</span>
           </template>
         </el-table-column>

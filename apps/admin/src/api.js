@@ -12,6 +12,8 @@ const ERROR_TEXT = {
   invalid_credentials: '邮箱或密码错误',
   invalid_token: '登录已失效，请重新登录',
   forbidden: '没有权限执行该操作',
+  conflict: '操作与当前状态冲突',
+  provider_unavailable: '支付渠道暂不可用',
   account_disabled: '账号已被禁用',
   rate_limited: '操作过于频繁，请稍后再试',
   not_found: '记录不存在',
@@ -22,8 +24,18 @@ const ERROR_TEXT = {
 
 export function errorText(e) {
   if (!e) return '未知错误'
-  if (e.code === 'bad_request' && e.message && e.message !== 'bad_request') return e.message
+  if ((e.code === 'bad_request' || e.code === 'conflict') && e.message && e.message !== e.code) return e.message
   return ERROR_TEXT[e.code] || e.message || '请求失败'
+}
+
+const enc = encodeURIComponent
+
+/** 查询串：跳过 undefined/null/空串。 */
+export function qs(params) {
+  const parts = Object.entries(params || {})
+    .filter(([, v]) => v !== undefined && v !== null && v !== '')
+    .map(([k, v]) => `${enc(k)}=${enc(v)}`)
+  return parts.length ? `?${parts.join('&')}` : ''
 }
 
 export function createApi({ base = '/api', fetchImpl, getToken = () => null, onUnauthorized = () => {} } = {}) {
@@ -66,11 +78,44 @@ export function createApi({ base = '/api', fetchImpl, getToken = () => null, onU
     listUsers: () => json('GET', '/admin/users'),
     getUser: (id) => json('GET', `/admin/users/${encodeURIComponent(id)}`),
     setUserDisabled: (id, disabled) => json('POST', `/admin/users/${encodeURIComponent(id)}/${disabled ? 'disable' : 'enable'}`),
-    getAnnouncements: () => json('GET', '/admin/announcements'),
-    saveAnnouncements: (list) => json('PUT', '/admin/announcements', list),
     getCatalog: () => json('GET', '/admin/catalog'),
     saveCatalog: (list) => json('PUT', '/admin/catalog', list),
     overview: (days = 14) => json('GET', `/admin/stats/overview?days=${days}`),
+    funnel: (days = 14) => json('GET', `/admin/stats/funnel?days=${days}`),
+
+    // 订单、退款、发票
+    listOrders: (f = {}) => json('GET', '/admin/orders' + qs({ status: f.status, accountId: f.accountId, limit: f.limit })),
+    getOrder: (id) => json('GET', `/admin/orders/${enc(id)}`),
+    refundOrder: (id, reason) => json('POST', `/admin/orders/${enc(id)}/refund`, reason ? { reason } : {}),
+    listRefunds: (limit) => json('GET', '/admin/refunds' + qs({ limit })),
+    listInvoices: (status) => json('GET', '/admin/invoices' + qs({ status })),
+    registerInvoice: (orderId, body) => json('POST', `/admin/orders/${enc(orderId)}/invoice`, body),
+    issueInvoice: (id, invoiceNo) => json('POST', `/admin/invoices/${enc(id)}/issue`, { invoiceNo }),
+    voidInvoice: (id) => json('POST', `/admin/invoices/${enc(id)}/void`, {}),
+
+    // 套餐与价格版本（改价 = 新增版本）
+    listPlans: () => json('GET', '/admin/plans'),
+    createPlan: (body) => json('POST', '/admin/plans', body),
+    addPlanVersion: (code, body) => json('POST', `/admin/plans/${enc(code)}/versions`, body),
+    setPlanEnabled: (code, enabled) => json('PUT', `/admin/plans/${enc(code)}/enabled`, { enabled }),
+
+    // 版本灰度
+    listReleases: () => json('GET', '/admin/releases'),
+    createRelease: (body) => json('POST', '/admin/releases', body),
+    updateRelease: (id, patch) => json('PUT', `/admin/releases/${enc(id)}`, patch),
+
+    // 公告
+    listAnnouncements: () => json('GET', '/admin/announcements'),
+    createAnnouncement: (body) => json('POST', '/admin/announcements', body),
+    updateAnnouncement: (id, patch) => json('PUT', `/admin/announcements/${enc(id)}`, patch),
+    deleteAnnouncement: (id) => json('DELETE', `/admin/announcements/${enc(id)}`),
+
+    // 管理员与审计
+    listAdmins: () => json('GET', '/admin/admins'),
+    grantAdmin: (body) => json('POST', '/admin/admins', body),
+    setAdminRole: (accountId, role) => json('PUT', `/admin/admins/${enc(accountId)}/role`, { role }),
+    removeAdmin: (accountId) => json('DELETE', `/admin/admins/${enc(accountId)}`),
+    listAudit: (f = {}) => json('GET', '/admin/audit' + qs({ actorId: f.actorId, action: f.action, targetType: f.targetType, targetId: f.targetId, before: f.before, limit: f.limit })),
     listFeedback: () => json('GET', '/admin/feedback'),
     downloadDiagnostic: async (id) => (await raw('GET', `/admin/feedback/${encodeURIComponent(id)}/diagnostic`)).blob(),
   }

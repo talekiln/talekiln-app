@@ -84,11 +84,11 @@ curl localhost:3000/health
 公开，返回 ES256 公钥 JWKS（含 `kid`，不含私钥）。轮换密钥：新增 `LICENCE_KEY_ID` 与新私钥后发布（当前实现同时只发布一把公钥；平滑轮换需扩展为多 key）。
 
 ### 管理后台 API（独立认证）
-`POST /admin/auth/login` `{ email, password }`（仅 `role=ADMIN` 且未禁用；按 IP 与邮箱限流）→ `{ token, expiresIn(2h), admin }`。管理员令牌使用独立密钥（`ADMIN_JWT_SECRET`，未设置则由访问令牌密钥派生）和 `aud=talekiln-admin`，普通用户令牌不能访问 `/admin/*`，反之亦然；每次请求回查账号仍是未禁用的管理员。其余接口均需 `Authorization: Bearer <管理员令牌>`：
+`POST /admin/auth/login` `{ email, password }`（仅管理员——有 AdminRole 记录或旧式 `role=ADMIN`——且未禁用；按 IP 与邮箱限流）→ `{ token, expiresIn(2h), admin }`。管理员令牌使用独立密钥（`ADMIN_JWT_SECRET`，未设置则由访问令牌密钥派生）和 `aud=talekiln-admin`，普通用户令牌不能访问 `/admin/*`，反之亦然；每次请求回查账号仍是未禁用的管理员。其余接口均需 `Authorization: Bearer <管理员令牌>`：
 
 - `POST /admin/invites` `{ plan?, expiresInDays?, count?(1..200) }` → 邀请码数组；`GET /admin/invites?status=unused|used|expired|revoked`；`POST /admin/invites/:id/revoke`（仅未使用的）。
 - `GET /admin/users`、`GET /admin/users/:id`（含设备与授权视图：套餐、权益、有效期、宽限天数）、`POST /admin/users/:id/disable|enable`（禁用即吊销全部刷新令牌，并拒绝登录/续期；管理员账号不可禁用）。
-- `GET|PUT /admin/announcements`、`GET|PUT /admin/catalog`（整体替换，zod 校验；存于 `Setting` 表）。客户端读取 `GET /public/announcements`、`GET /public/catalog`（只含启用项）。
+- `GET|PUT /admin/catalog`（整体替换，zod 校验；存于 `Setting` 表）。客户端读取 `GET /public/catalog`（只含启用项）。公告（时间窗、渠道）、版本灰度 `/admin/releases` 与客户端 `GET /updates/check`、管理员角色与审计、推广漏斗见 `docs/phase2-admin.md`；角色不同权限不同（READONLY / OPERATOR / ADMIN）。
 - `GET /admin/stats/overview?days=14`：DAU、项目数、导出数、失败数按天序列，失败码排行，引导步骤到达数，账号/邀请码计数。
 - `GET /admin/feedback`、`GET /admin/feedback/:id/diagnostic`（下载诊断包 zip）。
 

@@ -5,15 +5,6 @@ import { PLAN_ENTITLEMENTS } from './licence.service';
 import type { AppConfig } from './config';
 import type { Account, InviteCode, Repositories } from '../domain/repositories';
 
-export const announcementsSchema = z.array(z.object({
-  id: z.string().min(1).max(40),
-  title: z.string().min(1).max(100),
-  body: z.string().max(2000),
-  level: z.enum(['info', 'warn', 'critical']),
-  active: z.boolean(),
-  publishedAt: z.string().datetime().optional(),
-})).max(50).refine((a) => new Set(a.map((x) => x.id)).size === a.length, 'id 不能重复');
-
 export const catalogSchema = z.array(z.object({
   id: z.string().min(1).max(60),
   kind: z.enum(['text', 'image', 'video', 'tts']),
@@ -24,7 +15,6 @@ export const catalogSchema = z.array(z.object({
   enabled: z.boolean(),
 })).max(200).refine((a) => new Set(a.map((x) => x.id)).size === a.length, 'id 不能重复');
 
-export type Announcement = z.infer<typeof announcementsSchema>[number];
 export type CatalogEntry = z.infer<typeof catalogSchema>[number];
 
 export type InviteStatus = 'unused' | 'used' | 'expired' | 'revoked';
@@ -124,7 +114,7 @@ export class AdminService {
   async setDisabled(id: string, disabled: boolean) {
     const a = await this.repos.accounts.findById(id);
     if (!a) throw new ServiceError('not_found');
-    if (a.role === 'ADMIN') throw new ServiceError('forbidden', '不能禁用管理员账号');
+    if (a.role === 'ADMIN' || (await this.repos.adminRoles.find(id))) throw new ServiceError('forbidden', '不能禁用管理员账号');
     const now = this.now();
     await this.repos.accounts.setDisabled(id, disabled ? now : null);
     if (disabled) await this.repos.refreshTokens.revokeAllForAccount(id, now);
@@ -137,15 +127,7 @@ export class AdminService {
     };
   }
 
-  // ---- 公告 / 目录 ----
-  async getAnnouncements(): Promise<Announcement[]> {
-    return (await this.repos.settings.get<Announcement[]>('announcements')) ?? [];
-  }
-  async setAnnouncements(input: unknown): Promise<Announcement[]> {
-    const v = announcementsSchema.parse(input);
-    await this.repos.settings.set('announcements', v);
-    return v;
-  }
+  // ---- 模型目录（公告已迁到 AnnouncementService）----
   async getCatalog(): Promise<CatalogEntry[]> {
     return (await this.repos.settings.get<CatalogEntry[]>('catalog')) ?? [];
   }
@@ -154,7 +136,6 @@ export class AdminService {
     await this.repos.settings.set('catalog', v);
     return v;
   }
-  /** 客户端可见：只含启用/生效项。 */
-  async publicAnnouncements() { return (await this.getAnnouncements()).filter((a) => a.active); }
+  /** 客户端可见：只含启用项。 */
   async publicCatalog() { return (await this.getCatalog()).filter((c) => c.enabled); }
 }
