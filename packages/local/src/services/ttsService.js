@@ -1,6 +1,6 @@
 /**
  * TTS 语音合成服务
- * 支持多种 TTS 接口：minimax、edge-tts（本地）、通用 HTTP
+ * 支持多种 TTS 接口：minimax、OpenAI 兼容 HTTP（不使用非官方的 Edge TTS）
  */
 const https = require('https');
 const http = require('http');
@@ -145,7 +145,6 @@ async function synthesize(db, log, { text, storyboard_id, config, storage_base, 
       ttsModel || 'speech-02-hd'
     );
   } else if (provider === 'openai' || ttsConfig.base_url) {
-    console.log('==c sxy synthesizeWithOpenai', text, voiceId, ttsConfig.api_key, ttsConfig.base_url, ttsModel, finalSpeed);
     audioBuffer = await synthesizeWithOpenai(
       text,
       voiceId || 'alloy',

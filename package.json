@@ -11,7 +11,8 @@
     "build": "pnpm --filter @talekiln/renderer build",
     "dist:win": "pnpm --filter @talekiln/desktop dist:win",
     "lint": "pnpm -r --if-present lint",
-    "test": "pnpm -r --if-present test"
+    "test": "pnpm -r --if-present test",
+    "licenses:check": "node scripts/licenses-check.mjs"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
