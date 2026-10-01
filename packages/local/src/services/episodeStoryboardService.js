@@ -268,6 +268,8 @@ function getStoryboardsForEpisode(db, episodeId) {
         try { return JSON.parse(r.characters); } catch (_) { return []; }
       })(),
       composed_image: r.composed_image,
+      image_url: r.image_url ?? null,
+      local_path: r.local_path ?? null,
       video_url: r.video_url,
       audio_local_path: r.audio_local_path ?? null,
       narration_audio_local_path: r.narration_audio_local_path ?? null,
