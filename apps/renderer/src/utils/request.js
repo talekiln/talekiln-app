@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import { parseApiError, toastText } from './errorToast'
 
 const request = axios.create({
   baseURL: '/api/v1',
@@ -21,11 +22,13 @@ request.interceptors.response.use(
   },
   (error) => {
     // 提取后端实际错误信息（优先 API 返回的 message，而非 axios 通用 "status code 500"）
-    const backendMsg = error.response?.data?.error?.message
-    const msg = backendMsg || error.message || '网络错误'
-    ElMessage.error(msg)
+    // 文案来自统一错误码表（含建议操作），见 utils/errorToast.js
+    const parsed = parseApiError(error)
+    ElMessage.error(toastText(error))
     // 将真实错误信息写回 message，使组件 catch 块可直接用 e.message 获取可读内容
-    if (backendMsg) error.message = backendMsg
+    if (error.response?.data && parsed.message) error.message = parsed.message
+    error.code = parsed.code || error.code
+    error.action = parsed.action
     return Promise.reject(error)
   }
 )

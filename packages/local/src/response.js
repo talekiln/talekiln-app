@@ -1,3 +1,5 @@
+const errors = require('./errors');
+
 // 和 Go 端 pkg/response 保持一致，方便前端复用
 function send(res, statusCode, body) {
   const payload = {
@@ -27,9 +29,16 @@ function successWithPagination(res, items, total, page, pageSize) {
 }
 
 function error(res, statusCode, code, message, details) {
+  // 统一错误码表：附带建议操作；message 缺省时用表内文案（调用方给的 message 优先）
+  const info = errors.lookup(code);
   send(res, statusCode, {
     success: false,
-    error: { code, message, ...(details && { details }) },
+    error: {
+      code,
+      message: message || errors.describe(code).message,
+      ...(info && { action: info.action }),
+      ...(details && { details }),
+    },
   });
 }
 
