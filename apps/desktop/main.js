@@ -41,8 +41,35 @@ const lifecycle = require('./lifecycle').createLifecycle({
   readableError: (code, msg) => {
     try { return require(path.join(LOCAL_DIR, 'src', 'queue', 'taskView.js')).readableError(code, msg); } catch (_) { return msg; }
   },
+  getExtraTrayItems: () => (updater ? [updater.trayItem()] : []),
   log: (m) => writeMainLog(m),
 });
+
+// 自动更新：配置来自 update-config.json（占位）+ 环境变量；未配置/开发模式下保持关闭。electron-updater 缺失也不影响启动
+let updater = null;
+function setupUpdater() {
+  try {
+    const { resolveConfig } = require('./updater-logic');
+    const { createUpdateController } = require('./updater');
+    let file = {};
+    try { file = JSON.parse(fs.readFileSync(path.join(__dirname, 'update-config.json'), 'utf8')); } catch (_) {}
+    const config = resolveConfig({ file, env: process.env, isPackaged: app.isPackaged });
+    let autoUpdater = null;
+    if (config.enabled) ({ autoUpdater } = require('electron-updater'));
+    updater = createUpdateController({
+      autoUpdater, dialog, config, currentVersion: app.getVersion(),
+      getWindow: () => BrowserWindow.getAllWindows()[0],
+      unfinishedCount: () => (aiWorker ? aiWorker.unfinishedCount() : 0),
+      onStateChange: () => lifecycle.refreshTrayMenu(),
+      log: (m) => writeMainLog(m),
+    });
+    updater.start();
+    lifecycle.refreshTrayMenu();
+  } catch (e) {
+    writeMainLog(`updater setup failed: ${e && e.stack ? e.stack : e}`);
+    updater = null;
+  }
+}
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -160,6 +187,7 @@ app.whenReady().then(async () => {
     lifecycle.setupTray();
     createWindow(port);
     lifecycle.bindPower();
+    setupUpdater();
   } catch (err) {
     const stack = err && err.stack ? err.stack : String(err);
     writeMainLog(`startup failed\n${stack}`);
