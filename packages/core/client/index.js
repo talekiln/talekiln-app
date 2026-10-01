@@ -53,6 +53,8 @@ function connect(endpoint, { timeoutMs = 5000 } = {}) {
           });
         },
         hello(apiVersions = [1]) { return this.call('core.hello', { apiVersions }); },
+        /** 校验授权令牌：{ token, jwks | publicKey, graceDays?, issuer?, nowSec? } -> { valid, plan, expires, reason, ... } */
+        licenceStatus(params) { return this.call('licence.status', params); },
         /** Plan a render: { timeline, output:{width,height,fps,encoder}, cacheDir, hashContent? } */
         renderPlan(params) { return this.call('render.plan', params); },
         /** Subscribe to server notifications (e.g. render.progress); returns an unsubscribe function. */
@@ -90,4 +92,6 @@ async function connectRetry(endpoint, tries = 50, delayMs = 100) {
   throw last;
 }
 
-module.exports = { connect, connectRetry, RpcError };
+const { createSupervisor } = require('./supervisor');
+
+module.exports = { connect, connectRetry, RpcError, createSupervisor, ...require('./ffmpeg-provision') };

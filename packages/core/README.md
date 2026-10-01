@@ -13,13 +13,31 @@ Rust crate `lycore`：以本地 JSON-RPC 2.0 服务形式运行的核心进程�
 | 方法 | 状态 | 说明 |
 | --- | --- | --- |
 | `core.hello` | 已实现 | 握手与版本协商 |
-| `licence.status` | 占位 | 返回 not implemented |
+| `licence.status` | 已实现 | 校验 ES256 JWT 授权令牌，见下文 |
 | `media.probe` | 已实现 | 调用 ffprobe 解析媒体信息 |
 | `encoder.detect` | 已实现 | 检测 H.264 编码器可用性并给出推荐顺序 |
 | `render.plan` | 已实现 | 将时间线拆分为场景，计算确定性 sceneKey 并检测缓存命中 |
 | `render.start` | 已实现 | 异步渲染任务，返回 `jobId`；进度通过 `render.status` 轮询或 `render.progress` 通知 |
 | `render.status` | 已实现 | 查询任务状态/百分比/结果/错误 |
 | `render.cancel` | 已实现 | 取消任务并终止 ffmpeg 子进程 |
+
+### licence.status
+
+参数：`{"token":"<JWT>","jwks":{"keys":[...]}`（或单个 `"publicKey":{JWK}`）`,"graceDays":14（可选）,"issuer":"（可选）","nowSec":（可选，覆盖当前时间）}`。公钥由客户端从云端 `/.well-known/licence-jwks.json` 取得并缓存后传入，lycore 不联网。
+
+只接受 `alg=ES256`（拒绝 none/HS256）；头部有 `kid` 时必须在 JWKS 中匹配，无 `kid` 则逐个尝试。声明字段：`sub`、`did`、`plan`、`entitlements`、`graceDays`、`exp`、`iss`（云端 `licence.service.ts`），另支持可选 `nbf`。
+
+`result`：`{"valid":bool,"plan":"test"|null,"expires":"ISO8601 UTC"|null,"reason":"...","expiresAt","graceEndsAt","entitlements","accountId","deviceId"}`。
+
+| reason | valid | 含义 |
+| --- | --- | --- |
+| `ok` | true | 未过期 |
+| `grace` | true | 已过 `exp` 但在离线宽限期内（宽限天数：参数 `graceDays` > 令牌 `graceDays` > 默认 14） |
+| `expired` | false | 超出宽限期 |
+| `not_yet_valid` | false | `nbf` 在未来 |
+| `bad_signature` / `unknown_kid` / `unsupported_alg` / `malformed` / `missing_exp` / `issuer_mismatch` / `no_token` | false | 校验失败；不抛 RPC 错误 |
+
+缺少 `jwks`/`publicKey` 返回 -32602。
 
 ### core.hello
 
@@ -166,5 +184,29 @@ Node 客户端助手位于 `client/index.js`（CommonJS，无依赖）：`connec
 渲染测试（`src/render/tests.rs`）：参数构造为纯函数单元测试；若 PATH 上有真实 `ffmpeg`/`ffprobe`（需含 libass），则用 lavfi 生成素材做端到端渲染、缓存命中、编码器回退测试，否则自动跳过；另有记录参数的假 ffmpeg 脚本（仅 unix）测试重试/回退顺序、原子重命名与取消。
 
 客户端：`renderStart(params)` / `renderStatus(id)` / `renderCancel(id)` / `renderWait(id, onProgress)` / `onNotification(fn)`。
+
+## 进程守护（桌面主进程）
+
+`client/supervisor.js`（经 `require('@talekiln/core').createSupervisor` 导出）：
+
+```js
+const sup = createSupervisor({ bin, endpoint, logDir, env: { LYCORE_FFMPEG_DIR }, maxRestarts: 5,
+  backoff: { baseMs: 500, factor: 2, maxMs: 30000 }, healthIntervalMs: 5000, healthFailures: 3 });
+sup.on('restart', ({ attempt, delayMs, reason }) => {});
+sup.on('failed', ({ restarts, reason }) => { /* 超过上限：提示用户，不再重试 */ });
+await sup.start();            // 首次 core.hello 成功后 resolve；超过重启上限则 reject
+await sup.call('media.probe', { path });
+await sup.stop();             // 关连接 -> SIGTERM（Windows 为终止进程）-> 超时强杀
+```
+
+- 状态：`stopped → starting → running → backoff → starting …`，超过 `maxRestarts` 进入 `failed`；`stop()` 经 `stopping` 回到 `stopped`。
+- 健康探测：每 `healthIntervalMs` 调一次 `core.hello`（超时 `healthTimeoutMs`），连续 `healthFailures` 次失败视为挂死，杀掉后走重启。
+- 退避：第 n 次重启前等待 `baseMs * factor^(n-1)`，上限 `maxMs`；稳定运行超过 `resetAfterMs`（默认 60 秒）后计数清零。
+- 重启后 RPC 连接会重建，进行中的调用以 `connection closed` 失败，渲染任务需由上层按 `jobId` 重新发起。
+- 测试：`client/supervisor.test.js`（假子进程 + 假连接）、`client/supervisor.integration.test.js`（真实二进制，强杀后恢复）。
+
+## ffmpeg 供应
+
+`client/ffmpeg-provision.js`：`provision({ appDataDir, baseUrl? })` 把 LGPL 构建的 ffmpeg/ffprobe 下载到 `<appDataDir>/ffmpeg/<版本>/`，按 `ffmpeg-manifest.json` 里固定的 SHA-256 校验，支持断点续传，不一致即拒绝；返回目录用作 `LYCORE_FFMPEG_DIR`。默认下载地址是占位值，须由 `baseUrl` 或环境变量 `LYCORE_FFMPEG_BASE_URL` 配置；清单现为 TODO 占位，填入真实值前会直接拒绝。LGPL 合规与声明文本见 `docs/ffmpeg-lgpl.md`。测试：`client/ffmpeg-provision.test.js`。
 
 解析器的单元测试使用 `src/fixtures/` 下的 ffprobe/ffmpeg 输出样本。

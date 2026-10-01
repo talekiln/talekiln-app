@@ -11,6 +11,7 @@ pub const ERR_INVALID_REQUEST: i64 = -32600;
 pub const ERR_METHOD_NOT_FOUND: i64 = -32601;
 pub const ERR_INVALID_PARAMS: i64 = -32602;
 /// Application errors (implementation-defined range -32000..-32099).
+#[allow(dead_code)]
 pub const ERR_NOT_IMPLEMENTED: i64 = -32001;
 pub const ERR_INCOMPATIBLE_VERSION: i64 = -32010;
 
@@ -97,7 +98,10 @@ pub async fn handle_line(line: &str) -> Option<Value> {
         "render.start" => ff_result(id, crate::render::start(&params).await),
         "render.status" => ff_result(id, crate::render::status(&params)),
         "render.cancel" => ff_result(id, crate::render::cancel(&params)),
-        "licence.status" => err(id, ERR_NOT_IMPLEMENTED, &format!("not implemented: {method}"), None),
+        "licence.status" => match crate::licence::status(&params) {
+            Ok(v) => json!({ "jsonrpc": "2.0", "id": id, "result": v }),
+            Err(m) => err(id, ERR_INVALID_PARAMS, &m, None),
+        },
         _ => err(id, ERR_METHOD_NOT_FOUND, &format!("method not found: {method}"), None),
     })
 }
@@ -124,9 +128,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn stubs_not_implemented() {
+    async fn licence_status_needs_key_params() {
         let r = call(r#"{"jsonrpc":"2.0","id":1,"method":"licence.status"}"#).await;
-        assert_eq!(r["error"]["code"], ERR_NOT_IMPLEMENTED);
+        assert_eq!(r["error"]["code"], ERR_INVALID_PARAMS);
+        let r = call(r#"{"jsonrpc":"2.0","id":1,"method":"licence.status","params":{"jwks":{"keys":[]}}}"#).await;
+        assert_eq!(r["result"]["valid"], false);
+        assert_eq!(r["result"]["reason"], "no_token");
     }
 
     #[tokio::test]
