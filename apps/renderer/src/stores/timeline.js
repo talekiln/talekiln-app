@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { timelinesAPI } from '@/api/timelines'
+import { musicAPI } from '@/api/music'
+import { DEFAULT_MIX, mergeMix } from '@/utils/mixView'
 import { findClip, timelineDuration, splitClipAt, clipAt } from '@/utils/timelineMath'
 import { createHistory } from '@/utils/editHistory'
 import { createDraftWriter, draftKey, makeDraft, assessRecovery, mergeDraft } from '@/utils/draft'
@@ -200,14 +202,14 @@ export const useTimelineStore = defineStore('timeline', () => {
     if (!tl) return
     saving = true
     saveState.value = 'saving'
-    const snapshot = JSON.stringify(tl.tracks)
+    const snapshot = JSON.stringify([tl.tracks, tl.mix])
     try {
-      const saved = await timelinesAPI.save(tl.id, { episode_id: tl.episode_id, version: tl.version, tracks: tl.tracks })
+      const saved = await timelinesAPI.save(tl.id, { episode_id: tl.episode_id, version: tl.version, tracks: tl.tracks, mix: tl.mix })
       if (timeline.value === tl) {
         // 仅同步版本号，避免覆盖保存期间产生的新编辑
         tl.version = saved.version
         tl.duration_ms = saved.duration_ms
-        if (JSON.stringify(tl.tracks) !== snapshot) scheduleSave()
+        if (JSON.stringify([tl.tracks, tl.mix]) !== snapshot) scheduleSave()
         else {
           saveState.value = saveTimer ? 'dirty' : 'idle'
           // 已完整落库：本地草稿不再需要
@@ -253,6 +255,39 @@ export const useTimelineStore = defineStore('timeline', () => {
     })
   }
 
+  // ---------- 音乐与混音（保存在时间线 JSON：track.volume / timeline.mix） ----------
+
+  const mix = computed(() => mergeMix(timeline.value?.mix))
+  const musicTrack = computed(() => tracks.value.find((t) => t.kind === 'music') || null)
+
+  /** 修改混音设置（补丁：{ ducking: {enabled,gain,rampMs}, loudnorm }），值已由 mixView 规整 */
+  function updateMix(patch) {
+    if (!timeline.value) return false
+    timeline.value.mix = mergeMix(timeline.value.mix, patch)
+    scheduleSave()
+    return true
+  }
+
+  /** 设置某类轨道音量（0..4 的倍数，音乐轨 UI 用 0..2） */
+  function setTrackVolume(kind, volume) {
+    return mutate('轨道音量', () => {
+      const track = tracks.value.find((t) => t.kind === kind)
+      if (!track || !Number.isFinite(volume)) return false
+      track.volume = Math.min(4, Math.max(0, volume))
+    }, `vol-${kind}`)
+  }
+
+  /** 把音乐库中的曲目放到音乐轨：先落盘本地编辑，再由服务端追加并返回最新时间线 */
+  async function attachMusic(musicId, opts = {}) {
+    if (!timeline.value) return null
+    await flushPending()
+    const res = await musicAPI.attach(timeline.value.id, { music_id: musicId, ...opts })
+    setTimeline(res.timeline)
+    history.clear()
+    historyTick.value++
+    return res
+  }
+
   /** 切换轨道静音（trackId 缺省时取选中片段所在轨道） */
   function toggleMute(trackId) {
     const id = trackId ?? selected.value?.track?.id
@@ -292,8 +327,8 @@ export const useTimelineStore = defineStore('timeline', () => {
 
   return {
     timeline, episodeId, loading, missing, selectedClipId, saveState,
-    tracks, durationMs, selected, recovery, canUndo, canRedo,
-    load, assemble, flushPending, flushDraft, save, select, patchClip, deleteClip, splitAt, toggleMute,
+    tracks, durationMs, selected, recovery, mix, musicTrack, canUndo, canRedo,
+    load, assemble, updateMix, setTrackVolume, attachMusic, flushPending, flushDraft, save, select, patchClip, deleteClip, splitAt, toggleMute,
     undo, redo, applyRecovery, discardRecovery,
   }
 })
