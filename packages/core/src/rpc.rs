@@ -86,6 +86,14 @@ pub async fn handle_line(line: &str) -> Option<Value> {
         "core.hello" => hello(id, &params),
         "media.probe" => ff_result(id, crate::media::probe(&params).await),
         "encoder.detect" => ff_result(id, crate::encoder::detect(&params).await),
+        "render.plan" => {
+            let p = params.clone();
+            match tokio::task::spawn_blocking(move || crate::plan::plan(&p)).await {
+                Ok(Ok(v)) => json!({ "jsonrpc": "2.0", "id": id, "result": v }),
+                Ok(Err(m)) => err(id, ERR_INVALID_PARAMS, &m, None),
+                Err(e) => err(id, ERR_INVALID_PARAMS, &format!("plan failed: {e}"), None),
+            }
+        }
         "licence.status" | "render.start" => {
             err(id, ERR_NOT_IMPLEMENTED, &format!("not implemented: {method}"), None)
         }

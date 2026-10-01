@@ -1,7 +1,9 @@
 mod encoder;
 mod ffmpeg;
 mod media;
+mod plan;
 mod rpc;
+mod sha256;
 
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 
