@@ -99,17 +99,12 @@ async function createProjectFromStory(db, log, body) {
   return { ...ids, attempts: r.attempts, usage: r.usage };
 }
 
-/** Reorder: ids in desired order -> storyboard_number 1..n (must cover the whole episode). */
+/**
+ * Reorder: ids in desired order (must cover the whole episode).
+ * 顺序属于项目图（场景组内 children），经内核提交，storyboard_number 由物化重排为 1..n；跨段落移动的镜头并入新位置的段落。
+ */
 function reorderStoryboards(db, episodeId, ids) {
-  const rows = db.prepare('SELECT id FROM storyboards WHERE episode_id = ? AND deleted_at IS NULL').all(Number(episodeId));
-  const have = new Set(rows.map((r) => r.id));
-  const want = (ids || []).map(Number);
-  if (want.length !== have.size || new Set(want).size !== want.length || want.some((i) => !have.has(i))) {
-    const e = new Error('ids 必须恰好包含该剧集的全部分镜'); e.status = 400; throw e;
-  }
-  const upd = db.prepare('UPDATE storyboards SET storyboard_number = ?, updated_at = ? WHERE id = ?');
-  const now = new Date().toISOString();
-  db.transaction(() => want.forEach((id, i) => upd.run(i + 1, now, id)))();
+  require('../kernel/compat').reorderStoryboards(db, episodeId, ids);
 }
 
 module.exports = { shotToRow, validateRequest, resolveProvider, createProjectFromStory, reorderStoryboards, ASPECT_RATIOS };

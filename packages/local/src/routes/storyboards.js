@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const response = require('../response');
 const storyboardService = require('../services/storyboardService');
+const compat = require('../kernel/compat');
 const episodeStoryboardService = require('../services/episodeStoryboardService');
 const framePromptService = require('../services/framePromptService');
 const aiClient = require('../services/aiClient');
@@ -241,19 +242,21 @@ function routes(db, log) {
   return {
     create: (req, res) => {
       try {
-        const sb = storyboardService.createStoryboard(db, log, req.body || {});
+        const sb = compat.createStoryboard(db, log, req.body || {});
         response.created(res, sb);
       } catch (err) {
+        if (compat.handleError(res, err)) return;
         log.error('storyboards create', { error: err.message });
         response.internalError(res, err.message);
       }
     },
     insertBefore: (req, res) => {
       try {
-        const sb = storyboardService.insertBeforeStoryboard(db, log, req.params.id);
+        const sb = compat.insertBeforeStoryboard(db, log, req.params.id);
         if (!sb) return response.notFound(res, '目标分镜不存在');
         response.created(res, sb);
       } catch (err) {
+        if (compat.handleError(res, err)) return;
         log.error('storyboards insertBefore', { error: err.message });
         response.internalError(res, err.message);
       }
@@ -270,20 +273,22 @@ function routes(db, log) {
     },
     update: (req, res) => {
       try {
-        const sb = storyboardService.updateStoryboard(db, log, req.params.id, req.body || {});
+        const sb = compat.updateStoryboard(db, log, req.params.id, req.body || {});
         if (!sb) return response.notFound(res, '分镜不存在');
         response.success(res, sb);
       } catch (err) {
+        if (compat.handleError(res, err)) return;
         log.error('storyboards update', { error: err.message });
         response.internalError(res, err.message);
       }
     },
     delete: (req, res) => {
       try {
-        const ok = storyboardService.deleteStoryboard(db, log, req.params.id);
+        const ok = compat.deleteStoryboard(db, log, req.params.id);
         if (!ok) return response.notFound(res, '分镜不存在');
         response.success(res, { message: '删除成功' });
       } catch (err) {
+        if (compat.handleError(res, err)) return;
         log.error('storyboards delete', { error: err.message });
         response.internalError(res, err.message);
       }
@@ -1015,11 +1020,8 @@ function routes(db, log) {
       }
       const text = String(finalRaw).trim();
       const nowIso = new Date().toISOString();
-      db.prepare('UPDATE storyboards SET video_prompt = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL').run(
-        text,
-        nowIso,
-        sbId
-      );
+      // video_prompt 是图里的镜头字段：经内核提交，物化时才不会被图里的旧值盖回去
+      compat.setShotFields(db, [{ id: sbId, patch: { video_prompt: text } }]);
       log.info('[分镜] polishClassicVideoPromptStream 完成', { id: sbId, len: text.length });
       writeNd({ type: 'done', video_prompt: text });
       res.end();
@@ -1076,36 +1078,42 @@ function routes(db, log) {
 
         let updated = 0;
         const now = new Date().toISOString();
+        // lighting_style / depth_of_field 不在项目图里，照旧直接写；movement 是图里的镜头字段，批量经内核一次提交。
         const stmt = db.prepare(
-          'UPDATE storyboards SET movement = COALESCE(?, movement), lighting_style = COALESCE(?, lighting_style), depth_of_field = COALESCE(?, depth_of_field), updated_at = ? WHERE id = ?'
+          'UPDATE storyboards SET lighting_style = COALESCE(?, lighting_style), depth_of_field = COALESCE(?, depth_of_field), updated_at = ? WHERE id = ?'
         );
         const stmtOverwrite = db.prepare(
-          'UPDATE storyboards SET movement = ?, lighting_style = ?, depth_of_field = ?, updated_at = ? WHERE id = ?'
+          'UPDATE storyboards SET lighting_style = ?, depth_of_field = ?, updated_at = ? WHERE id = ?'
         );
+        const movementChanges = [];
 
-        for (const row of rows) {
-          const inferred = angleService.inferPhotographyParams(row);
-          // 只更新缺少的字段（除非 overwrite=true）
-          const newMovement   = overwrite ? inferred.movement   : (row.movement      ? null : inferred.movement);
-          const newLighting   = overwrite ? inferred.lighting_style : (row.lighting_style ? null : inferred.lighting_style);
-          const newDof        = overwrite ? inferred.depth_of_field : (row.depth_of_field  ? null : inferred.depth_of_field);
+        db.transaction(() => {
+          for (const row of rows) {
+            const inferred = angleService.inferPhotographyParams(row);
+            // 只更新缺少的字段（除非 overwrite=true）
+            const newMovement   = overwrite ? inferred.movement   : (row.movement      ? null : inferred.movement);
+            const newLighting   = overwrite ? inferred.lighting_style : (row.lighting_style ? null : inferred.lighting_style);
+            const newDof        = overwrite ? inferred.depth_of_field : (row.depth_of_field  ? null : inferred.depth_of_field);
 
-          if (overwrite) {
-            if (inferred.movement || inferred.lighting_style || inferred.depth_of_field) {
-              stmtOverwrite.run(inferred.movement, inferred.lighting_style, inferred.depth_of_field, now, row.id);
-              updated++;
-            }
-          } else {
-            if (newMovement || newLighting || newDof) {
-              stmt.run(newMovement, newLighting, newDof, now, row.id);
+            if (overwrite) {
+              if (inferred.movement || inferred.lighting_style || inferred.depth_of_field) {
+                movementChanges.push({ id: row.id, patch: { movement: inferred.movement || '' } });
+                stmtOverwrite.run(inferred.lighting_style, inferred.depth_of_field, now, row.id);
+                updated++;
+              }
+            } else if (newMovement || newLighting || newDof) {
+              if (newMovement) movementChanges.push({ id: row.id, patch: { movement: newMovement } });
+              stmt.run(newLighting, newDof, now, row.id);
               updated++;
             }
           }
-        }
+          compat.setShotFields(db, movementChanges);
+        })();
 
         log.info('[分镜] batchInferParams 完成', { episode_id: episodeId, total: rows.length, updated, overwrite });
         response.success(res, { total: rows.length, updated });
       } catch (err) {
+        if (compat.handleError(res, err)) return;
         log.error('storyboards batchInferParams', { error: err.message });
         response.internalError(res, err.message);
       }

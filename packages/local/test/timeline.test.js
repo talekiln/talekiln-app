@@ -20,10 +20,12 @@ function openDb() {
   }
   db.exec(MIG('24_timelines.sql'));
   db.exec(MIG('26_music_library_and_mix.sql'));
+  db.exec(MIG('27_project_graphs.sql'));
   return db;
 }
 
 function seedStoryboards(db, episodeId = 1) {
+  db.prepare("INSERT OR IGNORE INTO episodes (id, drama_id, script_content) VALUES (?, 1, '')").run(episodeId);
   const ins = db.prepare(`INSERT INTO storyboards (episode_id, storyboard_number, duration, dialogue, video_url, local_path, narration_audio_local_path, audio_local_path, deleted_at)
     VALUES (@episode_id, @n, @duration, @dialogue, @video_url, @local_path, @narr, @audio, @deleted)`);
   const rows = [

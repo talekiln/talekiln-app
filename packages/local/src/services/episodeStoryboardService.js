@@ -632,6 +632,7 @@ function saveStoryboards(db, log, episodeId, storyboards, cfg, styleOverride, sk
     const existing = db.prepare('SELECT id FROM storyboards WHERE episode_id = ? AND deleted_at IS NULL').all(episodeIdNum);
     if (existing.length > 0) {
       db.prepare('UPDATE storyboards SET deleted_at = ? WHERE episode_id = ?').run(now, episodeIdNum);
+      require('../kernel/compat').resetGraph(db, episodeIdNum); // 整集重建：旧项目图作废，下次写入从新分镜重新导入
     }
   }
 
@@ -867,6 +868,7 @@ async function processStoryboardGeneration(db, log, cfg, taskId, episodeId, mode
     // 提前删除旧分镜，为增量流式保存腾出位置
     const deleteNow = new Date().toISOString();
     db.prepare('UPDATE storyboards SET deleted_at = ? WHERE episode_id = ? AND deleted_at IS NULL').run(deleteNow, episodeIdNum);
+    require('../kernel/compat').resetGraph(db, episodeIdNum); // 整集重建：旧项目图作废，下次写入从新分镜重新导入
 
     // 不使用 json_mode：response_format:json_object 要求返回 JSON 对象而非数组，会导致模型包装成
     // {"storyboards":[...]} 或产生乱码 key，改由 extractFirstArray 统一处理任意包装格式。
@@ -1380,7 +1382,8 @@ function rebuildVideoPromptForStoryboard(db, log, storyboardId) {
 
   const videoPrompt = generateVideoPrompt(sbForPrompt, finalStyle, videoRatio);
   const now = new Date().toISOString();
-  db.prepare('UPDATE storyboards SET video_prompt = ?, updated_at = ? WHERE id = ?').run(videoPrompt, now, sbId);
+  // video_prompt 是项目图里的镜头字段：经内核提交（物化回旧表），不能直接写旧表
+  require('../kernel/compat').setShotFields(db, [{ id: sbId, patch: { video_prompt: videoPrompt } }]);
 
   if (log?.info) {
     log.info('[分镜] 已按最新规则重建 video_prompt', {
@@ -1558,26 +1561,28 @@ function splitStoryboardByAudio(db, log, storyboardId) {
   const plans = buildSplitPlansFromStoryboard(row);
   const extraCount = plans.length - 1;
   const now = new Date().toISOString();
-  const episodeId = row.episode_id;
-  const baseNumber = Number(row.storyboard_number) || 0;
+  const compat = require('../kernel/compat');
 
-  if (extraCount > 0) {
+  // 镜头与台词行的改写/新建走内核（拆出的新镜头插在原镜头之后，编号由物化顺延）；
+  // 图里没有的列（result、scene_id、角度参数、画面风格……）与素材列照旧直接写。
+  const storyboardIds = db.transaction(() => {
+    const ids = compat.splitShotByPlans(db, row, plans);
     db.prepare(
-      `UPDATE storyboards SET storyboard_number = storyboard_number + ?, updated_at = ?
-       WHERE episode_id = ? AND storyboard_number > ? AND deleted_at IS NULL`
-    ).run(extraCount, now, episodeId, baseNumber);
-  }
-
-  const storyboardIds = [];
-  updateStoryboardAsSplitSegment(db, sbId, row, plans[0], now);
-  storyboardIds.push(sbId);
-
-  for (let i = 1; i < plans.length; i++) {
-    const newNum = baseNumber + i;
-    const newId = persistSplitStoryboardRow(db, episodeId, newNum, row, plans[i], now);
-    copyStoryboardAssetLinks(db, sbId, newId);
-    storyboardIds.push(newId);
-  }
+      `UPDATE storyboards SET result = ?, universal_segment_text = NULL, video_url = NULL, audio_local_path = NULL,
+        narration_audio_local_path = NULL, updated_at = ? WHERE id = ? AND deleted_at IS NULL`
+    ).run(plans[0].result, now, ids[0]);
+    for (let i = 1; i < plans.length; i++) {
+      db.prepare(
+        `UPDATE storyboards SET scene_id = ?, layout_description = ?, result = ?, angle_h = ?, angle_v = ?, angle_s = ?,
+          lighting_style = ?, depth_of_field = ?, creation_mode = ?, updated_at = ? WHERE id = ?`
+      ).run(
+        row.scene_id ?? null, row.layout_description ?? null, plans[i].result, row.angle_h ?? null, row.angle_v ?? null, row.angle_s ?? null,
+        row.lighting_style ?? null, row.depth_of_field ?? null, row.creation_mode === 'universal' ? 'universal' : 'classic', now, ids[i]
+      );
+      copyStoryboardAssetLinks(db, sbId, ids[i]);
+    }
+    return ids;
+  })();
 
   for (const id of storyboardIds) {
     rebuildVideoPromptForStoryboard(db, log, id);
