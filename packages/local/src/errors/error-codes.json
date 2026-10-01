@@ -2,57 +2,293 @@
   "version": 1,
   "note": "统一错误码表（唯一数据源）。local 服务响应与渲染进程 toast 共用；新增错误码必须先加在这里，test/errorCodes.test.js 会校验与代码中的常量一致。message 面向用户，action 为建议操作。core 的数字码以字符串作键。",
   "entries": {
-    "INVALID_API_KEY": { "scope": "provider", "message": "API Key 无效或已过期，请检查设置中的 Key", "action": "在设置里重新填写 Key，并点「连通测试」确认" },
-    "MODEL_NOT_ENABLED": { "scope": "provider", "message": "该模型未开通或无权限，请在服务商控制台开通后重试", "action": "打开服务商控制台开通该模型，或在设置里换一个已开通的模型" },
-    "INSUFFICIENT_BALANCE": { "scope": "provider", "message": "账户余额不足或已欠费，请充值后重试", "action": "到服务商控制台充值，到账后在任务中心点「重试」" },
-    "RATE_LIMITED": { "scope": "provider", "message": "请求过于频繁或额度受限，请稍后重试", "action": "无需操作，任务会自动退避重试；长期出现请降低并发或联系服务商提额" },
-    "INVALID_PARAMS": { "scope": "provider", "message": "请求参数不合法", "action": "检查提示词长度、图片尺寸、时长等参数后重试" },
-    "TASK_FAILED": { "scope": "provider", "message": "生成任务失败", "action": "在任务中心查看详情，调整提示词或参数后点「重试」" },
-    "NETWORK": { "scope": "provider", "message": "网络请求失败", "action": "检查网络与代理设置，恢复后点「重试」" },
-    "BAD_RESPONSE": { "scope": "provider", "message": "服务商返回格式异常", "action": "稍后重试；反复出现请在反馈中附上日志" },
-    "PROVIDER_NOT_AVAILABLE": { "scope": "provider", "message": "该服务商暂未开放", "action": "在设置中改用「百炼」或「方舟」" },
-    "CAPABILITY_NOT_SUPPORTED": { "scope": "provider", "message": "该服务商不支持此能力", "action": "在设置中为该功能换一个支持的服务商或模型" },
-    "SPEND_LIMIT": { "scope": "provider", "message": "已达到费用上限，任务未提交。请在设置中调整单次/月度上限后重试", "action": "调整单次或月度费用上限后重新提交（费用设置界面尚未提供时，请联系管理员调整）" },
-    "UNKNOWN": { "scope": "provider", "message": "未知错误", "action": "稍后重试；反复出现请在反馈中附上日志" },
-
-    "SUBMIT_UNCERTAIN": { "scope": "local", "message": "提交结果不确定：请求可能已到达服务商。为避免重复扣费未自动重试，请先到服务商控制台确认后再手动重试", "action": "先到服务商控制台确认是否已产生该任务；确认没有后再强制重试" },
-    "SECRET_STORE_UNAVAILABLE": { "scope": "local", "message": "系统密钥加密不可用，无法保存 API Key", "action": "确认已登录 Windows 用户账户且系统凭据服务正常；Key 不会以明文保存" },
-    "BAD_REQUEST": { "scope": "local", "message": "请求不合法", "action": "检查输入内容后重试" },
-    "NOT_FOUND": { "scope": "local", "message": "找不到对应的数据", "action": "刷新页面；数据可能已被删除" },
-    "FORBIDDEN": { "scope": "local", "message": "没有权限执行该操作", "action": "重启应用后重试；仍失败请反馈" },
-    "CONFLICT": { "scope": "local", "message": "当前状态不允许该操作", "action": "刷新任务列表查看最新状态后再操作" },
-    "INTERNAL_ERROR": { "scope": "local", "message": "本地服务出错", "action": "重试一次；仍失败请导出日志反馈" },
-    "SCRIPTGEN_FAILED": { "scope": "local", "message": "剧本/分镜生成失败", "action": "缩短或调整故事梗概后重试" },
-    "STORYBOARD_INVALID": { "scope": "local", "message": "模型返回的分镜不符合格式，多次重试仍失败", "action": "重新生成，或换一个文本模型" },
-    "MODEL_ARK_ASSET": { "scope": "local", "message": "方舟素材库请求失败", "action": "检查方舟 Key 与素材库配置后重试" },
-    "NO_STORYBOARDS": { "scope": "local", "message": "还没有分镜，无法生成时间线", "action": "先在分镜表中生成分镜" },
-    "OVERLAP": { "scope": "local", "message": "同一轨道上的片段不能重叠", "action": "拖开或缩短重叠的片段" },
-
-    "invalid_invite": { "scope": "cloud", "message": "邀请码无效、已用完或已过期", "action": "向邀请人确认邀请码，或索取新的邀请码" },
-    "email_taken": { "scope": "cloud", "message": "该邮箱已注册", "action": "直接登录；忘记密码请联系管理员" },
-    "invalid_credentials": { "scope": "cloud", "message": "邮箱或密码不正确", "action": "检查后重新输入" },
-    "invalid_token": { "scope": "cloud", "message": "登录已失效", "action": "请重新登录" },
-    "token_reuse": { "scope": "cloud", "message": "检测到登录凭据被重复使用，账号已强制下线", "action": "请重新登录；若不是你本人操作，请立即修改密码并联系管理员" },
-    "forbidden": { "scope": "cloud", "message": "没有权限执行该操作", "action": "确认账号权限，或联系管理员" },
-    "device_required": { "scope": "cloud", "message": "需要先登记本设备", "action": "重新登录以登记设备" },
-    "device_revoked": { "scope": "cloud", "message": "本设备已被停用", "action": "联系管理员恢复，或在其他设备上重新登记" },
-    "not_found": { "scope": "cloud", "message": "找不到对应的记录", "action": "刷新后重试" },
-    "bad_request": { "scope": "cloud", "message": "请求格式不正确", "action": "升级到最新版本后重试" },
-    "http_error": { "scope": "cloud", "message": "云端服务返回错误", "action": "稍后重试" },
-    "internal_error": { "scope": "cloud", "message": "云端服务暂时不可用", "action": "稍后重试；持续出现请联系管理员" },
-
-    "-32700": { "scope": "core", "name": "ERR_PARSE", "message": "渲染引擎收到无法解析的指令", "action": "重启应用；反复出现请反馈日志" },
-    "-32600": { "scope": "core", "name": "ERR_INVALID_REQUEST", "message": "渲染引擎收到不合法的请求", "action": "重启应用；反复出现请反馈日志" },
-    "-32601": { "scope": "core", "name": "ERR_METHOD_NOT_FOUND", "message": "渲染引擎不支持该操作", "action": "客户端与引擎版本可能不一致，请重新安装最新版" },
-    "-32602": { "scope": "core", "name": "ERR_INVALID_PARAMS", "message": "渲染参数不合法或找不到该渲染任务", "action": "检查时间线与导出设置后重试" },
-    "-32001": { "scope": "core", "name": "ERR_NOT_IMPLEMENTED", "message": "该功能在当前版本尚未实现", "action": "升级到最新版本" },
-    "-32010": { "scope": "core", "name": "ERR_INCOMPATIBLE_VERSION", "message": "渲染引擎版本与客户端不兼容", "action": "重新安装最新版安装包" },
-    "-32020": { "scope": "core", "name": "ERR_FFMPEG_MISSING", "message": "找不到 FFmpeg", "action": "重新安装应用；若被杀毒软件隔离，请恢复并加入信任" },
-    "-32021": { "scope": "core", "name": "ERR_FFMPEG_FAILED", "message": "FFmpeg 处理失败", "action": "检查素材文件是否完整；尝试改用软件编码后重新导出" },
-    "-32022": { "scope": "core", "name": "ERR_FFMPEG_TIMEOUT", "message": "FFmpeg 处理超时", "action": "缩短时间线或降低分辨率后重新导出" },
-    "-32023": { "scope": "core", "name": "ERR_FFMPEG_OUTPUT", "message": "FFmpeg 输出文件无效", "action": "检查磁盘空间与输出路径权限后重新导出" },
-    "-32030": { "scope": "core", "name": "ERR_SUBTITLES_UNAVAILABLE", "message": "当前引擎无法烧录字幕", "action": "关闭字幕烧录导出，或重新安装最新版" },
-    "-32031": { "scope": "core", "name": "ERR_MISSING_ASSETS", "message": "时间线引用的素材文件缺失", "action": "到时间线检查红色标记的片段，重新生成或替换素材" },
-    "-32032": { "scope": "core", "name": "ERR_RENDER_FAILED", "message": "渲染失败", "action": "查看日志；可改用软件编码或缩短时间线后重试" }
+    "INVALID_API_KEY": {
+      "scope": "provider",
+      "message": "API Key 无效或已过期，请检查设置中的 Key",
+      "action": "在设置里重新填写 Key，并点「连通测试」确认"
+    },
+    "MODEL_NOT_ENABLED": {
+      "scope": "provider",
+      "message": "该模型未开通或无权限，请在服务商控制台开通后重试",
+      "action": "打开服务商控制台开通该模型，或在设置里换一个已开通的模型"
+    },
+    "INSUFFICIENT_BALANCE": {
+      "scope": "provider",
+      "message": "账户余额不足或已欠费，请充值后重试",
+      "action": "到服务商控制台充值，到账后在任务中心点「重试」"
+    },
+    "RATE_LIMITED": {
+      "scope": "provider",
+      "message": "请求过于频繁或额度受限，请稍后重试",
+      "action": "无需操作，任务会自动退避重试；长期出现请降低并发或联系服务商提额"
+    },
+    "INVALID_PARAMS": {
+      "scope": "provider",
+      "message": "请求参数不合法",
+      "action": "检查提示词长度、图片尺寸、时长等参数后重试"
+    },
+    "TASK_FAILED": {
+      "scope": "provider",
+      "message": "生成任务失败",
+      "action": "在任务中心查看详情，调整提示词或参数后点「重试」"
+    },
+    "NETWORK": {
+      "scope": "provider",
+      "message": "网络请求失败",
+      "action": "检查网络与代理设置，恢复后点「重试」"
+    },
+    "BAD_RESPONSE": {
+      "scope": "provider",
+      "message": "服务商返回格式异常",
+      "action": "稍后重试；反复出现请在反馈中附上日志"
+    },
+    "PROVIDER_NOT_AVAILABLE": {
+      "scope": "provider",
+      "message": "该服务商暂未开放",
+      "action": "在设置中改用「百炼」或「方舟」"
+    },
+    "CAPABILITY_NOT_SUPPORTED": {
+      "scope": "provider",
+      "message": "该服务商不支持此能力",
+      "action": "在设置中为该功能换一个支持的服务商或模型"
+    },
+    "SPEND_LIMIT": {
+      "scope": "provider",
+      "message": "已达到费用上限，任务未提交。请在设置中调整单次/月度上限后重试",
+      "action": "调整单次或月度费用上限后重新提交（费用设置界面尚未提供时，请联系管理员调整）"
+    },
+    "UNKNOWN": {
+      "scope": "provider",
+      "message": "未知错误",
+      "action": "稍后重试；反复出现请在反馈中附上日志"
+    },
+    "SUBMIT_UNCERTAIN": {
+      "scope": "local",
+      "message": "提交结果不确定：请求可能已到达服务商。为避免重复扣费未自动重试，请先到服务商控制台确认后再手动重试",
+      "action": "先到服务商控制台确认是否已产生该任务；确认没有后再强制重试"
+    },
+    "SECRET_STORE_UNAVAILABLE": {
+      "scope": "local",
+      "message": "系统密钥加密不可用，无法保存 API Key",
+      "action": "确认已登录 Windows 用户账户且系统凭据服务正常；Key 不会以明文保存"
+    },
+    "BAD_REQUEST": {
+      "scope": "local",
+      "message": "请求不合法",
+      "action": "检查输入内容后重试"
+    },
+    "NOT_FOUND": {
+      "scope": "local",
+      "message": "找不到对应的数据",
+      "action": "刷新页面；数据可能已被删除"
+    },
+    "FORBIDDEN": {
+      "scope": "local",
+      "message": "没有权限执行该操作",
+      "action": "重启应用后重试；仍失败请反馈"
+    },
+    "CONFLICT": {
+      "scope": "local",
+      "message": "当前状态不允许该操作",
+      "action": "刷新任务列表查看最新状态后再操作"
+    },
+    "INTERNAL_ERROR": {
+      "scope": "local",
+      "message": "本地服务出错",
+      "action": "重试一次；仍失败请导出日志反馈"
+    },
+    "SCRIPTGEN_FAILED": {
+      "scope": "local",
+      "message": "剧本/分镜生成失败",
+      "action": "缩短或调整故事梗概后重试"
+    },
+    "STORYBOARD_INVALID": {
+      "scope": "local",
+      "message": "模型返回的分镜不符合格式，多次重试仍失败",
+      "action": "重新生成，或换一个文本模型"
+    },
+    "MODEL_ARK_ASSET": {
+      "scope": "local",
+      "message": "方舟素材库请求失败",
+      "action": "检查方舟 Key 与素材库配置后重试"
+    },
+    "NO_STORYBOARDS": {
+      "scope": "local",
+      "message": "还没有分镜，无法生成时间线",
+      "action": "先在分镜表中生成分镜"
+    },
+    "OVERLAP": {
+      "scope": "local",
+      "message": "同一轨道上的片段不能重叠",
+      "action": "拖开或缩短重叠的片段"
+    },
+    "invalid_invite": {
+      "scope": "cloud",
+      "message": "邀请码无效、已用完或已过期",
+      "action": "向邀请人确认邀请码，或索取新的邀请码"
+    },
+    "email_taken": {
+      "scope": "cloud",
+      "message": "该邮箱已注册",
+      "action": "直接登录；忘记密码请联系管理员"
+    },
+    "invalid_credentials": {
+      "scope": "cloud",
+      "message": "邮箱或密码不正确",
+      "action": "检查后重新输入"
+    },
+    "invalid_token": {
+      "scope": "cloud",
+      "message": "登录已失效",
+      "action": "请重新登录"
+    },
+    "token_reuse": {
+      "scope": "cloud",
+      "message": "检测到登录凭据被重复使用，账号已强制下线",
+      "action": "请重新登录；若不是你本人操作，请立即修改密码并联系管理员"
+    },
+    "forbidden": {
+      "scope": "cloud",
+      "message": "没有权限执行该操作",
+      "action": "确认账号权限，或联系管理员"
+    },
+    "device_required": {
+      "scope": "cloud",
+      "message": "需要先登记本设备",
+      "action": "重新登录以登记设备"
+    },
+    "device_revoked": {
+      "scope": "cloud",
+      "message": "本设备已被停用",
+      "action": "联系管理员恢复，或在其他设备上重新登记"
+    },
+    "not_found": {
+      "scope": "cloud",
+      "message": "找不到对应的记录",
+      "action": "刷新后重试"
+    },
+    "bad_request": {
+      "scope": "cloud",
+      "message": "请求格式不正确",
+      "action": "升级到最新版本后重试"
+    },
+    "http_error": {
+      "scope": "cloud",
+      "message": "云端服务返回错误",
+      "action": "稍后重试"
+    },
+    "internal_error": {
+      "scope": "cloud",
+      "message": "云端服务暂时不可用",
+      "action": "稍后重试；持续出现请联系管理员"
+    },
+    "-32700": {
+      "scope": "core",
+      "name": "ERR_PARSE",
+      "message": "渲染引擎收到无法解析的指令",
+      "action": "重启应用；反复出现请反馈日志"
+    },
+    "-32600": {
+      "scope": "core",
+      "name": "ERR_INVALID_REQUEST",
+      "message": "渲染引擎收到不合法的请求",
+      "action": "重启应用；反复出现请反馈日志"
+    },
+    "-32601": {
+      "scope": "core",
+      "name": "ERR_METHOD_NOT_FOUND",
+      "message": "渲染引擎不支持该操作",
+      "action": "客户端与引擎版本可能不一致，请重新安装最新版"
+    },
+    "-32602": {
+      "scope": "core",
+      "name": "ERR_INVALID_PARAMS",
+      "message": "渲染参数不合法或找不到该渲染任务",
+      "action": "检查时间线与导出设置后重试"
+    },
+    "-32001": {
+      "scope": "core",
+      "name": "ERR_NOT_IMPLEMENTED",
+      "message": "该功能在当前版本尚未实现",
+      "action": "升级到最新版本"
+    },
+    "-32010": {
+      "scope": "core",
+      "name": "ERR_INCOMPATIBLE_VERSION",
+      "message": "渲染引擎版本与客户端不兼容",
+      "action": "重新安装最新版安装包"
+    },
+    "-32020": {
+      "scope": "core",
+      "name": "ERR_FFMPEG_MISSING",
+      "message": "找不到 FFmpeg",
+      "action": "重新安装应用；若被杀毒软件隔离，请恢复并加入信任"
+    },
+    "-32021": {
+      "scope": "core",
+      "name": "ERR_FFMPEG_FAILED",
+      "message": "FFmpeg 处理失败",
+      "action": "检查素材文件是否完整；尝试改用软件编码后重新导出"
+    },
+    "-32022": {
+      "scope": "core",
+      "name": "ERR_FFMPEG_TIMEOUT",
+      "message": "FFmpeg 处理超时",
+      "action": "缩短时间线或降低分辨率后重新导出"
+    },
+    "-32023": {
+      "scope": "core",
+      "name": "ERR_FFMPEG_OUTPUT",
+      "message": "FFmpeg 输出文件无效",
+      "action": "检查磁盘空间与输出路径权限后重新导出"
+    },
+    "-32030": {
+      "scope": "core",
+      "name": "ERR_SUBTITLES_UNAVAILABLE",
+      "message": "当前引擎无法烧录字幕",
+      "action": "关闭字幕烧录导出，或重新安装最新版"
+    },
+    "-32031": {
+      "scope": "core",
+      "name": "ERR_MISSING_ASSETS",
+      "message": "时间线引用的素材文件缺失",
+      "action": "到时间线检查红色标记的片段，重新生成或替换素材"
+    },
+    "-32032": {
+      "scope": "core",
+      "name": "ERR_RENDER_FAILED",
+      "message": "渲染失败",
+      "action": "查看日志；可改用软件编码或缩短时间线后重试"
+    },
+    "account_disabled": {
+      "scope": "cloud",
+      "message": "账号已被停用",
+      "action": "请联系管理员"
+    },
+    "rate_limited": {
+      "scope": "cloud",
+      "message": "请求过于频繁",
+      "action": "稍等几分钟再试"
+    },
+    "payload_too_large": {
+      "scope": "cloud",
+      "message": "提交的内容太大",
+      "action": "减小附件或文字后重试"
+    },
+    "CLOUD_ERROR": {
+      "scope": "local",
+      "message": "云端服务暂时不可用",
+      "action": "检查网络后重试；离线时可继续使用已缓存的授权"
+    },
+    "UPSTREAM_ERROR": {
+      "scope": "local",
+      "message": "上游服务返回错误",
+      "action": "稍后重试；仍失败请导出日志反馈"
+    },
+    "FILE_TOO_LARGE": {
+      "scope": "local",
+      "message": "文件太大",
+      "action": "换一个小于 50 MB 的文件"
+    }
   }
 }
