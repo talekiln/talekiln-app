@@ -1,0 +1,22 @@
+{
+  "_comment": "TODO: 这是占位清单。发布前必须替换为真实的 LGPL ffmpeg 构建的版本号、文件名、sha256、大小，并把对应文件放到下载地址。含 TODO 或非 64 位十六进制的 sha256 会被下载模块直接拒绝，不会发起任何网络请求。",
+  "schema": 1,
+  "version": "TODO-ffmpeg-version",
+  "license": "LGPL-2.1-or-later",
+  "licenseNote": "TODO: 填写构建来源、configure 参数（不得含 --enable-gpl / --enable-nonfree）、对应源码获取地址，见 docs/ffmpeg-lgpl.md",
+  "sourceUrl": "TODO: 对应版本 ffmpeg 源码与构建脚本的公开地址",
+  "builds": {
+    "win32-x64": {
+      "files": [
+        { "name": "ffmpeg.exe", "path": "TODO/win32-x64/ffmpeg.exe", "sha256": "TODO_SHA256_FFMPEG_WIN32_X64", "size": null },
+        { "name": "ffprobe.exe", "path": "TODO/win32-x64/ffprobe.exe", "sha256": "TODO_SHA256_FFPROBE_WIN32_X64", "size": null }
+      ]
+    },
+    "linux-x64": {
+      "files": [
+        { "name": "ffmpeg", "path": "TODO/linux-x64/ffmpeg", "sha256": "TODO_SHA256_FFMPEG_LINUX_X64", "size": null },
+        { "name": "ffprobe", "path": "TODO/linux-x64/ffprobe", "sha256": "TODO_SHA256_FFPROBE_LINUX_X64", "size": null }
+      ]
+    }
+  }
+}
