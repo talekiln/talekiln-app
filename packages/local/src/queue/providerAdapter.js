@@ -226,7 +226,8 @@ function createQueueProvider(provider, { storageDir, listConfigs, createProvider
       if (task.kind !== 'video') return { status: 'failed', errorCode: ERROR_CODES.BAD_RESPONSE, errorMessage: `unexpected vendor id for ${task.kind}` };
       const { facade } = resolve('video');
       const r = await facade.video.poll(provider, { taskId: id });
-      if (r.status === 'succeeded') return { status: 'succeeded', result: { url: r.videoUrl } };
+      // usage (billed duration / resolution) travels with the result so write-back can record the real clip length.
+      if (r.status === 'succeeded') return { status: 'succeeded', result: r.usage ? { url: r.videoUrl, usage: r.usage } : { url: r.videoUrl } };
       if (r.status === 'failed') {
         const e = r.error;
         return { status: 'failed', errorCode: e && e.code, errorMessage: e && e.message };

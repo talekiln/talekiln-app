@@ -226,8 +226,11 @@ function shotRows(graph) {
     const by = (kind) => lines.filter((p) => p.kind === kind).map((p) => p.text).join('\n');
     const parts = kernel.partsOfShot(graph, r.shot_id);
     const hasAsset = !!((parts.video && kernel.adoptedVersion(graph, parts.video)) || (parts.image && kernel.adoptedVersion(graph, parts.image)));
+    const ia = parts.image && kernel.adoptedVersion(graph, parts.image);
+    const imageRef = ia && ia.asset && ia.asset.ref ? String(ia.asset.ref) : null;
     return {
       ...r,
+      image_ref: imageRef,
       segment_index: groupIndex.get(r.scene_group_id), segment_title: r.scene_title || '',
       dialogue: by('dialogue'), narration: by('narration'), action: by('action'),
       has_asset: hasAsset,
@@ -274,6 +277,15 @@ function writeStoryboards(db, ep, graph) {
       }
       // video_url：图里没有采用视频时不清空（旧生成流程还会直接写这一列，见报告“绕过内核的旧写路径”）
       if (r.video_url && existing.video_url !== r.video_url) { sets.push('video_url = ?'); vals.push(r.video_url); }
+      // 首帧图：采用的图片落到旧表的 local_path（存储目录内的相对路径）或 image_url（网络地址）；同样只增不清
+      if (r.image_ref) {
+        const rel = r.image_ref.startsWith('/static/') ? r.image_ref.slice('/static/'.length) : r.image_ref;
+        const remote = /^(https?:|data:)/i.test(rel);
+        if (remote ? existing.image_url !== rel : existing.local_path !== rel) {
+          sets.push(remote ? 'image_url = ?' : 'local_path = ?'); vals.push(rel);
+          if (remote && existing.local_path) sets.push('local_path = NULL'); // 页面优先读 local_path，旧值会盖住新图
+        }
+      }
       const status = deriveStatus(existing.status, r.has_asset);
       if (status !== existing.status) { sets.push('status = ?'); vals.push(status); }
       if (existing.deleted_at != null) sets.push('deleted_at = NULL');

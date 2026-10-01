@@ -360,6 +360,13 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
   r.post('/episodes/:id/redo', kernelRoutes.postRedo);
   r.post('/episodes/:id/import-legacy', kernelRoutes.importLegacy);
 
+  // ---------- generation (I1): image / video through the durable queue, results land in the kernel ----------
+  if (extras.generation) {
+    const gen = require('./generation')(extras.generation, log, { legacyEnabled: !!(cfg && cfg.generation && cfg.generation.legacy_enabled === true) });
+    r.post('/episodes/:id/generate', gen.generate);
+    r.get('/episodes/:id/generation/status', gen.status);
+  }
+
   // ---------- export / render (G06) and AIGC marking settings (G04) ----------
   {
     let exporter = null;
