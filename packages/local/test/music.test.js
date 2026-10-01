@@ -19,6 +19,7 @@ function setup() {
   db.exec(MIG('01_init.sql'));
   db.exec(MIG('24_timelines.sql'));
   db.exec(MIG('26_music_library_and_mix.sql'));
+  db.exec(MIG('27_project_graphs.sql'));
   const storageRoot = path.join(dir, 'storage');
   fs.mkdirSync(storageRoot);
   const library = music.createMusicLibrary(db, { storageRoot, probe: async () => 12000 });
@@ -155,8 +156,11 @@ describe('attach to timeline and mix settings', () => {
 describe('music HTTP routes', () => {
   it('uploads, lists, attaches and deletes through express', async () => {
     const { db, library } = setup();
+    // 音乐挂载现在经项目图提交：需要剧集与对应的分镜（视频片段必须属于某个分镜）
+    db.prepare("INSERT INTO episodes (id, drama_id, script_content) VALUES (1, 1, '')").run();
+    const sb = Number(db.prepare("INSERT INTO storyboards (episode_id, storyboard_number, duration, video_url) VALUES (1, 1, 20, 'v/1.mp4')").run().lastInsertRowid);
     const t = tl.saveTimeline(db, { episode_id: 1, tracks: [
-      { kind: 'video', volume: 1, clips: [{ id: 'v1', start_ms: 0, duration_ms: 20000, asset_ref: 'v/1.mp4', asset_kind: 'video', src_in_ms: 0, src_out_ms: 20000 }] },
+      { kind: 'video', volume: 1, clips: [{ id: 'v1', start_ms: 0, duration_ms: 20000, asset_ref: 'v/1.mp4', asset_kind: 'video', src_in_ms: 0, src_out_ms: 20000, storyboard_id: sb }] },
       { kind: 'subtitle', volume: 1, clips: [] }, { kind: 'narration', volume: 1, clips: [] }, { kind: 'music', volume: 1, clips: [] },
     ] });
     const log = { error() {} };

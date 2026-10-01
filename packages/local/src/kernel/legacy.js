@@ -353,4 +353,4 @@ function materialize(db, episodeId, graph) {
   })();
 }
 
-module.exports = { importLegacy, materialize, buildGraphFromRows, deriveStatus };
+module.exports = { importLegacy, materialize, buildGraphFromRows, deriveStatus, shotLines, shotParams, clipId, splitLines, SPEAKER_RE };
