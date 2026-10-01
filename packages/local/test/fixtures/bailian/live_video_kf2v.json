@@ -1,0 +1,36 @@
+{
+ "submit": {
+  "request_id": "7805529c-60df-9bf5-a019-a818ba911268",
+  "output": {
+   "task_id": "63ce625b-6bd7-4a3f-9d27-16145c2604e9",
+   "task_status": "PENDING"
+  }
+ },
+ "running": {
+  "request_id": "2219543b-0425-921d-9cd5-34f72a92f474",
+  "output": {
+   "task_id": "63ce625b-6bd7-4a3f-9d27-16145c2604e9",
+   "task_status": "RUNNING",
+   "submit_time": "2026-10-02 01:10:42.650",
+   "scheduled_time": "2026-10-02 01:10:42.695"
+  }
+ },
+ "succeeded": {
+  "request_id": "5ef7c1b5-516e-9785-b65b-b4e44534922e",
+  "output": {
+   "task_id": "63ce625b-6bd7-4a3f-9d27-16145c2604e9",
+   "task_status": "SUCCEEDED",
+   "submit_time": "2026-10-02 01:10:42.650",
+   "scheduled_time": "2026-10-02 01:10:42.695",
+   "end_time": "2026-10-02 01:10:58.572",
+   "orig_prompt": "橘猫慢慢转头看向镜头",
+   "video_url": "https://example.invalid/redacted",
+   "actual_prompt": "日系治愈系写真，一只橘色虎斑猫坐在老旧木窗台上，阳光从窗外洒落，照亮其蓬松的毛发。猫咪 initially 侧身望向窗外，随后缓缓转头看向镜头，眼神温柔而专注。背景是模糊的庭院绿植与白墙小屋，木质窗框斑驳有岁月感。画面温暖柔和，带有胶片质感。中景，镜头轻微左移，捕捉猫咪自然转身动作。"
+  },
+  "usage": {
+   "duration": 5,
+   "video_count": 1,
+   "SR": 480
+  }
+ }
+}
