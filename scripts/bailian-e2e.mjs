@@ -224,13 +224,6 @@ export async function run(opts) {
       return `项目 ${created.drama_id}，保留 ${keep.length}/${list.length} 镜，角色 ${chars.length} 个`;
     });
 
-    // 文生视频最慢，先提交，和后面的图像/配音并行；它也是最贵的一步，被花费上限拦下就整条中止
-    await stage('video_t2v_submit 提交文生视频(第1镜)', async () => {
-      const s1 = story.shots[0];
-      story.t2vTask = await enqueue('video', { model: models.t2v, prompt: s1.video_prompt || s1.description, duration: T2V_SECONDS, size: '1280*720', resolution: '720P' });
-      return `任务 ${story.t2vTask}`;
-    });
-
     // ---- 3 角色参考图（文生图） ----------------------------------------------------------
     await stage('character 角色参考图(T2I)', async () => {
       const c = story.characters[0];
@@ -242,6 +235,13 @@ export async function run(opts) {
       story.portrait = { url: t.result.urls[0], file: f.path, name: c.name };
       copyOut(f.path, 'portrait.png');
       return `${c.name} -> ${f.path}`;
+    });
+
+    // 文生视频最慢，在角色图成功后再提交（图片阶段失败时不留下无人领取的计费任务），和后面的图像/配音并行；它也是最贵的一步，被花费上限拦下就整条中止
+    await stage('video_t2v_submit 提交文生视频(第1镜)', async () => {
+      const s1 = story.shots[0];
+      story.t2vTask = await enqueue('video', { model: models.t2v, prompt: s1.video_prompt || s1.description, duration: T2V_SECONDS, size: '1280*720', resolution: '720P' });
+      return `任务 ${story.t2vTask}`;
     });
 
     // ---- 4 首帧图（带角色参考图） --------------------------------------------------------

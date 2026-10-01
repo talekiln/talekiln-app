@@ -99,7 +99,10 @@ function createDownloader({ storageDir, fetchImpl = (...a) => fetch(...a), sleep
       if (attempt < maxAttempts && wait > 0) await sleep(wait);
     }
     const code = lastErr instanceof ProviderError ? lastErr.code : ERROR_CODES.NETWORK;
-    throw new ProviderError(code, `download failed after ${maxAttempts} attempts: ${lastErr && lastErr.message}`);
+    const cause = lastErr && lastErr.cause && lastErr.cause.code ? ` (${lastErr.cause.code})` : '';
+    let host = '';
+    try { host = ` host=${new URL(url).host}`; } catch { /* url not parseable: omit host */ }
+    throw new ProviderError(code, `download failed after ${maxAttempts} attempts: ${lastErr && lastErr.message}${cause}${host}`);
   }
 
   async function finalize(part, expectedSha256) {
