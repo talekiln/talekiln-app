@@ -16,6 +16,7 @@ function connect(endpoint, { timeoutMs = 5000 } = {}) {
     const pending = new Map();
     let nextId = 1;
     let buf = '';
+    const listeners = new Set();
     sock.setEncoding('utf8');
     sock.on('data', (chunk) => {
       buf += chunk;
@@ -25,6 +26,7 @@ function connect(endpoint, { timeoutMs = 5000 } = {}) {
         buf = buf.slice(i + 1);
         if (!line.trim()) continue;
         const msg = JSON.parse(line);
+        if (msg.id === undefined && msg.method) { for (const l of listeners) l(msg); continue; }
         const p = pending.get(msg.id);
         if (!p) continue;
         pending.delete(msg.id);
@@ -53,6 +55,26 @@ function connect(endpoint, { timeoutMs = 5000 } = {}) {
         hello(apiVersions = [1]) { return this.call('core.hello', { apiVersions }); },
         /** Plan a render: { timeline, output:{width,height,fps,encoder}, cacheDir, hashContent? } */
         renderPlan(params) { return this.call('render.plan', params); },
+        /** Subscribe to server notifications (e.g. render.progress); returns an unsubscribe function. */
+        onNotification(fn) { listeners.add(fn); return () => listeners.delete(fn); },
+        /** Start an async render job: { timeline, output, cacheDir, outputPath, fallbackEncoders?, mix? } -> { jobId } */
+        renderStart(params) { return this.call('render.start', params); },
+        renderStatus(jobId) { return this.call('render.status', { jobId }); },
+        renderCancel(jobId) { return this.call('render.cancel', { jobId }); },
+        /** Resolve with the final status (done|failed|cancelled); onProgress gets each render.progress payload. */
+        renderWait(jobId, onProgress) {
+          return new Promise((resolve, reject) => {
+            const off = this.onNotification((m) => {
+              if (m.method !== 'render.progress' || m.params.jobId !== jobId) return;
+              if (onProgress) onProgress(m.params);
+              if (['done', 'failed', 'cancelled'].includes(m.params.status)) { off(); resolve(m.params); }
+            });
+            // covers a job that finished before we subscribed
+            this.renderStatus(jobId).then((s) => {
+              if (['done', 'failed', 'cancelled'].includes(s.status)) { off(); resolve(s); }
+            }, (e) => { off(); reject(e); });
+          });
+        },
         close() { sock.end(); },
       });
     });

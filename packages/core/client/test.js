@@ -33,6 +33,11 @@ if (tool === 'ffprobe') {
   else console.log(fs.readFileSync(fx + '/ffprobe_av.json', 'utf8'));
 } else if (a.includes('-encoders')) {
   process.stdout.write(fs.readFileSync(fx + '/ffmpeg_encoders.txt', 'utf8'));
+} else if (a.includes('-filters')) {
+  process.stdout.write(' T.. subtitles          V->V       Render text subtitles\\n');
+} else if (a.includes('-progress')) {
+  console.log('out_time_us=100000');
+  fs.writeFileSync(a[a.length - 1], 'fake');
 } else {
   const enc = a[a.indexOf('-c:v') + 1];
   if (enc === 'libx264' || enc === 'h264_mf') process.exit(0);
@@ -64,9 +69,8 @@ const child = spawn(bin, ['--pipe', endpoint, '--log-dir', logDir], {
 
   await assert.rejects(c.hello([99]), (e) => e instanceof RpcError && e.code === -32010 && /incompatible/.test(e.message));
   await assert.rejects(c.call('core.hello', {}), (e) => e.code === -32602);
-  for (const m of ['licence.status', 'render.start']) {
-    await assert.rejects(c.call(m, {}), (e) => e.code === -32001 && /not implemented/.test(e.message));
-  }
+  await assert.rejects(c.call('licence.status', {}), (e) => e.code === -32001 && /not implemented/.test(e.message));
+  await assert.rejects(c.call('render.start', {}), (e) => e.code === -32602);
   await assert.rejects(c.call('nope', {}), (e) => e.code === -32601);
 
   // media.probe via fake ffprobe
@@ -126,6 +130,34 @@ const child = spawn(bin, ['--pipe', endpoint, '--log-dir', logDir], {
     assert.deepStrictEqual(p3.scenes.map((s) => s.cacheHit), [true, false, false]);
     assert.deepStrictEqual(p3.toRender, [1, 2]);
     await assert.rejects(c.renderPlan({ timeline: tl }), (e) => e.code === -32602);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  // render.start / status / cancel with the fake ffmpeg: job id, progress notifications, final state
+  {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lycore-render-'));
+    for (const n of ['a.mp4', 'n.wav']) fs.writeFileSync(path.join(dir, n), n);
+    const tl = { tracks: [
+      { kind: 'video', clips: [{ id: 'v1', start_ms: 0, duration_ms: 2000, src_in_ms: 0, src_out_ms: 2000, asset_ref: path.join(dir, 'a.mp4'), volume: 1 }] },
+      { kind: 'subtitle', clips: [{ id: 's1', start_ms: 100, duration_ms: 500, text: 'hi' }] },
+      { kind: 'narration', clips: [{ id: 'n1', start_ms: 0, duration_ms: 1000, asset_ref: path.join(dir, 'n.wav'), volume: 1 }] },
+    ] };
+    const params = { timeline: tl, output: { width: 640, height: 360, fps: 30, encoder: 'libx264' },
+      cacheDir: path.join(dir, 'cache'), outputPath: path.join(dir, 'out', 'final.mp4') };
+    const events = [];
+    const off = c.onNotification((m) => { if (m.method === 'render.progress') events.push(m.params); });
+    const { jobId } = await c.renderStart(params);
+    assert.ok(/^job-/.test(jobId));
+    const final = await c.renderWait(jobId);
+    assert.strictEqual(final.status, 'done', JSON.stringify(final));
+    assert.strictEqual(final.percent, 100);
+    assert.ok(events.length >= 2 && events.every((e) => e.jobId === jobId), 'progress notifications received');
+    assert.strictEqual(events[events.length - 1].status, 'done');
+    assert.ok(fs.existsSync(params.outputPath));
+    const st = await c.renderStatus(jobId);
+    assert.strictEqual(st.result.scenesRendered, 1);
+    assert.strictEqual((await c.renderCancel(jobId)).cancelRequested, false);
+    await assert.rejects(c.renderStatus('nope'), (e) => e.code === -32602);
+    off();
     fs.rmSync(dir, { recursive: true, force: true });
   }
   c.close();
