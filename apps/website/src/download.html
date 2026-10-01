@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>下载 {{siteName}} {{version}}</title>
+  <meta name="description" content="下载故事窑 Talekiln 桌面版，附 SHA-256 校验值。">
+  <meta name="color-scheme" content="light dark">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+{{{header}}}
+<main>
+  <section class="section">
+    <div class="wrap">
+      <h1 class="h1-small">下载 {{siteName}}</h1>
+      <p class="section-lead">版本 {{version}} · 发布日期 {{releaseDate}}</p>
+
+      <div class="table-scroll">
+        <table class="dl">
+          <thead><tr><th scope="col">平台</th><th scope="col">下载</th><th scope="col">大小</th><th scope="col">SHA-256</th></tr></thead>
+          <tbody>
+{{{downloadRows}}}
+          </tbody>
+        </table>
+      </div>
+
+      <h2>下载后请先校验</h2>
+      {{{verifyHint}}}
+
+      <h2>系统要求与说明</h2>
+      <ul class="ticks">
+        <li>Windows 10 / 11，64 位。macOS 版本开放时间见本页更新。</li>
+        <li>正式安装包会由发布方代码签名；若系统弹出“未知发布者”提示，请先核对上面的 SHA-256 再决定是否运行。</li>
+        <li>首次使用需要在设置里填写你自己的模型服务 Key；项目与素材保存在本机。</li>
+        <li>应用内会检查更新，发现新版本时由你确认后才会安装。</li>
+      </ul>
+
+      <p class="cta"><a class="btn btn-ghost" href="{{repoUrl}}">想看源码？开源仓库入口</a></p>
+    </div>
+  </section>
+</main>
+{{{footer}}}
+</body>
+</html>

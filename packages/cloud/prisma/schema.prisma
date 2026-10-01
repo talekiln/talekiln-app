@@ -26,6 +26,7 @@ model Account {
   subscription  Subscription?
   orders        Order[]
   licenceUsages LicenceUsage[]
+  adminRole     AdminRole?
 }
 
 model InviteCode {
@@ -279,4 +280,68 @@ model LicenceUsage {
   expiresAt DateTime
 
   @@index([accountId, issuedAt])
+}
+
+// ---- P2-H：公告、版本灰度、管理员角色、审计 ----
+// 枚举类字段用 String 存，取值由服务层 zod 与迁移里的 CHECK 约束共同保证。
+
+model Announcement {
+  id        String    @id @default(uuid())
+  title     String
+  body      String
+  level     String    @default("info") // info | warn | critical
+  channel   String    @default("all") // all | beta | stable
+  startsAt  DateTime
+  endsAt    DateTime?
+  enabled   Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([enabled, startsAt])
+}
+
+model Release {
+  id             String   @id @default(uuid())
+  version        String
+  channel        String // beta | stable
+  rolloutPercent Int      @default(0)
+  minVersion     String?
+  forced         Boolean  @default(false)
+  notes          String   @default("")
+  enabled        Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([version, channel])
+  @@index([channel, enabled])
+}
+
+// 后台角色：每账号至多一条；无此记录时，Account.role = ADMIN 的旧管理员按 ADMIN 对待。
+model AdminRole {
+  accountId String   @id
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  role      String // ADMIN | OPERATOR | READONLY
+  grantedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// 审计日志：只增不改。操作者账号被删后保留邮箱快照。
+model AdminAudit {
+  id         String   @id @default(uuid())
+  at         DateTime
+  actorId    String?
+  actorEmail String?
+  actorRole  String?
+  action     String
+  targetType String?
+  targetId   String?
+  ok         Boolean
+  status     Int
+  detail     Json?
+  ip         String?
+
+  @@index([at])
+  @@index([actorId, at])
+  @@index([targetType, targetId])
 }

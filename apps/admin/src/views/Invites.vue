@@ -1,8 +1,12 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, errorText } from '../api.js'
 import { INVITE_STATUS, formatTime, invitesToCsv } from '../format.js'
+import { can } from '../permissions.js'
+import { me } from '../session.js'
+
+const canWrite = computed(() => can(me.value, 'ops:write'))
 
 const rows = ref([])
 const loading = ref(false)
@@ -90,7 +94,7 @@ onMounted(load)
         <span>有效天数</span>
         <el-input-number v-model="form.expiresInDays" :min="0" :max="365" />
         <span class="muted">0 = 永不过期；一次最多 200 个</span>
-        <el-button type="primary" :loading="creating" @click="create">生成邀请码</el-button>
+        <el-button type="primary" :disabled="!canWrite" :loading="creating" @click="create">生成邀请码</el-button>
       </div>
     </div>
 
@@ -115,7 +119,7 @@ onMounted(load)
       <el-table-column label="操作" width="150" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" @click="copy(row.code)">复制</el-button>
-          <el-button v-if="row.status === 'unused'" link type="danger" @click="revoke(row)">吊销</el-button>
+          <el-button v-if="row.status === 'unused' && canWrite" link type="danger" @click="revoke(row)">吊销</el-button>
         </template>
       </el-table-column>
     </el-table>
