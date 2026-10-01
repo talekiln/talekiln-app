@@ -143,3 +143,20 @@ test('tts: handshake failure is told apart by probing the key', async () => {
   const offline = async () => { throw new Error('ENOTFOUND'); };
   await assert.rejects(() => mk(offline, { WebSocket: ws }).tts.synthesize('bailian', { text: 'x' }), (e) => e.code === ERROR_CODES.NETWORK);
 });
+
+test('video: recorded real t2v and kf2v runs (submit, running, succeeded with usage)', async () => {
+  for (const [name, path] of [['live_video_t2v.json', /video-generation\/video-synthesis$/], ['live_video_kf2v.json', /image2video\/video-synthesis$/]]) {
+    const rec = JSON.parse(fx(name));
+    const sub = mockFetch({ body: JSON.stringify(rec.submit) });
+    const req = name.includes('kf2v') ? { model: 'wan2.2-kf2v-flash', firstFrameUrl: 'https://e.invalid/f.png', prompt: 'x' } : { prompt: 'x', duration: 5 };
+    const { taskId } = await mk(sub).video.submit('bailian', req);
+    assert.equal(taskId, rec.submit.output.task_id);
+    assert.match(sub.calls[0].url, path);
+    assert.equal((await mk(mockFetch({ body: JSON.stringify(rec.running) })).video.poll('bailian', { taskId })).status, 'running');
+    const ok = await mk(mockFetch({ body: JSON.stringify(rec.succeeded) })).video.poll('bailian', { taskId });
+    assert.equal(ok.status, 'succeeded');
+    assert.match(ok.videoUrl, /^https:\/\/example\.invalid\//);
+    assert.equal(ok.usage.duration, 5);
+    assert.ok(ok.usage.SR);
+  }
+});
