@@ -1,0 +1,16 @@
+{
+  "id": "edge-single",
+  "origin": "hand-written",
+  "note": "边界：一个场景、一个镜头、一行台词（手写，非 AI 输出）",
+  "scenes": [
+    {
+      "title": "独白",
+      "lines": [
+        { "kind": "narration", "speaker": "", "text": "整座城市只剩下一盏灯还亮着。" }
+      ],
+      "shots": [
+        { "title": "孤灯", "description": "夜色里的一盏灯", "location": "街角", "duration_ms": 4000, "legacy_id": 2001, "lines": [0] }
+      ]
+    }
+  ]
+}

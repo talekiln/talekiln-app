@@ -50,7 +50,7 @@ Node { id, type, params, legacy_id? }
 
 - 原子 op：`addNode, removeNode, setParam(node, path, value), connect, disconnect, addGroup, removeGroup, setChildren(group, ids), setGroupOrder, setLayout, addVersion, adoptVersion, setComposeSegments`。
 - 事务 `Tx { tx_id, label, ops[] }`：全有或全无；应用时生成逆 op（前后值），整事务一次撤销；同一 `tx_id` 重放是空操作。
-- 校验：端口类型、环检测、节点存在、`children` 无重复、每个 shot 在且仅在一个 group 里、compose 的 segments 引用的 shot 必须存在、片段区间合法。
+- 校验：端口类型、环检测、节点存在、`layout` 坐标为有限数、`children` 无重复、每个 shot 在且仅在一个 group 里、compose 的 segments 引用的 shot 必须存在、片段区间合法。
 - 意图层（每个视图一组，只产出事务，不直接改图）：
   - 剧本：`rewriteLine, insertLine, deleteLine, splitLine, mergeLines, reorderLines`
   - 分镜：`setShotField, splitShot, mergeShots, reorderShots, moveShotToGroup, addShot, deleteShot, regenerateShot`
@@ -61,7 +61,7 @@ Node { id, type, params, legacy_id? }
 
 ## 4. 失效
 
-`cacheKey(node) = sha256(canonical{ type, node_version, params, inputs:[ (port, cacheKey(上游)) 按端口排序 ] })`。`layout` 不参与。`compose` 的 key 还包含各 segments。
+`cacheKey(node) = sha256(canonical{ type, node_version, params, inputs:[ (port, cacheKey(上游)) 按端口排序 ] })`。`layout` 不参与。`compose` 的 key 还包含各 segments 和全项目镜头顺序（K3：重排镜头必须让合成过期）。
 
 - 过期 = 没有采用版本，或采用版本的 `cacheKey` ≠ 当前 key。
 - `staleSet(graph)` 为纯函数；每次事务返回 `{ invalidated: [...], revalidated: [...] }`（相对事务前）。
@@ -121,7 +121,7 @@ Node { id, type, params, legacy_id? }
 - **removeNode 级联**：移除节点同时清理其边、`layout`、`versions`、`adopted` 与组成员，逆 op（`restoreNode`）原样放回；`applyTx` 返回的 `inverse` 即撤销用的 op 序列，一个 tx 一个撤销步。
 - **幂等与历史**：`applyTx` 为纯函数，`opts.applied`（Set）里已有的 `tx_id` 为空操作；`History` 在撤销时把 `tx_id` 移出生效集合、重做时放回。事务可带非规格字段 `meta`（如新建节点 id），应用时忽略。
 - **视图 `params`**：视图里输出的 params 是键排序副本，保证快照重载（规范 JSON）前后视图逐字节相同。
-- **未做（留给后续任务）**：持久化（`project_graphs` / `graph_ops`）、REST、`importLegacy` / `materialize`、`conformance/` 完整套件（`packages/kernel/test/` 里目前是各模块单测与随机属性测试）。
+- **已拆出的后续任务**：持久化（`project_graphs` / `graph_ops`）、REST、`importLegacy` / `materialize` 见 §10；一致性套件见 [kernel-conformance.md](kernel-conformance.md)，结果与缺口都写在那里。
 
 ## 10. K2 实现备注（持久化、旧表适配、REST）
 
