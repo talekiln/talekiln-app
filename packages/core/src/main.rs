@@ -2,6 +2,7 @@ mod encoder;
 mod ffmpeg;
 mod media;
 mod plan;
+mod render;
 mod rpc;
 mod sha256;
 
@@ -11,16 +12,26 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader
 async fn serve<S: AsyncRead + AsyncWrite + Unpin>(stream: S) {
     let (r, mut w) = tokio::io::split(stream);
     let mut lines = BufReader::new(r).lines();
-    while let Ok(Some(line)) = lines.next_line().await {
-        if line.trim().is_empty() {
-            continue;
-        }
-        if let Some(resp) = rpc::handle_line(&line).await {
-            let mut out = resp.to_string();
-            out.push('\n');
-            if w.write_all(out.as_bytes()).await.is_err() {
-                break;
-            }
+    let mut notes = render::subscribe();
+    loop {
+        let out = tokio::select! {
+            l = lines.next_line() => match l {
+                Ok(Some(line)) => {
+                    if line.trim().is_empty() { continue; }
+                    match rpc::handle_line(&line).await { Some(r) => r, None => continue }
+                }
+                _ => break,
+            },
+            n = notes.recv() => match n {
+                Ok(v) => v,
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(_) => break,
+            },
+        };
+        let mut s = out.to_string();
+        s.push('\n');
+        if w.write_all(s.as_bytes()).await.is_err() {
+            break;
         }
     }
 }
