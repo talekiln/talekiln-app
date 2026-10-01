@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Hardened Runtime 授权（公证要求开启 Hardened Runtime）。仅为 Electron 应用的常见最小集合，未在真机公证流程中验证；
+     以 Apple 当前文档和 electron-builder 文档为准，公证被拒时按拒绝日志增减。不含任何证书或口令。 -->
+<plist version="1.0">
+  <dict>
+    <!-- V8 的 JIT 需要 -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <!-- 原生模块（better-sqlite3、sharp 及其 libvips）以不同于主程序的签名加载时需要；若全部由同一证书重签可尝试去掉 -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+  </dict>
+</plist>
