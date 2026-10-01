@@ -1,5 +1,6 @@
 <template>
   <div class="timeline-editor">
+    <ViewSwitcher />
     <header class="te-header">
       <el-button size="small" @click="goBack">
         <el-icon><ArrowLeft /></el-icon> 返回
@@ -111,6 +112,9 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, VideoPlay, VideoPause } from '@element-plus/icons-vue'
 import { useTimelineStore } from '@/stores/timeline'
 import MusicPanel from '@/components/MusicPanel.vue'
+import ViewSwitcher from '@/components/ViewSwitcher.vue'
+import { useProjectViewsStore } from '@/stores/projectViews'
+import { fromKernelClipId, toKernelClipId } from '@/utils/projectViews'
 import VoiceoverPanel from '@/components/VoiceoverPanel.vue'
 import { useKeymap } from '@/composables/useKeymap'
 import { SCOPE_TIMELINE, SCOPE_WORKBENCH } from '@/utils/keymap'
@@ -126,6 +130,8 @@ const TRACK_NAMES = { video: '视频', subtitle: '字幕', narration: '旁白', 
 const route = useRoute()
 const router = useRouter()
 const store = useTimelineStore()
+// 四视图共享状态（选择 / 播放头 / 历史）。时间线编辑器自己的编辑走旧接口（已改道经内核），保存后刷新共享 store
+const views = useProjectViewsStore()
 
 const episodeId = computed(() => Number(route.params.id))
 const pxPerSec = ref(DEFAULT_ZOOM)
@@ -183,7 +189,26 @@ async function loadAll() {
     ElMessage.error(e.message || '加载时间线失败')
   }
   await maybeRecover()
+  await views.load(episodeId.value, { drama: route.query.drama })
+  applySharedFocus()
 }
+
+// 别的视图里选中的对象 -> 选中对应片段、播放头跟随
+function applySharedFocus() {
+  const f = views.focusFor('timeline')
+  if (f) {
+    const id = fromKernelClipId(f.id, episodeId.value, (cid) => !!store.tracks.some((t) => t.clips.some((c) => c.id === cid)))
+    if (id) store.select(id)
+  }
+  if (store.timeline) playhead.value = Math.min(views.playhead, store.durationMs)
+}
+watch(() => store.selectedClipId, (id) => {
+  if (id) views.select({ kind: 'segment', id: toKernelClipId(id, episodeId.value) }, { playhead: false })
+})
+watch(playhead, (ms) => { if (!playing.value) views.setPlayhead(ms) })
+watch(() => store.saveState, (st, old) => { if (st === 'idle' && old && old !== 'idle') views.refresh() })
+// 在别的地方（顶栏）撤销 / 重做后，重新读取时间线
+watch(() => views.revision, () => { store.load(episodeId.value).then(applySharedFocus).catch(() => {}) })
 
 // 配音写进了项目图（旁白音频 + 词级字幕）；重新读取时间线即可看到新的旁白轨和字幕轨
 async function onVoiceoverDone() {
