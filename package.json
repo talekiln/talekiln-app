@@ -1,0 +1,26 @@
+{
+  "name": "talekiln",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @talekiln/desktop dev",
+    "dev:web": "pnpm -r --parallel --filter @talekiln/local --filter @talekiln/renderer dev",
+    "build": "pnpm --filter @talekiln/renderer build",
+    "dist:win": "pnpm --filter @talekiln/desktop dist:win",
+    "lint": "pnpm -r --if-present lint",
+    "test": "pnpm -r --if-present test"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "electron",
+      "electron-winstaller",
+      "esbuild",
+      "sharp",
+      "vue-demi"
+    ]
+  }
+}

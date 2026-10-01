@@ -1,0 +1,53 @@
+{
+  "name": "@talekiln/desktop",
+  "version": "1.2.8",
+  "description": "Talekiln desktop client",
+  "main": "main.js",
+  "author": "Talekiln",
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "electron .",
+    "dist:win": "electron-builder --win"
+  },
+  "dependencies": {
+    "@talekiln/local": "workspace:*"
+  },
+  "devDependencies": {
+    "electron": "^39.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "app.talekiln.desktop",
+    "productName": "Talekiln",
+    "artifactName": "Talekiln-${version}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../renderer/dist",
+        "to": "renderer"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**",
+      "**/node_modules/sharp/**",
+      "**/node_modules/@img/**"
+    ]
+  },
+  "private": true
+}
