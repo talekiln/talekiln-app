@@ -319,29 +319,29 @@ export async function run(opts) {
       return `${story.shots.length} 镜`;
     });
     await stage('timeline 组装时间线+字幕', async () => {
-      const { splitCues } = require(path.join(localRoot, 'src', 'subtitles'));
       let tl = await api('POST', `/timelines/episode/${story.episodeId}/assemble`, { replace: true });
       const vtrack = tl.tracks.find((t) => t.kind === 'video');
-      const clips = [];
-      let clipped = 0;
+      // 字幕由台词行推导：每个分镜只能有一条字幕，起止时间跟随视频（不能按逐字时间戳拆成多条）。
+      // 组装结果里已有的字幕原样保留，没有的分镜补一条（整段旁白文字，铺满该镜头）。
+      const sub = tl.tracks.find((t) => t.kind === 'subtitle');
+      const clips = [...sub.clips];
+      let added = 0;
       for (const vc of vtrack.clips) {
         const sb = story.shots.find((s) => s.id === vc.storyboard_id);
-        if (!sb || !sb.voice || !sb.voice.words.length) continue;
-        for (const cue of splitCues(sb.voice.words, { aspectRatio: '16:9' })) {
-          const start = vc.start_ms + cue.startMs;
-          const end = Math.min(vc.start_ms + vc.duration_ms, vc.start_ms + cue.endMs);
-          if (end <= start) { clipped++; continue; }
-          clips.push({ id: crypto.randomUUID(), start_ms: start, duration_ms: end - start, text: cue.text, storyboard_id: sb.id, volume: 1 });
-        }
+        if (!sb || !sb.voice || !sb.voice.text || clips.some((c) => c.storyboard_id === sb.id)) continue;
+        clips.push({ id: crypto.randomUUID(), start_ms: vc.start_ms, duration_ms: vc.duration_ms, text: sb.voice.text, storyboard_id: sb.id, volume: 1 });
+        added++;
       }
-      if (!clips.length) throw new Error('没有生成任何字幕（缺少逐字时间戳）');
-      tl = await api('PUT', `/timelines/${tl.id}`, {
-        episode_id: story.episodeId,
-        tracks: tl.tracks.map((t) => (t.kind === 'subtitle' ? { ...t, clips } : t)),
-      });
+      if (!clips.length) throw new Error('没有生成任何字幕（分镜没有台词/旁白文字）');
+      if (added) {
+        tl = await api('PUT', `/timelines/${tl.id}`, {
+          episode_id: story.episodeId,
+          tracks: tl.tracks.map((t) => (t.kind === 'subtitle' ? { ...t, clips } : t)),
+        });
+      }
       story.timeline = tl;
       const narr = tl.tracks.find((t) => t.kind === 'narration').clips.length;
-      return `视频 ${vtrack.clips.length} 段，旁白 ${narr} 段，字幕 ${clips.length} 条（超出镜头被截掉 ${clipped} 条），总长 ${tl.duration_ms} 毫秒`;
+      return `视频 ${vtrack.clips.length} 段，旁白 ${narr} 段，字幕 ${clips.length} 条（补充 ${added} 条），总长 ${tl.duration_ms} 毫秒`;
     });
 
     // ---- 8 导出 -------------------------------------------------------------------------
