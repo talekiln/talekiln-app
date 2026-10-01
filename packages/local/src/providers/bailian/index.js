@@ -55,7 +55,9 @@ function createBailianAdapter(cfg = {}) {
   const base = (cfg.baseUrl || DEFAULT_BASE).replace(/\/+$/, '').replace(/\/(compatible-mode\/v1|api\/v1)$/, '');
   const wsUrl = cfg.wsUrl || base.replace(/^http/, 'ws') + WS_PATH;
   const doFetch = cfg.fetch || ((...a) => globalThis.fetch(...a));
-  const WS = cfg.WebSocket || globalThis.WebSocket;
+  // `ws` rather than the global WebSocket: verified that DashScope never answers a close frame, so the
+  // socket lingers about two minutes after each synthesis unless it is terminated.
+  const WS = cfg.WebSocket || require('ws');
   const genId = cfg.idGenerator || (() => require('crypto').randomUUID());
 
   function authHeaders(extra) {
@@ -227,18 +229,24 @@ function createBailianAdapter(cfg = {}) {
   }
 
   // ---- tts.synthesize: CosyVoice over WebSocket (UNVERIFIED message schema) -----------------
-  function ttsSynthesize({ model, text, voice, format, sampleRate, rate, pitch, volume, signal }) {
+  function ttsSynthesize({ model, text, voice, format, sampleRate, rate, pitch, volume, wordTimestamps, signal }) {
     return new Promise((resolve, reject) => {
       if (!apiKey) return reject(new ProviderError(ERROR_CODES.INVALID_API_KEY, '未配置 Key', { provider: 'bailian' }));
       if (!WS) return reject(new ProviderError(ERROR_CODES.NETWORK, '运行时无 WebSocket', { provider: 'bailian' }));
       const taskId = genId();
       const fmt = format || 'mp3';
       const chunks = [];
+      const sentenceWords = new Map(); // sentence index -> latest words (events repeat and grow)
+      let usage;
       let settled = false;
       let ws;
-      const done = (fn, v) => { if (settled) return; settled = true; try { ws && ws.close(); } catch (_) { /* ignore */ } fn(v); };
+      const done = (fn, v) => {
+        if (settled) return;
+        settled = true;
+        try { if (ws) (typeof ws.terminate === 'function' ? ws.terminate() : ws.close()); } catch (_) { /* ignore */ }
+        fn(v);
+      };
       try {
-        // Node >=22 global (undici) WebSocket accepts {headers}; pass a `WebSocket` impl (e.g. ws) via cfg otherwise.
         ws = new WS(wsUrl, { headers: { Authorization: `Bearer ${apiKey}` } });
       } catch (e) {
         return reject(new ProviderError(ERROR_CODES.NETWORK, e.message, { provider: 'bailian' }));
@@ -251,7 +259,7 @@ function createBailianAdapter(cfg = {}) {
         payload: {
           task_group: 'audio', task: 'tts', function: 'SpeechSynthesizer',
           model: model || 'cosyvoice-v2',
-          parameters: { text_type: 'PlainText', voice: voice || 'longxiaochun_v2', format: fmt, sample_rate: sampleRate || 22050, volume: volume ?? 50, rate: rate ?? 1, pitch: pitch ?? 1 },
+          parameters: { text_type: 'PlainText', voice: voice || 'longxiaochun_v2', format: fmt, sample_rate: sampleRate || 22050, volume: volume ?? 50, rate: rate ?? 1, pitch: pitch ?? 1, ...(wordTimestamps ? { word_timestamp_enabled: true } : {}) },
           input: {},
         },
       });
@@ -264,9 +272,22 @@ function createBailianAdapter(cfg = {}) {
         if (event === 'task-started') {
           send({ header: { action: 'continue-task', task_id: taskId, streaming: 'duplex' }, payload: { input: { text } } });
           send({ header: { action: 'finish-task', task_id: taskId, streaming: 'duplex' }, payload: { input: {} } });
+        } else if (event === 'result-generated') {
+          const out = m.payload && m.payload.output;
+          const sentence = out && out.sentence;
+          if (sentence && Array.isArray(sentence.words) && sentence.words.length) sentenceWords.set(sentence.index, sentence.words);
+          if (m.payload && m.payload.usage) usage = m.payload.usage;
         } else if (event === 'task-finished') {
           if (!chunks.length) return done(reject, new ProviderError(ERROR_CODES.BAD_RESPONSE, '未返回音频', { provider: 'bailian' }));
-          done(resolve, { audio: Buffer.concat(chunks), format: fmt });
+          const result = { audio: Buffer.concat(chunks), format: fmt };
+          if (wordTimestamps) {
+            // Verified: begin_time/end_time are milliseconds from the start of the audio.
+            result.words = [...sentenceWords.keys()].sort((a, b) => a - b).flatMap((k) => sentenceWords.get(k))
+              .map((w) => ({ text: w.text, startMs: w.begin_time, endMs: w.end_time }));
+          }
+          const u = (m.payload && m.payload.usage) || usage;
+          if (u) result.usage = u;
+          done(resolve, result);
         } else if (event === 'task-failed') {
           done(reject, mapError(200, { code: m.header.error_code, message: m.header.error_message }));
         }

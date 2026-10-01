@@ -10,8 +10,9 @@
  *      -> Promise<{taskId}>
  *  video.poll({taskId, signal?})
  *      -> Promise<{status:'pending'|'running'|'succeeded'|'failed', videoUrl?, error?: ProviderError}>
- *  tts.synthesize({model?, text, voice?, format?, sampleRate?, rate?, pitch?, volume?, signal?})
- *      -> Promise<{audio: Buffer, format}>
+ *  tts.synthesize({model?, text, voice?, format?, sampleRate?, rate?, pitch?, volume?, wordTimestamps?, signal?})
+ *      -> Promise<{audio: Buffer, format, words?: {text, startMs, endMs}[], usage?}>
+ *      words: per-character timing from audio start, present when wordTimestamps is true.
  */
 const CAPABILITIES = Object.freeze(['text.stream', 'image.generate', 'video.submit', 'video.poll', 'tts.synthesize']);
 
