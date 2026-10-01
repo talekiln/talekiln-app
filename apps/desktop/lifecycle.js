@@ -58,7 +58,7 @@ function createNotificationBatcher({ show, windowMs = 1500, setTimer = setTimeou
   };
 }
 
-function createLifecycle({ app, dialog, Notification, Tray, Menu, nativeImage, powerMonitor, getWorker, readableError, log = () => {}, setTimer }) {
+function createLifecycle({ app, dialog, Notification, Tray, Menu, nativeImage, powerMonitor, getWorker, readableError, getExtraTrayItems = () => [], log = () => {}, setTimer }) {
   let tray = null;
   let win = null;
   let quitConfirmed = false;
@@ -76,16 +76,27 @@ function createLifecycle({ app, dialog, Notification, Tray, Menu, nativeImage, p
     } catch (e) { log(`showWindow failed: ${e && e.message}`); }
   }
 
+  /** 托盘菜单每次重建，使“检查更新/安装更新”等动态文案生效。 */
+  function refreshTrayMenu() {
+    try {
+      if (!tray) return;
+      let extra = [];
+      try { extra = getExtraTrayItems() || []; } catch (_) { extra = []; }
+      tray.setContextMenu(Menu.buildFromTemplate([
+        { label: '显示窗口', click: showWindow },
+        ...extra,
+        { label: '退出', click: () => app.quit() },
+      ]));
+    } catch (e) { log(`tray menu refresh failed: ${e && e.message}`); }
+  }
+
   function setupTray() {
     try {
       if (tray || !Tray || !nativeImage) return false;
       const icon = nativeImage.createFromDataURL(`data:image/png;base64,${TRAY_ICON_PNG_BASE64}`);
       tray = new Tray(icon);
       tray.setToolTip('Talekiln');
-      tray.setContextMenu(Menu.buildFromTemplate([
-        { label: '显示窗口', click: showWindow },
-        { label: '退出', click: () => app.quit() },
-      ]));
+      refreshTrayMenu();
       tray.on('click', showWindow);
       return true;
     } catch (e) {
@@ -149,7 +160,7 @@ function createLifecycle({ app, dialog, Notification, Tray, Menu, nativeImage, p
     } catch (e) { log(`powerMonitor unavailable: ${e && e.message}`); return false; }
   }
 
-  return { setupTray, attachWindow, onBeforeQuit, onTaskFinished, bindPower, showWindow, isQuitting: () => quitting };
+  return { setupTray, refreshTrayMenu, attachWindow, onBeforeQuit, onTaskFinished, bindPower, showWindow, isQuitting: () => quitting };
 }
 
 module.exports = { createLifecycle, quitPrompt, notificationFor, createNotificationBatcher, TRAY_ICON_PNG_BASE64 };
