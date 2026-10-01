@@ -15,9 +15,15 @@
         <h2>导出设置</h2>
         <el-form label-width="96px" :disabled="busy">
           <el-form-item label="分辨率">
-            <el-select v-model="form.resolution" style="width: 280px" data-test="resolution">
-              <el-option v-for="r in resolutions" :key="r.key" :label="r.label" :value="r.key" />
+            <el-select v-model="form.resolution" style="width: 280px" data-test="resolution" @change="onSizeChange">
+              <el-option-group label="通用">
+                <el-option v-for="r in resolutions" :key="r.key" :label="r.label" :value="r.key" />
+              </el-option-group>
+              <el-option-group label="平台预设">
+                <el-option v-for="r in presets" :key="r.key" :label="r.label" :value="r.key" />
+              </el-option-group>
             </el-select>
+            <div v-if="currentPreset" class="hint" data-test="preset-hint">{{ presetHint(currentPreset) }}</div>
           </el-form-item>
           <el-form-item label="帧率">
             <el-radio-group v-model="form.fps" data-test="fps">
@@ -39,6 +45,41 @@
             <div class="hint">请填写本机的完整路径（以 .mp4 结尾），文件夹不存在时会自动创建；同名文件会被覆盖。</div>
           </el-form-item>
         </el-form>
+      </section>
+
+      <section class="panel" data-test="media-panel">
+        <h2>导出到剪映 / Premiere</h2>
+        <div class="hint media-hint">
+          把当前时间线导出成可编辑的工程，不重新渲染视频。尺寸与帧率沿用上面的选择；素材使用本机原文件路径，请勿在导入前移动素材。
+          剪映草稿格式随版本变化，需要用你的剪映版本实际打开验证，详见 docs/phase2-export.md。
+        </div>
+        <el-form label-width="96px" :disabled="mediaBusy">
+          <el-form-item label="导出到">
+            <el-radio-group v-model="media.target" data-test="media-target">
+              <el-radio-button v-for="t in mediaTargets" :key="t.value" :value="t.value">{{ t.label }}</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item label="导出文件夹">
+            <el-input v-model="form.media_dir" placeholder="D:\导出（路径可含中文和空格）" data-test="media-dir" />
+          </el-form-item>
+          <el-form-item label="工程名称">
+            <el-input v-model="form.media_name" placeholder="留空则用剧集标题" style="width: 280px" data-test="media-name" />
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" :loading="mediaBusy" :disabled="!!loadError" data-test="media-export" @click="onMediaExport(false)">导出</el-button>
+            <el-button :disabled="mediaBusy || !!loadError" data-test="media-check" @click="onMediaExport(true)">仅检查素材</el-button>
+          </el-form-item>
+        </el-form>
+        <el-alert v-if="mediaError" type="error" :closable="false" show-icon :title="mediaError" data-test="media-error" />
+        <el-alert v-if="mediaConflict" type="warning" :closable="false" show-icon title="导出位置已有同名工程">
+          <el-button size="small" data-test="media-overwrite" @click="onMediaExport(false, true)">覆盖并重新导出</el-button>
+        </el-alert>
+        <div v-if="mediaResult" class="media-result" data-test="media-result">
+          <el-alert type="success" :closable="false" show-icon :title="mediaResultText(mediaResult)" />
+          <ul v-if="mediaResult.warnings?.length" class="media-warn">
+            <li v-for="(w, i) in mediaResult.warnings" :key="i">{{ w }}</li>
+          </ul>
+        </div>
       </section>
 
       <section class="panel">
@@ -101,7 +142,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { exportAPI } from '@/api/export'
 import {
-  FALLBACK_RESOLUTIONS, encoderOptions, validateForm, buildStartRequest, stageLabel, progressStatus, errorText,
+  FALLBACK_RESOLUTIONS, FALLBACK_PLATFORM_PRESETS, MEDIA_TARGETS, sizeTable, presetOf, presetHint,
+  validateMediaForm, buildMediaRequest, mediaResultText, encoderOptions, validateForm, buildStartRequest, stageLabel, progressStatus, errorText,
   formatElapsed, formatPercent, isFinal, createJobPoller
 } from '@/utils/exportJob'
 import { formatDuration } from '@/utils/mixView'
@@ -116,9 +158,18 @@ const loadError = ref('')
 const starting = ref(false)
 const cancelling = ref(false)
 const resolutions = ref(FALLBACK_RESOLUTIONS)
+const presets = ref(FALLBACK_PLATFORM_PRESETS)
 const fpsOptions = ref([24, 25, 30, 60])
 const encoders = ref(encoderOptions([], null))
-const form = reactive({ resolution: '1080p', fps: 30, encoder: 'auto', output_path: '' })
+const form = reactive({ resolution: '1080p', fps: 30, encoder: 'auto', output_path: '', media_dir: '', media_name: '' })
+const mediaTargets = MEDIA_TARGETS
+const media = reactive({ target: 'jianying' })
+const mediaBusy = ref(false)
+const mediaError = ref('')
+const mediaConflict = ref(false)
+const mediaResult = ref(null)
+const sizes = computed(() => sizeTable(resolutions.value, presets.value))
+const currentPreset = computed(() => presetOf(presets.value, form.resolution))
 const aigc = reactive({ watermark: true, metadata: true, producer: 'Talekiln' })
 const job = ref(null)
 const startedAt = ref(0)
@@ -156,6 +207,7 @@ async function loadOptions(refresh = false) {
   try {
     const o = await exportAPI.options(episodeId.value, refresh)
     resolutions.value = o.resolutions?.length ? o.resolutions : FALLBACK_RESOLUTIONS
+    presets.value = o.platform_presets?.length ? o.platform_presets : FALLBACK_PLATFORM_PRESETS
     fpsOptions.value = o.fps_options?.length ? o.fps_options : fpsOptions.value
     encoders.value = encoderOptions(o.encoders, o.best_encoder)
     if (!refresh) {
@@ -190,7 +242,7 @@ async function onStart() {
   starting.value = true
   job.value = null
   try {
-    const r = await exportAPI.start(buildStartRequest(form, resolutions.value, episodeId.value))
+    const r = await exportAPI.start(buildStartRequest(form, sizes.value, episodeId.value))
     job.value = { job_id: r.job_id, status: 'queued', percent: 0, stage: 'queued', output_path: r.output_path, encoder: r.encoder }
     startClock()
     poller.start(r.job_id)
@@ -198,6 +250,30 @@ async function onStart() {
     /* 错误文案由后端给出，request.js 已提示 */
   } finally {
     starting.value = false
+  }
+}
+
+function onSizeChange() {
+  const p = currentPreset.value
+  if (p) form.fps = p.fps
+}
+
+/** 导出到剪映 / Premiere。dryRun：只检查素材与估算，不写文件；overwrite：覆盖同名工程 */
+async function onMediaExport(dryRun, overwrite = false) {
+  const bad = validateMediaForm(form)
+  if (bad) return ElMessage.warning(bad)
+  mediaBusy.value = true
+  mediaError.value = ''
+  mediaConflict.value = false
+  mediaResult.value = null
+  try {
+    const { kind, body } = buildMediaRequest(form, sizes.value, episodeId.value, media.target, { dry_run: dryRun || undefined, overwrite: overwrite || undefined })
+    mediaResult.value = await exportAPI[kind](body)
+  } catch (e) {
+    if (e?.code === 'EXPORT_OUTPUT_EXISTS') mediaConflict.value = true
+    else mediaError.value = e?.message || '导出失败'
+  } finally {
+    mediaBusy.value = false
   }
 }
 
@@ -242,6 +318,9 @@ onBeforeUnmount(() => { poller.stop(); stopClock() })
 .producer-label { color: var(--text-muted); }
 .aigc-warn { margin: 8px 0; }
 .actions { display: flex; gap: 12px; }
+.media-hint { margin: -6px 0 12px; }
+.media-result { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.media-warn { margin: 0; padding-left: 20px; font-size: 12px; color: var(--text-subtle); line-height: 1.6; }
 .job { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
 .job-line { display: flex; gap: 16px; align-items: baseline; font-size: 13px; }
 .job-stage { color: var(--text-bright); font-weight: 600; }

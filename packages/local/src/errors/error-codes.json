@@ -339,6 +339,41 @@
       "scope": "local",
       "message": "文件太大",
       "action": "换一个小于 50 MB 的文件"
+    },
+    "EXPORT_ASSETS": {
+      "scope": "local",
+      "message": "部分素材文件不存在或不是本地文件",
+      "action": "打开时间线检查素材，缺失的镜头重新生成或重新导入后再导出"
+    },
+    "EXPORT_MEDIA_NOT_GENERATED": {
+      "scope": "local",
+      "message": "时间线上有镜头还没有生成视频或图片",
+      "action": "先在分镜里把这些镜头出图出视频，再导出到剪映或 Premiere"
+    },
+    "EXPORT_NO_TIMELINE": {
+      "scope": "local",
+      "message": "该剧集没有可导出的时间线内容",
+      "action": "先生成分镜并组装时间线，再导出"
+    },
+    "EXPORT_BAD_FORMAT": {
+      "scope": "local",
+      "message": "导出格式或尺寸参数无效",
+      "action": "换一个预设尺寸，或检查宽高、帧率是否在允许范围内"
+    },
+    "EXPORT_BAD_OUTPUT_DIR": {
+      "scope": "local",
+      "message": "导出文件夹无效",
+      "action": "填写本机已有磁盘上的完整文件夹路径（路径可含中文和空格）"
+    },
+    "EXPORT_OUTPUT_EXISTS": {
+      "scope": "local",
+      "message": "导出位置已有同名草稿或工程文件夹",
+      "action": "换一个名字或文件夹，或勾选覆盖后重试"
+    },
+    "EXPORT_WRITE_FAILED": {
+      "scope": "local",
+      "message": "写入导出文件失败",
+      "action": "检查目标磁盘空间和写入权限，或换一个文件夹"
     }
   }
 }
