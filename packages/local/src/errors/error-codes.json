@@ -132,6 +132,16 @@
       "message": "剧本/分镜生成失败",
       "action": "缩短或调整故事梗概后重试"
     },
+    "VOICEOVER_FAILED": {
+      "scope": "local",
+      "message": "配音生成失败",
+      "action": "检查配音服务的 Key 与音色后重试；已成功的镜头不会重复扣费"
+    },
+    "NO_TTS_PROVIDER": {
+      "scope": "local",
+      "message": "没有可用的配音服务配置",
+      "action": "到 AI 配置里添加百炼 Key（文本或配音配置均可）"
+    },
     "STORYBOARD_INVALID": {
       "scope": "local",
       "message": "模型返回的分镜不符合格式，多次重试仍失败",

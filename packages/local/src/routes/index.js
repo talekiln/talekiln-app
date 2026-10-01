@@ -51,7 +51,7 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
   const assets = assetRoutes(db, log);
   const audio = audioRoutes(db, log, cfg);
   const promptOverrides = promptOverridesRoutes.routes(db, log);
-  const scriptgen = scriptgenRoutes(db, log);
+  const scriptgen = scriptgenRoutes(db, log, extras.scriptgenDeps);
   const workbench = workbenchRoutes(db, log);
   const onboarding = onboardingRoutes(db, log, cfg);
 
@@ -359,6 +359,13 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
   r.post('/episodes/:id/undo', kernelRoutes.postUndo);
   r.post('/episodes/:id/redo', kernelRoutes.postRedo);
   r.post('/episodes/:id/import-legacy', kernelRoutes.importLegacy);
+
+  // ---------- narration voiceover (estimate -> confirm -> synthesize -> kernel write-back) ----------
+  if (extras.storageRoot) {
+    const vo = require('./voiceover')(db, log, { spend: aiQueue && aiQueue.spend, storageRoot: extras.storageRoot, resolve: extras.voiceoverResolve });
+    r.get('/voiceover/voices', vo.voices);
+    r.post('/episodes/:id/voiceover', vo.voiceover);
+  }
 
   // ---------- export / render (G06) and AIGC marking settings (G04) ----------
   {
