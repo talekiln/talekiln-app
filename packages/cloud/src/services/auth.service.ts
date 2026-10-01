@@ -45,8 +45,11 @@ export class AuthService {
       account = await this.repos.accounts.create({
         email, passwordHash: await this.hash(input.password), role: 'USER', plan: invite.plan,
       });
-    } catch {
-      throw new ServiceError('email_taken');
+    } catch (e) {
+      // 仅唯一键冲突（Prisma P2002 / 内存实现）才是邮箱占用；其他数据库故障不应被伪装成 email_taken
+      const code = (e as { code?: string }).code;
+      if (code === 'P2002' || (e as Error).message?.startsWith('unique:')) throw new ServiceError('email_taken');
+      throw e;
     }
     // 先建账号再原子抢码；抢不到（已被用/过期/并发）则回滚账号
     const won = await this.repos.invites.consume(invite.code, account.id, this.now());

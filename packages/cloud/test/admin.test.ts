@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { NestFactory } from '@nestjs/core';
 import bcrypt from 'bcryptjs';
 import { createAppModule } from '../src/app.module';
-import { createMemoryRepositories } from '../src/domain/memory.repositories';
+import { makeRepos } from './helpers/repos';
 import { configureApp } from '../src/http/setup';
 import { loadConfig } from '../src/services/config';
 import { RateLimiter } from '../src/services/rate-limiter';
@@ -13,7 +13,7 @@ import { RateLimiter } from '../src/services/rate-limiter';
 const ADMIN = { email: 'ops@example.com', password: 'test-admin-pass-1' };
 
 async function boot(env: Record<string, string> = {}) {
-  const repos = createMemoryRepositories();
+  const repos = await makeRepos();
   const config = loadConfig({ JWT_ACCESS_SECRET: 'x'.repeat(40), NODE_ENV: 'test', ...env } as NodeJS.ProcessEnv);
   await repos.accounts.create({ email: ADMIN.email, passwordHash: await bcrypt.hash(ADMIN.password, 4), role: 'ADMIN', plan: 'test' });
   const app = await NestFactory.create(createAppModule({ repos, config }), { logger: false, bodyParser: false });

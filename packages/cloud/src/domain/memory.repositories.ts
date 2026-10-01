@@ -29,7 +29,13 @@ export function createMemoryRepositories(): Repositories {
       },
       async list() { return [...accounts.values()].map((x) => ({ ...x })); },
       async setDisabled(id, at) { const a = accounts.get(id); if (a) a.disabledAt = at; },
-      async delete(id) { accounts.delete(id); },
+      async delete(id) {
+        // 与数据库外键语义一致：设备/刷新令牌级联删除，邀请码的使用者置空
+        accounts.delete(id);
+        for (const [k, d] of devices) if (d.accountId === id) devices.delete(k);
+        for (const [k, t] of tokens) if (t.accountId === id) tokens.delete(k);
+        for (const i of invites.values()) if (i.usedById === id) i.usedById = null;
+      },
     },
     invites: {
       async create(i) {
@@ -85,6 +91,7 @@ export function createMemoryRepositories(): Repositories {
     },
     refreshTokens: {
       async create(t) {
+        for (const x of tokens.values()) if (x.tokenHash === t.tokenHash) throw new Error('unique:tokenHash');
         const rec: RefreshTokenRecord = { ...t, id: randomUUID(), createdAt: new Date(), usedAt: null, revokedAt: null };
         tokens.set(rec.id, rec);
         return { ...rec };
