@@ -151,7 +151,7 @@ function isMaskedKey(v) {
   return typeof v === 'string' && v.startsWith('****') && v.length <= 8;
 }
 
-const SENSITIVE_NAME = /api[_-]?key|secret|token|authorization|password|access_key/i;
+const SENSITIVE_NAME = /api[_-]?key|secret|token|authorization|password|access_?key|passwd|credential|signature|cookie|licen[cs]e|jwt|private[_-]?key|session[_-]?id|\bsig\b/i;
 /** 日志脱敏：按字段名清洗对象；按已知密钥值与 Bearer 模式清洗文本。 */
 function redactValue(v, depth = 0) {
   if (depth > 6 || v == null) return v;
@@ -166,12 +166,33 @@ function redactValue(v, depth = 0) {
   }
   return v;
 }
+/**
+ * 文本脱敏规则（按顺序）。新增密钥形态时在这里加一条，并在 test/redactText.test.js 补用例。
+ */
+const TEXT_RULES = [
+  // 许可证 / 登录 JWT（三段 base64url，头部固定以 eyJ 开头）
+  [/\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}/g, '[REDACTED_JWT]'],
+  // Authorization 头：Bearer / Basic / Token，以及 “authorization: xxx”
+  [/\b(Bearer|Basic|Token)\s+[A-Za-z0-9._~+/=-]{8,}/gi, '$1 [REDACTED]'],
+  [/(authorization["']?\s*[:=]\s*["']?)(?!Bearer\b|Basic\b|Token\b)[^\s"',}]+/gi, '$1[REDACTED]'],
+  // 云厂商 Key：sk-、阿里云 AccessKey（LTAI）、AWS AK、百炼 CLI 令牌
+  [/\bsk-[A-Za-z0-9._-]{8,}/g, 'sk-[REDACTED]'],
+  [/\bLTAI[A-Za-z0-9]{8,}/g, 'LTAI[REDACTED]'],
+  [/\bAKIA[0-9A-Z]{16}\b/g, 'AKIA[REDACTED]'],
+  [/\bo1_[A-Za-z0-9._-]{20,}/g, 'o1_[REDACTED]'],
+  // 带签名的下载链接：只抹签名类参数的值，URL 其余部分保留以便排障
+  [/([?&](?:Signature|X-Amz-Signature|X-Amz-Credential|X-Amz-Security-Token|OSSAccessKeyId|AccessKeyId|x-oss-signature|x-oss-credential|security-token|sign|sig|token|access_token|refresh_token)=)[^&\s"'#]+/gi, '$1[REDACTED]'],
+  // 键值形式的刷新令牌 / 访问令牌 / 许可证 / 口令（JSON 或 querystring 形态）
+  [/(["']?(?:refresh[_-]?token|access[_-]?token|id[_-]?token|licen[cs]e(?:[_-]?(?:key|token|jwt))?|api[_-]?key|secret(?:[_-]?key)?|password)["']?\s*[:=]\s*["']?)[^\s"',&}]{6,}/gi, '$1[REDACTED]'],
+];
+
 function redactText(text) {
   let s = String(text);
   for (const secret of current.knownSecrets()) {
     if (secret && secret.length >= 6) s = s.split(secret).join('[REDACTED]');
   }
-  return s.replace(/(Bearer|Token)\s+[A-Za-z0-9._~+/=-]{8,}/gi, '$1 [REDACTED]');
+  for (const [re, rep] of TEXT_RULES) s = s.replace(re, rep);
+  return s;
 }
 
 module.exports = {

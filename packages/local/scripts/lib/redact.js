@@ -8,6 +8,8 @@ const RULES = [
   [/("?authorization"?\s*[:=]\s*"?)[^",}\s]+/gi, '$1REDACTED'],
   [/\bo1_[A-Za-z0-9._-]{20,}/g, 'o1_REDACTED'],
   [/\bLTAI[A-Za-z0-9]{12,}/g, 'LTAI_REDACTED'],
+  [/\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}/g, 'JWT_REDACTED'],
+  [/("?refresh[_-]?token"?\s*[:=]\s*"?)[^",}&\s]+/gi, '$1REDACTED'],
   [/\bws-[a-z0-9]{12,}(\.[a-z0-9-]+\.maas\.aliyuncs\.com)/gi, 'ws-example$1'],
   [/https?:\/\/[^\s"']+[?&](Signature|X-Amz-Signature|OSSAccessKeyId|Expires)=[^\s"']*/g, 'https://example.invalid/redacted'],
 ];

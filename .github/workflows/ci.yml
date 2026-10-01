@@ -31,8 +31,50 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - run: pnpm dist:win
+
+      # 签名骨架：只有存在证书 Secrets 且不是 PR 时才签名；否则走未签名构建。
+      # 机密只经 env 传给下面单个步骤，不 echo、不落盘。见 docs/release-signing.md
+      - name: Detect signing secrets
+        id: signing
+        shell: pwsh
+        env:
+          HAS_CERT: ${{ secrets.WIN_CSC_LINK != '' && secrets.WIN_CSC_KEY_PASSWORD != '' }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if ($env:HAS_CERT -eq 'true' -and $env:EVENT -ne 'pull_request') { "enabled=true" >> $env:GITHUB_OUTPUT }
+          else { "enabled=false" >> $env:GITHUB_OUTPUT }
+
+      - name: Build installer (signed)
+        if: steps.signing.outputs.enabled == 'true'
+        run: pnpm dist:win
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+
+      - name: Build installer (unsigned)
+        if: steps.signing.outputs.enabled != 'true'
+        run: pnpm dist:win
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Verify signature and update publisher
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        run: |
+          Get-ChildItem apps/desktop/release/*.exe | ForEach-Object {
+            $sig = Get-AuthenticodeSignature $_.FullName
+            if ($sig.Status -ne 'Valid') { throw "bad signature on $($_.Name): $($sig.Status)" }
+            if (-not $sig.TimeStamperCertificate) { throw "no timestamp on $($_.Name)" }
+          }
+          $yml = Get-ChildItem -Recurse apps/desktop/release -Filter app-update.yml | Select-Object -First 1
+          if (-not $yml -or -not (Select-String -Path $yml.FullName -Pattern '^publisherName:' -Quiet)) {
+            throw 'app-update.yml has no publisherName: auto-update would skip signature verification'
+          }
+
       - uses: actions/upload-artifact@v4
         with:
-          name: talekiln-win
-          path: apps/desktop/release/*.exe
+          name: talekiln-win-${{ steps.signing.outputs.enabled == 'true' && 'signed' || 'UNSIGNED' }}
+          path: |
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/latest*.yml
