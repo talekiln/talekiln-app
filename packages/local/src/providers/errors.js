@@ -11,6 +11,7 @@ const ERROR_CODES = Object.freeze({
   BAD_RESPONSE: 'BAD_RESPONSE',
   PROVIDER_NOT_AVAILABLE: 'PROVIDER_NOT_AVAILABLE',
   CAPABILITY_NOT_SUPPORTED: 'CAPABILITY_NOT_SUPPORTED',
+  SPEND_LIMIT: 'SPEND_LIMIT',
   UNKNOWN: 'UNKNOWN',
 });
 
@@ -25,6 +26,7 @@ const READABLE = {
   BAD_RESPONSE: '服务商返回格式异常',
   PROVIDER_NOT_AVAILABLE: '该服务商暂未开放',
   CAPABILITY_NOT_SUPPORTED: '该服务商不支持此能力',
+  SPEND_LIMIT: '已达到费用上限，任务未提交。请在设置中调整单次/月度上限后重试',
   UNKNOWN: '未知错误',
 };
 

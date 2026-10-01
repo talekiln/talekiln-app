@@ -23,8 +23,10 @@ const SUBMIT_UNCERTAIN = 'SUBMIT_UNCERTAIN';
  *   pollDelay(task) -> ms                       delay before the next poll of a still-running task
  *   crash(point): called at 'before_submit' | 'after_submit' | 'after_id_write'
  *   maxPollErrors
+ *   spendGuard(task) -> { ok: true } | { ok: false, message }   checked before a queued task is claimed;
+ *     a refusal fails the task with SPEND_LIMIT (never submitted, retryable once limits change)
  */
-function createAiTaskQueue({ store, providers, limits = {}, now = () => Date.now(), backoff, jitter = (ms) => ms, pollDelay = null, hooks = {}, crash = () => {}, maxPollErrors = 5 }) {
+function createAiTaskQueue({ store, providers, limits = {}, now = () => Date.now(), backoff, jitter = (ms) => ms, pollDelay = null, hooks = {}, crash = () => {}, maxPollErrors = 5, spendGuard = null }) {
   const pausedUntil = new Map(); // provider -> epoch ms (429 backoff, shared by all tasks of the provider)
   const defaultBackoff = (p, err, attempt) => Math.min(60000, 1000 * 2 ** Math.max(0, attempt - 1));
   const computeBackoff = backoff || defaultBackoff;
@@ -64,6 +66,11 @@ function createAiTaskQueue({ store, providers, limits = {}, now = () => Date.now
     if (!p) {
       if (store.claim(task.id)) store.fail(task.id, ERROR_CODES.PROVIDER_NOT_AVAILABLE, task.provider);
       return;
+    }
+    if (spendGuard) {
+      let verdict;
+      try { verdict = spendGuard(task); } catch (err) { verdict = { ok: false, message: `spend check failed: ${err && err.message}` }; }
+      if (verdict && verdict.ok === false) { store.fail(task.id, ERROR_CODES.SPEND_LIMIT, verdict.message || null); return; }
     }
     if (!store.claim(task.id)) return;
     const claimed = store.get(task.id);
