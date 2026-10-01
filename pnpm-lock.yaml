@@ -61,6 +61,8 @@ importers:
         specifier: ^5.0.0
         version: 5.4.21(@types/node@26.6.3)
 
+  packages/core: {}
+
   packages/local:
     dependencies:
       '@volcengine/openapi':
