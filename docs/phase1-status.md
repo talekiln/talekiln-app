@@ -4,7 +4,7 @@
 |---|---|---|
 | A01 分叉并打包 | 进行中 | 代码已导入并改成 pnpm 多包；Windows 安装包由 CI 产出，待真机验证 |
 | A04 品牌替换 | 部分 | 名称、appId 已换；图标、关于页许可清单未做 |
-| A05 多包结构与 CI | 进行中 | desktop / renderer / local 三包；core、cloud、admin 待建 |
+| A05 多包结构与 CI | 进行中 | desktop / renderer / local 三包；core、cloud 已建；admin 见 H01 |
 | A06 Electron 安全基线 | 部分 | 升到 39；sandbox、CSP、外链白名单已做；Fuses 未做 |
 | A07 本地服务只听本机 | 已做 | 127.0.0.1 + 每次启动令牌 |
 | A02 代码审计 | 已做 | docs/audit.md，13 项必改 |
@@ -30,3 +30,6 @@
 | G03/G05 渲染导出 | 已做（Linux 真 ffmpeg 测过） | 硬件编码器、Windows 路径、取消需 Windows 真机 |
 | B01–B03 云端账号与授权 | 已做（无数据库验证） | 迁移与 Prisma 仓库待真 Postgres 验证 |
 | D04/D05 角色库与镜头工作台 | 已做（未在浏览器打开） | 锁定参考图对火山经典路径可能无效 |
+| H01 运营后台 | 已做（未在浏览器打开） | apps/admin 五屏（登录/邀请码/用户/公告与目录/概览），云端 /admin/* 独立管理员认证；vite build 通过 |
+| H02 使用统计 | 已做（内存仓储验证） | 云端 POST /telemetry 白名单、概览聚合；客户端 opt-in 模块已写，尚未接入应用事件与设置开关 |
+| H03 反馈与诊断包 | 已做（无 Electron/Postgres 验证） | GET /api/v1/diagnostics/bundle 脱敏 zip（植入假密钥测试）；云端 POST /feedback 有大小与限流；诊断包直接存库，未用 OSS 临时凭证；界面入口未做 |
