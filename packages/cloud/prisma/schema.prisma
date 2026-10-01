@@ -17,6 +17,7 @@ model Account {
   email        String         @unique
   passwordHash String
   role         Role           @default(USER)
+  disabledAt   DateTime?
   plan         String         @default("test")
   createdAt    DateTime       @default(now())
   devices      Device[]
@@ -33,6 +34,7 @@ model InviteCode {
   expiresAt   DateTime?
   usedAt      DateTime?
   usedById    String?
+  revokedAt   DateTime?
   usedBy      Account?  @relation("InviteUsedBy", fields: [usedById], references: [id], onDelete: SetNull)
 }
 
@@ -64,4 +66,38 @@ model RefreshToken {
 
   @@index([familyId])
   @@index([accountId])
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+// 匿名统计事件：不含账号、IP、提示词内容或密钥。installId 为客户端随机生成的匿名标识。
+model TelemetryEvent {
+  id        String   @id @default(uuid())
+  at        DateTime @default(now())
+  day       String
+  installId String
+  name      String
+  code      String?
+  step      String?
+
+  @@index([day, name])
+}
+
+model Feedback {
+  id             String   @id @default(uuid())
+  createdAt      DateTime @default(now())
+  accountId      String?
+  installId      String?
+  contact        String?
+  message        String
+  taskId         String?
+  appVersion     String?
+  diagnostic     Bytes?
+  diagnosticSize Int      @default(0)
+
+  @@index([createdAt])
 }

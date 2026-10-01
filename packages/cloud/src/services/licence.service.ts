@@ -39,6 +39,7 @@ export class LicenceService {
     if (device.revokedAt) throw new ServiceError('device_revoked');
     const account = await this.repos.accounts.findById(accountId);
     if (!account) throw new ServiceError('not_found');
+    if (account.disabledAt) throw new ServiceError('account_disabled');
 
     const iat = Math.floor(this.now().getTime() / 1000);
     const exp = iat + this.cfg.licenceTtlSeconds;

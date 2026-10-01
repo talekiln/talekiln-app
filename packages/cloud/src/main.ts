@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ErrorFilter } from './http/filter';
+import { configureApp } from './http/setup';
 import { AuthService } from './services/auth.service';
 import { REPOS, type Repositories } from './domain/repositories';
 
@@ -16,8 +16,8 @@ async function seedAdmin(app: Awaited<ReturnType<typeof NestFactory.create>>) {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  app.useGlobalFilters(new ErrorFilter());
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
+  configureApp(app);
   app.enableShutdownHooks();
   await seedAdmin(app);
   await app.listen(Number(process.env.PORT ?? 3000), '0.0.0.0');

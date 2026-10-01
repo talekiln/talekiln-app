@@ -69,6 +69,10 @@ export class TokenService {
     }
     const account = await this.repos.accounts.findById(rec.accountId);
     if (!account) throw new ServiceError('invalid_token');
+    if (account.disabledAt) {
+      await this.repos.refreshTokens.revokeFamily(rec.familyId, now);
+      throw new ServiceError('account_disabled');
+    }
     if (rec.deviceId) {
       const d = await this.repos.devices.findById(rec.deviceId);
       if (!d || d.revokedAt) {
