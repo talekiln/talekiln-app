@@ -6,6 +6,8 @@
  * is within one frame of the speech it shows.
  */
 
+const { defaultSubtitleFont } = require('../utils/platformFonts');
+
 const PUNCT = /^[\s，。！？、；：,.!?;:…—“”"'‘’（）()《》【】「」]+$/u;
 const PAUSE = /[，。！？、；：,.!?;:…—]/u;      // a spoken pause: phrase boundary
 const BREAK_STRONG = /[。！？!?…；;]/u;           // sentence end: always ends the cue
@@ -123,7 +125,7 @@ function assColor(hex) {
 const RESOLUTION = { '9:16': [1080, 1920], '16:9': [1920, 1080], '1:1': [1080, 1080] };
 
 const DEFAULT_STYLE = Object.freeze({
-  fontName: 'Microsoft YaHei',
+  fontName: defaultSubtitleFont(), // Windows/Linux: Microsoft YaHei；macOS: PingFang SC
   fontSize: 0,          // 0 = auto: 5.5% of the short side
   color: '#FFFFFF',
   outlineColor: '#000000',

@@ -10,11 +10,12 @@
     "dev:web": "pnpm -r --parallel --filter @talekiln/local --filter @talekiln/renderer dev",
     "build": "pnpm --filter @talekiln/renderer build",
     "dist:win": "pnpm --filter @talekiln/desktop dist:win",
+    "dist:mac": "pnpm --filter @talekiln/desktop dist:mac",
     "lint": "pnpm -r --if-present lint",
     "test": "pnpm -r --if-present test",
     "licenses:check": "node scripts/licenses-check.mjs",
     "secrets:scan": "node scripts/secret-scan.mjs",
-    "test:scripts": "node --test scripts/open-source-export.test.mjs",
+    "test:scripts": "node --test scripts/open-source-export.test.mjs scripts/platform-lib.test.mjs",
     "export:dry": "node scripts/open-source-export.mjs"
   },
   "pnpm": {

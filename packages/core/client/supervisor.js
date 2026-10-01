@@ -76,11 +76,12 @@ function createSupervisor(o) {
     const myGen = ++gen;
     startedAt = Date.now(); // spawn 同步失败时也要有正确的起点，否则会误判为“稳定运行”而清零计数
     setState('starting');
-    const args = ['--pipe', cfg.endpoint];
+    const args = ['--pipe', cfg.endpoint]; // Windows 命名管道或 Unix 套接字路径（参数名沿用 --pipe）
     if (cfg.logDir) args.push('--log-dir', cfg.logDir);
     let c;
     try {
-      c = spawnFn(cfg.bin, args, { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...(cfg.env || {}) }, windowsHide: true });
+      c = spawnFn(cfg.bin, args, { stdio: ['ignore', 'pipe', 'pipe'], // LYCORE_WATCH_PARENT：父进程（桌面主进程）崩溃或被强杀时 lycore 自行退出，避免残留（Unix 上生效，见 src/main.rs）
+      env: { ...process.env, LYCORE_WATCH_PARENT: '1', ...(cfg.env || {}) }, windowsHide: true });
     } catch (e) {
       // 同步 spawn 失败（如路径不存在）按崩溃处理
       setImmediate(() => onChildGone(myGen, { code: null, signal: null, error: e }));

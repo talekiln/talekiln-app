@@ -94,8 +94,30 @@ export function eventToCombo(e) {
   return [...mods, key].join('+')
 }
 
-/** 显示用 */
-export function formatCombo(combo) {
+/** 是否 macOS（navigator 可注入，便于测试）。键位匹配本身不区分：ctrlKey 或 metaKey 都算 'Ctrl'。 */
+export function isMacPlatform(nav = typeof navigator !== 'undefined' ? navigator : null) {
+  const p = nav && (nav.userAgentData?.platform || nav.platform || '')
+  return /mac|iphone|ipad/i.test(String(p))
+}
+
+/** macOS 显示约定：⌃/⌘ 合一显示为 ⌘，⌥、⇧ 用符号，修饰键与主键之间不加 '+'（⇧⌘Z）。其他平台原样。 */
+export function formatComboFor(combo, mac) {
+  const out = formatComboBase(combo)
+  if (!mac) return out
+  const parts = out.split('+')
+  const key = parts.pop()
+  // macOS 修饰键顺序：⌃⌥⇧⌘
+  const sym = { Alt: '⌥', Shift: '⇧', Ctrl: '⌘' }
+  const mods = ['Alt', 'Shift', 'Ctrl'].filter((m) => parts.includes(m)).map((m) => sym[m])
+  return mods.join('') + key
+}
+
+/** 显示用（随当前平台）：Windows/Linux 显示 Ctrl+K，macOS 显示 ⌘K。 */
+export function formatCombo(combo, mac = isMacPlatform()) {
+  return formatComboFor(combo, mac)
+}
+
+function formatComboBase(combo) {
   return combo.replace('Space', '空格').replace('ArrowLeft', '←').replace('ArrowRight', '→')
     .replace('ArrowUp', '↑').replace('ArrowDown', '↓').replace('Delete', 'Del')
 }

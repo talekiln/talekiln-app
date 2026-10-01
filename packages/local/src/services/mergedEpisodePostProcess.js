@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { getFfmpegPath, getFfprobePath } = require('../utils/ffmpegPath');
+const { pickDrawtextFont } = require('../utils/platformFonts');
 
 function ffprobeDurationSec(filePath) {
   const probe = getFfprobePath();
@@ -180,22 +181,8 @@ function amixTwoTracks(pathA, pathB, slotSec, outPath, log) {
 }
 
 function getDrawtextFontOption() {
-  const candidates = [];
-  if (process.platform === 'win32') {
-    const root = process.env.SystemRoot || 'C:\\Windows';
-    candidates.push(
-      path.join(root, 'Fonts', 'msyh.ttc'),
-      path.join(root, 'Fonts', 'msyhbd.ttc'),
-      path.join(root, 'Fonts', 'simhei.ttf')
-    );
-  }
-  candidates.push('/System/Library/Fonts/PingFang.ttc', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf');
-  for (const p of candidates) {
-    if (p && fs.existsSync(p)) {
-      return `:fontfile='${escapeFfmpegPath(p)}'`;
-    }
-  }
-  return '';
+  const p = pickDrawtextFont();
+  return p ? `:fontfile='${escapeFfmpegPath(p)}'` : '';
 }
 
 /**
