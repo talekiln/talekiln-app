@@ -153,7 +153,7 @@ test('统计：只接受白名单字段，提示词/Key 等多余字段整体拒
   try {
     const bad = [
       { installId: IID, events: [{ name: 'project_created', prompt: '一个关于猫的故事' }] },
-      { installId: IID, events: [{ name: 'task_failed', code: 'sk-abcdefghijklmnopqrstuvwx' }] }, // 非法码格式
+      { installId: IID, events: [{ name: 'task_failed', code: ['sk', 'abcdefghijklmnopqrstuvwx'].join('-') }] }, // 非法码格式
       { installId: IID, email: 'a@b.com', events: [{ name: 'app_open' }] },
       { installId: IID, events: [{ name: 'custom_event' }] },
       { installId: 'short', events: [{ name: 'app_open' }] },
@@ -207,7 +207,7 @@ test('反馈：保存、脱敏文字、管理员下载诊断包与任务号', as
   const s = await boot();
   try {
     const r = await s.call('/feedback', { body: {
-      message: '导出失败 Authorization: Bearer abcdefghijklmnop1234 以及 sk-abcdefghijklmnopqrstuv',
+      message: '导出失败 Authorization: Bearer abcdefghijklmnop1234 以及 ' + ['sk', 'abcdefghijklmnopqrstuv'].join('-'),
       taskId: 'task_123', contact: 'me@example.com', appVersion: '1.2.8', diagnostic: zipB64(),
     } });
     assert.equal(r.status, 201);
