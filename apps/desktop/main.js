@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, session, shell, dialog } = require('electron');
+const { app, BrowserWindow, Menu, session, shell, dialog, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const net = require('net');
@@ -60,7 +60,14 @@ async function startLocalService() {
 
   require(path.join(LOCAL_DIR, 'src', 'db', 'migrate.js'));
   const { createApp } = require(path.join(LOCAL_DIR, 'src', 'app.js'));
-  const { app: expressApp } = createApp();
+  // 密钥：主进程用 safeStorage 加密，仅密文落盘；明文只在本地服务内存中。不可用时拒绝保存而非降级明文
+  const { FileSecretStore, createSafeStorageCipher } = require(path.join(LOCAL_DIR, 'src', 'secrets'));
+  const secretStore = new FileSecretStore({
+    cipher: createSafeStorageCipher(safeStorage),
+    filePath: path.join(DATA_DIR, 'data', 'secrets.enc.json'),
+  });
+  if (!secretStore.isAvailable()) writeMainLog('safeStorage encryption unavailable: API keys cannot be saved');
+  const { app: expressApp } = createApp({ secretStore });
   const port = await freePort();
   return new Promise((resolve, reject) => {
     const server = require('http').createServer(expressApp);

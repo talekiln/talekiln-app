@@ -111,9 +111,9 @@ function inferProtocol(provider, model) {
  */
 function getDefaultImageConfig(db, preferredModel, preferredProvider, imageServiceType) {
   const serviceType = imageServiceType || 'image';
-  let configs = aiConfigService.listConfigs(db, serviceType);
+  let configs = aiConfigService.listConfigsInternal(db, serviceType);
   if (configs.length === 0 && serviceType === 'storyboard_image') {
-    configs = aiConfigService.listConfigs(db, 'image');
+    configs = aiConfigService.listConfigsInternal(db, 'image');
   }
   let active = configs.filter((c) => c.is_active);
   if (active.length === 0) return null;

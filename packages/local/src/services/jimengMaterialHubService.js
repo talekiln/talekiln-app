@@ -9,13 +9,14 @@
 function loadAiJimeng2AuthRow(db) {
   if (!db) return null;
   try {
-    return db
+    const row = db
       .prepare(
         `SELECT id, name, base_url, api_key FROM ai_service_configs
          WHERE deleted_at IS NULL AND service_type = ? AND is_active = 1
          ORDER BY is_default DESC, priority DESC, id ASC LIMIT 1`
       )
       .get('jimeng2_character_auth');
+    return require('./aiConfigService').withResolvedKey(row);
   } catch (_) {
     return null;
   }
@@ -111,7 +112,6 @@ function buildHubContext(cfg, db, log) {
 
   const hubAuthDiag = {
     winning_token_source: winningTokenSource,
-    raw_token_chars_before_normalize: rawTokJoined.length,
     token_chars_in_bearer_payload: tok.length,
     raw_had_leading_bearer_prefix: hadLeadingBearer,
     leading_bearer_prefix_stripped: hadLeadingBearer,
@@ -124,7 +124,7 @@ function buildHubContext(cfg, db, log) {
     db_jimeng2_active_row_found: !!row,
     db_config_id: row?.id ?? null,
     db_config_name: row?.name ?? null,
-    db_api_key_field_chars: dbKeyLen,
+    db_api_key_present: dbKeyLen > 0,
     token_fingerprint: tokenFingerprint(tok),
     request_header_shape: 'Authorization: Bearer <token>',
     note:
