@@ -120,7 +120,7 @@ async function synthesize(db, log, { text, storyboard_id, config, storage_base, 
   if (!text || !text.trim()) throw new Error('text 不能为空');
   const aiConfigService = require('./aiConfigService');
   const ttsConfig = config || (() => {
-    const configs = aiConfigService.listConfigs(db, 'tts');
+    const configs = aiConfigService.listConfigsInternal(db, 'tts');
     const active = configs.filter((c) => c.is_active);
     return active.find((c) => c.is_default) || active[0];
   })();

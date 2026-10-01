@@ -1,3 +1,6 @@
+mod encoder;
+mod ffmpeg;
+mod media;
 mod rpc;
 
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
@@ -10,7 +13,7 @@ async fn serve<S: AsyncRead + AsyncWrite + Unpin>(stream: S) {
         if line.trim().is_empty() {
             continue;
         }
-        if let Some(resp) = rpc::handle_line(&line) {
+        if let Some(resp) = rpc::handle_line(&line).await {
             let mut out = resp.to_string();
             out.push('\n');
             if w.write_all(out.as_bytes()).await.is_err() {

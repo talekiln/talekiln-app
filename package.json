@@ -12,7 +12,8 @@
     "dist:win": "pnpm --filter @talekiln/desktop dist:win",
     "lint": "pnpm -r --if-present lint",
     "test": "pnpm -r --if-present test",
-    "licenses:check": "node scripts/licenses-check.mjs"
+    "licenses:check": "node scripts/licenses-check.mjs",
+    "secrets:scan": "node scripts/secret-scan.mjs"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

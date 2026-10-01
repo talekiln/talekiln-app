@@ -862,6 +862,17 @@
           >
             导出解说 SRT
           </el-button>
+          <el-button
+            v-if="storyboards.length > 0"
+            class="sb-export-srt-btn"
+            size="small"
+            type="primary"
+            :disabled="!currentEpisodeId"
+            :loading="assemblingTimeline"
+            @click="onAssembleTimeline"
+          >
+            组装时间线
+          </el-button>
         </div>
         <div class="asset-actions sb-batch-actions">
           <div class="flex">
@@ -2648,6 +2659,7 @@ import { taskAPI } from '@/api/task'
 import { imagesAPI } from '@/api/images'
 import { videosAPI } from '@/api/videos'
 import { storyboardsAPI } from '@/api/storyboards'
+import { timelinesAPI } from '@/api/timelines'
 import { uploadAPI } from '@/api/upload'
 import { characterLibraryAPI } from '@/api/characterLibrary'
 import { sceneLibraryAPI } from '@/api/sceneLibrary'
@@ -5737,6 +5749,27 @@ async function onExportStoryboardSheet() {
     return
   }
   ElMessage.success(`已导出分镜表（${result.count} 个镜头）`)
+}
+
+const assemblingTimeline = ref(false)
+
+/** 从分镜组装时间线并进入时间线编辑器（已存在则直接进入） */
+async function onAssembleTimeline() {
+  if (!currentEpisodeId.value) return
+  assemblingTimeline.value = true
+  try {
+    try {
+      await timelinesAPI.assemble(currentEpisodeId.value)
+    } catch (e) {
+      // 409：时间线已存在，直接打开
+      if (e?.response?.status !== 409) throw e
+    }
+    router.push({ path: `/episodes/${currentEpisodeId.value}/timeline`, query: { drama: String(dramaId.value) } })
+  } catch (e) {
+    ElMessage.error(e.message || '组装时间线失败')
+  } finally {
+    assemblingTimeline.value = false
+  }
 }
 
 function onExportNarrationSrt() {

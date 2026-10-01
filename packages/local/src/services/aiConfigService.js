@@ -2,6 +2,16 @@
 const fs = require('fs');
 const path = require('path');
 const { normalizeMaterialHubToken } = require('./jimengMaterialHubService');
+const secrets = require('../secrets');
+
+/** 取明文 key：仅限服务端内部调用，不得写入响应或日志 */
+function resolveKey(id) {
+  return secrets.getSecretStore().get(secrets.configRef(id)) || '';
+}
+/** 给直接 SELECT 了 ai_service_configs 的调用方：返回带明文 api_key 的行副本（内存） */
+function withResolvedKey(row) {
+  return row ? { ...row, api_key: resolveKey(row.id) } : row;
+}
 
 function normalizeApiKeyForService(serviceType, apiKey) {
   if (serviceType === 'jimeng2_character_auth' && apiKey != null) {
@@ -42,7 +52,7 @@ function ensureSingleDefaultPerType(db) {
   }
 }
 
-function listConfigs(db, serviceType) {
+function listConfigs(db, serviceType, opts = {}) {
   ensureSingleDefaultPerType(db);
   const order = 'ORDER BY is_default DESC, priority DESC, created_at DESC';
   let sql = 'SELECT * FROM ai_service_configs WHERE deleted_at IS NULL ' + order;
@@ -52,7 +62,12 @@ function listConfigs(db, serviceType) {
     params.push(serviceType);
   }
   const rows = params.length ? db.prepare(sql).all(...params) : db.prepare(sql).all();
-  return rows.map(rowToConfig);
+  return rows.map((r) => rowToConfig(r, opts));
+}
+
+/** 内部使用：api_key 为明文，仅供供应商调用层，绝不可直接返回给前端 */
+function listConfigsInternal(db, serviceType) {
+  return listConfigs(db, serviceType, { reveal: true });
 }
 
 function clearOtherDefault(db, serviceType, exceptId) {
@@ -62,9 +77,9 @@ function clearOtherDefault(db, serviceType, exceptId) {
   stmt.run(serviceType, exceptId);
 }
 
-function getConfig(db, id) {
+function getConfig(db, id, opts = {}) {
   const row = db.prepare('SELECT * FROM ai_service_configs WHERE id = ? AND deleted_at IS NULL').get(id);
-  return row ? rowToConfig(row) : null;
+  return row ? rowToConfig(row, opts) : null;
 }
 
 function createConfig(db, log, req) {
@@ -112,6 +127,8 @@ function createConfig(db, log, req) {
     }
   }
   const defaultModel = req.default_model != null ? String(req.default_model).trim() || null : null;
+  const plainKey = normalizeApiKeyForService(req.service_type, req.api_key || '');
+  if (plainKey && !secrets.getSecretStore().isAvailable()) throw new secrets.SecretStoreUnavailableError();
   const info = db.prepare(
     `INSERT INTO ai_service_configs (service_type, provider, api_protocol, name, base_url, api_key, model, default_model, endpoint, query_endpoint, priority, is_default, is_active, settings, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`
@@ -121,7 +138,7 @@ function createConfig(db, log, req) {
     req.api_protocol || '',
     req.name || '',
     req.base_url || '',
-    normalizeApiKeyForService(req.service_type, req.api_key || ''),
+    '',
     model,
     defaultModel,
     endpoint,
@@ -134,6 +151,12 @@ function createConfig(db, log, req) {
   );
   log.info('AI config created', { config_id: info.lastInsertRowid, provider: req.provider });
   const newId = info.lastInsertRowid;
+  try {
+    secrets.getSecretStore().set(secrets.configRef(newId), plainKey);
+  } catch (e) {
+    db.prepare('DELETE FROM ai_service_configs WHERE id = ?').run(newId);
+    throw e;
+  }
   if (req.is_default) clearOtherDefault(db, req.service_type || 'text', newId);
   return getConfig(db, newId);
 }
@@ -159,10 +182,14 @@ function updateConfig(db, log, id, req) {
     updates.push('base_url = ?');
     params.push(req.base_url);
   }
-  if (req.api_key != null) {
-    updates.push('api_key = ?');
+  // 掩码值（前端回传的展示串）视为"未修改"；空串表示清除
+  let newPlainKey = null;
+  if (req.api_key != null && !secrets.isMaskedKey(req.api_key)) {
     const st = req.service_type != null ? req.service_type : existing.service_type;
-    params.push(normalizeApiKeyForService(st, req.api_key));
+    newPlainKey = normalizeApiKeyForService(st, req.api_key);
+    if (newPlainKey && !secrets.getSecretStore().isAvailable()) throw new secrets.SecretStoreUnavailableError();
+    updates.push('api_key = ?');
+    params.push('');
   }
   if (req.model != null) {
     updates.push('model = ?');
@@ -197,6 +224,7 @@ function updateConfig(db, log, id, req) {
     params.push(req.is_active ? 1 : 0);
   }
   if (updates.length === 0) return existing;
+  if (newPlainKey !== null) secrets.getSecretStore().set(secrets.configRef(id), newPlainKey);
   params.push(new Date().toISOString(), id);
   db.prepare('UPDATE ai_service_configs SET ' + updates.join(', ') + ', updated_at = ? WHERE id = ?').run(...params);
   if (req.is_default === true) clearOtherDefault(db, existing.service_type, id);
@@ -208,11 +236,13 @@ function deleteConfig(db, log, id) {
   const now = new Date().toISOString();
   const result = db.prepare('UPDATE ai_service_configs SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL').run(now, id);
   if (result.changes === 0) return false;
+  secrets.getSecretStore().delete(secrets.configRef(id));
   log.info('AI config deleted', { config_id: id });
   return true;
 }
 
-function rowToConfig(r) {
+function rowToConfig(r, opts = {}) {
+  const plain = resolveKey(r.id) || r.api_key || '';
   const cfg = {
     id: r.id,
     service_type: r.service_type,
@@ -220,7 +250,8 @@ function rowToConfig(r) {
     api_protocol: r.api_protocol || '',
     name: r.name,
     base_url: r.base_url,
-    api_key: r.api_key,
+    api_key: opts.reveal ? plain : secrets.maskKey(plain),
+    has_api_key: !!plain,
     model: modelFromDb(r.model),
     default_model: r.default_model ? String(r.default_model).trim() : null,
     endpoint: r.endpoint,
@@ -514,10 +545,10 @@ function applyVendorLock(db, log, cfg) {
   }
 
   // 保存现有 api_key（key: "service_type:provider"）
-  const existing = db.prepare('SELECT service_type, provider, api_key FROM ai_service_configs WHERE deleted_at IS NULL').all();
+  const existing = db.prepare('SELECT id, service_type, provider FROM ai_service_configs WHERE deleted_at IS NULL').all();
   const savedKeys = new Map();
   for (const row of existing) {
-    savedKeys.set(`${row.service_type}:${row.provider}`, row.api_key);
+    savedKeys.set(`${row.service_type}:${row.provider}`, resolveKey(row.id));
   }
 
   const now = new Date().toISOString();
@@ -529,7 +560,7 @@ function applyVendorLock(db, log, cfg) {
     const model = Array.isArray(item.model)
       ? JSON.stringify(item.model)
       : item.model ? JSON.stringify([item.model]) : '[]';
-    db.prepare(
+    const ins = db.prepare(
       `INSERT INTO ai_service_configs
         (service_type, provider, api_protocol, name, base_url, api_key, model, default_model, endpoint, query_endpoint, priority, is_default, is_active, settings, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`
@@ -539,7 +570,7 @@ function applyVendorLock(db, log, cfg) {
       item.api_protocol || '',
       item.name || '',
       item.base_url || '',
-      apiKey,
+      '',
       model,
       item.default_model || null,
       item.endpoint || '',
@@ -550,6 +581,11 @@ function applyVendorLock(db, log, cfg) {
       now,
       now
     );
+    try {
+      secrets.getSecretStore().set(secrets.configRef(ins.lastInsertRowid), apiKey);
+    } catch (e) {
+      console.warn('[vendor_lock] key not stored:', e.code || e.message);
+    }
   }
   for (const item of configs) {
     console.log(`[vendor_lock] loaded: service_type=${item.service_type} provider=${item.provider} api_protocol=${item.api_protocol || '(auto)'} endpoint=${item.endpoint || '(auto)'}`);
@@ -562,14 +598,42 @@ function applyVendorLock(db, log, cfg) {
  */
 function bulkUpdateApiKey(db, log, newKey) {
   const now = new Date().toISOString();
-  const info = db.prepare(
-    'UPDATE ai_service_configs SET api_key = ?, updated_at = ? WHERE deleted_at IS NULL'
-  ).run(newKey, now);
-  log.info('Bulk update api_key', { updated: info.changes });
-  return info.changes;
+  if (!secrets.getSecretStore().isAvailable()) throw new secrets.SecretStoreUnavailableError();
+  const ids = db.prepare('SELECT id FROM ai_service_configs WHERE deleted_at IS NULL').all();
+  for (const { id } of ids) secrets.getSecretStore().set(secrets.configRef(id), newKey);
+  db.prepare('UPDATE ai_service_configs SET api_key = ?, updated_at = ? WHERE deleted_at IS NULL').run('', now);
+  log.info('Bulk update api_key', { updated: ids.length });
+  return ids.length;
+}
+
+/**
+ * 启动迁移：把旧版明文 api_key 加密进 secret store 后清空数据库列。
+ * 存储不可用时不动数据（下次启动重试），返回 { migrated, skipped }。
+ */
+function migratePlaintextApiKeys(db, log) {
+  const store = secrets.getSecretStore();
+  const rows = db.prepare("SELECT id, api_key FROM ai_service_configs WHERE api_key IS NOT NULL AND api_key != ''").all();
+  if (rows.length === 0) return { migrated: 0, skipped: 0 };
+  if (!store.isAvailable()) {
+    log.warn('API key migration skipped: secret store unavailable', { pending: rows.length });
+    return { migrated: 0, skipped: rows.length };
+  }
+  const clear = db.prepare("UPDATE ai_service_configs SET api_key = '' WHERE id = ?");
+  let migrated = 0;
+  for (const r of rows) {
+    store.set(secrets.configRef(r.id), r.api_key); // 先写密文，成功后才清空明文
+    clear.run(r.id);
+    migrated++;
+  }
+  log.info('API keys migrated to secret store', { migrated });
+  return { migrated, skipped: 0 };
 }
 
 module.exports = {
+  resolveKey,
+  withResolvedKey,
+  listConfigsInternal,
+  migratePlaintextApiKeys,
   listConfigs,
   getConfig,
   createConfig,
