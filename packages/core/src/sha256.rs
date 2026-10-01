@@ -79,7 +79,11 @@ impl Sha256 {
         self.buf.extend_from_slice(data);
     }
 
-    pub fn finish_hex(mut self) -> String {
+    pub fn finish_hex(self) -> String {
+        self.finish_bytes().iter().map(|b| format!("{b:02x}")).collect()
+    }
+
+    pub fn finish_bytes(mut self) -> [u8; 32] {
         let bits = self.len * 8;
         let mut pad = vec![0x80u8];
         while (self.buf.len() + pad.len()) % 64 != 56 {
@@ -87,7 +91,11 @@ impl Sha256 {
         }
         pad.extend_from_slice(&bits.to_be_bytes());
         self.update(&pad);
-        self.h.iter().map(|x| format!("{x:08x}")).collect()
+        let mut out = [0u8; 32];
+        for (i, x) in self.h.iter().enumerate() {
+            out[i * 4..i * 4 + 4].copy_from_slice(&x.to_be_bytes());
+        }
+        out
     }
 }
 

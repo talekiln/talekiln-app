@@ -69,7 +69,29 @@ const child = spawn(bin, ['--pipe', endpoint, '--log-dir', logDir], {
 
   await assert.rejects(c.hello([99]), (e) => e instanceof RpcError && e.code === -32010 && /incompatible/.test(e.message));
   await assert.rejects(c.call('core.hello', {}), (e) => e.code === -32602);
-  await assert.rejects(c.call('licence.status', {}), (e) => e.code === -32001 && /not implemented/.test(e.message));
+  await assert.rejects(c.call('licence.status', {}), (e) => e.code === -32602);
+  // licence.status：用 node:crypto 按 jose 的方式（ES256，IEEE P1363 签名）签发，验证互通
+  {
+    const crypto = require('crypto');
+    const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const jwks = { keys: [{ ...publicKey.export({ format: 'jwk' }), kid: 'k1', alg: 'ES256', use: 'sig' }] };
+    const b = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+    const now = Math.floor(Date.now() / 1000);
+    const mk = (claims) => {
+      const input = b({ alg: 'ES256', kid: 'k1', typ: 'JWT' }) + '.' + b(claims);
+      const sig = crypto.sign('sha256', Buffer.from(input), { key: privateKey, dsaEncoding: 'ieee-p1363' });
+      return input + '.' + sig.toString('base64url');
+    };
+    const base = { sub: 'acc', did: 'dev', plan: 'test', entitlements: ['generate'], graceDays: 14, iat: now - 100, iss: 'talekiln' };
+    const ok = await c.call('licence.status', { token: mk({ ...base, exp: now + 3600 }), jwks });
+    assert.strictEqual(ok.valid, true); assert.strictEqual(ok.reason, 'ok'); assert.strictEqual(ok.plan, 'test');
+    const gr = await c.call('licence.status', { token: mk({ ...base, exp: now - 86400 }), jwks });
+    assert.strictEqual(gr.valid, true); assert.strictEqual(gr.reason, 'grace');
+    const ex = await c.call('licence.status', { token: mk({ ...base, exp: now - 20 * 86400 }), jwks });
+    assert.strictEqual(ex.valid, false); assert.strictEqual(ex.reason, 'expired');
+    const tampered = mk({ ...base, exp: now + 3600 }).split('.'); tampered[1] = b({ ...base, plan: 'pro', exp: now + 9e6 });
+    assert.strictEqual((await c.licenceStatus({ token: tampered.join('.'), jwks })).reason, 'bad_signature');
+  }
   await assert.rejects(c.call('render.start', {}), (e) => e.code === -32602);
   await assert.rejects(c.call('nope', {}), (e) => e.code === -32601);
 
