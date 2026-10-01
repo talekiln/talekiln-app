@@ -13,13 +13,31 @@ Rust crate `lycore`：以本地 JSON-RPC 2.0 服务形式运行的核心进程�
 | 方法 | 状态 | 说明 |
 | --- | --- | --- |
 | `core.hello` | 已实现 | 握手与版本协商 |
-| `licence.status` | 占位 | 返回 not implemented |
+| `licence.status` | 已实现 | 校验 ES256 JWT 授权令牌，见下文 |
 | `media.probe` | 已实现 | 调用 ffprobe 解析媒体信息 |
 | `encoder.detect` | 已实现 | 检测 H.264 编码器可用性并给出推荐顺序 |
 | `render.plan` | 已实现 | 将时间线拆分为场景，计算确定性 sceneKey 并检测缓存命中 |
 | `render.start` | 已实现 | 异步渲染任务，返回 `jobId`；进度通过 `render.status` 轮询或 `render.progress` 通知 |
 | `render.status` | 已实现 | 查询任务状态/百分比/结果/错误 |
 | `render.cancel` | 已实现 | 取消任务并终止 ffmpeg 子进程 |
+
+### licence.status
+
+参数：`{"token":"<JWT>","jwks":{"keys":[...]}`（或单个 `"publicKey":{JWK}`）`,"graceDays":14（可选）,"issuer":"（可选）","nowSec":（可选，覆盖当前时间）}`。公钥由客户端从云端 `/.well-known/licence-jwks.json` 取得并缓存后传入，lycore 不联网。
+
+只接受 `alg=ES256`（拒绝 none/HS256）；头部有 `kid` 时必须在 JWKS 中匹配，无 `kid` 则逐个尝试。声明字段：`sub`、`did`、`plan`、`entitlements`、`graceDays`、`exp`、`iss`（云端 `licence.service.ts`），另支持可选 `nbf`。
+
+`result`：`{"valid":bool,"plan":"test"|null,"expires":"ISO8601 UTC"|null,"reason":"...","expiresAt","graceEndsAt","entitlements","accountId","deviceId"}`。
+
+| reason | valid | 含义 |
+| --- | --- | --- |
+| `ok` | true | 未过期 |
+| `grace` | true | 已过 `exp` 但在离线宽限期内（宽限天数：参数 `graceDays` > 令牌 `graceDays` > 默认 14） |
+| `expired` | false | 超出宽限期 |
+| `not_yet_valid` | false | `nbf` 在未来 |
+| `bad_signature` / `unknown_kid` / `unsupported_alg` / `malformed` / `missing_exp` / `issuer_mismatch` / `no_token` | false | 校验失败；不抛 RPC 错误 |
+
+缺少 `jwks`/`publicKey` 返回 -32602。
 
 ### core.hello
 

@@ -1,5 +1,6 @@
 mod encoder;
 mod ffmpeg;
+mod licence;
 mod media;
 mod plan;
 mod render;
