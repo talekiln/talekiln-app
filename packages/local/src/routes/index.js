@@ -343,11 +343,21 @@ function setupRouter(cfg, db, log, aiQueue) {
 
   // ---------- ai-tasks (task center) ----------
   if (aiQueue && aiQueue.store) {
-    const aiTasks = require('./aiTasks')(aiQueue.store, log, aiQueue.worker);
+    const aiTasks = require('./aiTasks')(aiQueue.store, log, aiQueue.worker, { spend: aiQueue.spend });
+    r.post('/ai-tasks', aiTasks.create);
     r.get('/ai-tasks', aiTasks.list);
     r.get('/ai-tasks/:id', aiTasks.get);
     r.post('/ai-tasks/:id/retry', aiTasks.retry);
     r.post('/ai-tasks/:id/cancel', aiTasks.cancel);
+  }
+
+  // ---------- spend control (D06) ----------
+  if (aiQueue && aiQueue.spend) {
+    const spendRoutes = require('./spend')(aiQueue.spend, log);
+    r.get('/spend/summary', spendRoutes.summary);
+    r.get('/spend/limits', spendRoutes.getLimits);
+    r.put('/spend/limits', spendRoutes.putLimits);
+    r.post('/spend/estimate', spendRoutes.estimate);
   }
 
   return r;

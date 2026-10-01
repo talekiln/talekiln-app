@@ -7,23 +7,29 @@ const { getDb } = require('./db/index.js');
 const { loadConfig } = require('./config/index.js');
 const logger = require('./logger.js');
 const { setupRouter } = require('./routes/index.js');
-const { createAiTaskStore, createAiTaskQueue, createWorker, createDownloader, withDownloads, queueOptionsFromConfig } = require('./queue');
+const { createAiTaskStore, createAiTaskQueue, createWorker, createDownloader, withDownloads, queueOptionsFromConfig, buildQueueProviders } = require('./queue');
+const { createSpendService } = require('./spend');
 
 function createAiQueue({ config, db, log, storageRoot, providers, onTaskFinished }) {
   const store = createAiTaskStore(db);
+  const spend = createSpendService(db);
   const downloader = createDownloader({ storageDir: storageRoot });
   const queue = createAiTaskQueue({
     store,
     providers: withDownloads(providers, downloader),
     ...queueOptionsFromConfig(config),
+    spendGuard: (t) => spend.guardTask(t),
     hooks: { onRateLimit: (e) => log.warn && log.warn('ai queue rate limited', e) },
   });
   const worker = createWorker({
     queue, store, config,
-    onTaskFinished,
+    onTaskFinished: (t) => {
+      try { spend.recordFinished(t); } catch (e) { log.error && log.error('spend record', { error: e && e.message }); }
+      if (onTaskFinished) onTaskFinished(t);
+    },
     onError: (e) => log.error && log.error('ai queue worker', { error: e && e.message }),
   });
-  return { store, queue, worker, downloader };
+  return { store, queue, worker, downloader, spend };
 }
 
 function createApp(opts = {}) {
@@ -100,7 +106,7 @@ function createApp(opts = {}) {
   });
 
   // 持久化 AI 任务队列 + worker（由 server.js / 桌面主进程调用 aiQueue.worker.start()）
-  const aiQueue = createAiQueue({ config, db, log, storageRoot, providers: opts.queueProviders || {}, onTaskFinished: opts.onTaskFinished });
+  const aiQueue = createAiQueue({ config, db, log, storageRoot, providers: opts.queueProviders || buildQueueProviders({ db, storageDir: storageRoot }), onTaskFinished: opts.onTaskFinished });
 
   app.use('/api/v1', setupRouter(config, db, log, aiQueue));
 
