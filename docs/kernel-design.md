@@ -167,6 +167,8 @@ Node { id, type, params, legacy_id? }
 
 ### 10.5 仍绕过内核的旧写路径（后续要改成调意图层）
 
+> 状态更新：镜头与时间线的编辑类写接口已在 §11 改道经内核；本节原清单保留作历史记录，现状以 §11.5「剩余绕过内核的写入」为准。
+
 下列接口仍直接写旧表，之后内核提交的物化会按图覆盖其派生列，或图感知不到这些变化：
 
 - 镜头增删改：`POST/PUT/DELETE /storyboards`、`/storyboards/:id/insert-before`、`PUT /episodes/:id/storyboards/order`、`POST /storyboards/batch-infer-params`、`split-by-audio`、各类 polish / prompt 接口；
@@ -195,3 +197,66 @@ Node { id, type, params, legacy_id? }
 - **真实片长**：`effectiveSegments`（只读投影）——采用的 video 版本带正整数 `metadata.duration_ms`（R）时，到末尾的片段（out == 目标时长）伸缩到 R，其余裁到 R 以内；存储的 `shot.duration_ms` 与 `compose.segments` 不变。`timelineView`、`shotView.used_ms` 用它，`shotView` 另给 `real_ms`。物化后旧时间线表同步。注意：改写镜头目标时长会改 shot 的 cacheKey 进而让图/视频过期，所以不用“回写 duration_ms”的办法。
 - **装配**：`timeline/kernelAssemble.js` 的 `assembleFromKernel(db, ep, {replace})` 与 `assembleFromStoryboard` 同语义（已存在且未 replace -> 409），但经内核；`replace` 重置片段为整段、清字幕样式覆盖（音乐保留）。旧路由 `POST /timelines/episode/:id/assemble` 尚未改调（路由归 I3）。
 - **未做**：配音进队列/任务中心；多说话人分别配不同音色（现在一个镜头一个音色）；台词比镜头长只返回时间不处理（`timelineView` 会夹掉越界字幕）；除 `longxiaochun_v2` 外音色未实测；字幕样式界面。
+
+## 12. 旧写接口改道（I3）：兼容层与剩余绕过
+
+代码：`packages/local/src/kernel/compat.js`；测试 `test/kernelCompat.test.js`。URL 与返回形状不变，实现改为：确保该剧集有图（没有就自动 `importLegacy`）-> 把请求翻译成内核意图/事务 -> `store.commit`（同一 SQLite 事务里物化回旧表）-> 从物化后的旧表读出响应。图里没有的列（见 12.5）仍照旧直接写，但与图的提交放在同一个 SQLite 事务里；任何一步失败整体回滚，图、日志、旧表都不变。
+
+### 12.1 改道的接口
+
+| 接口 | 翻译成 |
+|---|---|
+| `POST /storyboards` | `insertLine`（新镜头的台词/旁白/动作行）+ `addShot`；`storyboard_number` = 插在全局第 n 个位置；`segment_title` 命中已有段落则放进该段落；`scene_id`、`result` 直接写 |
+| `POST /storyboards/:id/insert-before` | `addShot`（目标镜头前、同段落） |
+| `PUT /storyboards/:id` | 镜头字段 -> `setShotField`（`duration` 秒 -> `duration_ms`，片段随之联动）；`dialogue/narration/action` -> 对应 kind 的行：按位置 `rewriteLine`，多删少补；`segment_title` -> `moveShotToGroup`；其余列直接写 |
+| `DELETE /storyboards/:id` | `deleteShot`（旧表软删除；台词行留在剧本里） |
+| `PUT /episodes/:id/storyboards/order` | 全局重排 `setChildren`（见 11.2） |
+| `POST /storyboards/batch-infer-params` | `movement` -> `setShotField`（一个事务）；`lighting_style`、`depth_of_field` 直接写 |
+| 提示词润色 / 重建 / 角色补全 | `video_prompt`（`polishClassicVideoPromptStream`、`rebuildVideoPromptForStoryboard`）、`characters`（图生流程补全角色）-> `compat.setShotFields`；`polished_prompt`、`universal_segment_text`、`continuity_snapshot` 不在图里，仍直接写 |
+| `POST /storyboards/:id/split-by-audio` | 第一个方案改写原镜头（行重写、时长/标题/景别/运镜随之变、解除视频与配音的采用版本），其余方案 `addShot` 在其后；新镜头克隆图里的参数；`result`、`scene_id` 等图外列直接写 |
+| `POST /timelines/episode/:id/assemble` | 先把旧表里新生成但图里还没采用的素材补成采用版本，再把每个镜头的片段重置为整段（gap 0、无转场），清空音乐与字幕样式覆盖（一个事务）；没有 `replace` 且已有时间线 -> 409 `CONFLICT`；没有分镜 -> 400 `NO_STORYBOARDS` |
+| `PUT /timelines/:id` | 把完整时间线与当前图比对，翻译成 `setComposeSegments` / 镜头重排 / `deleteShot` / 行改写 / `subtitle_overrides` / `music`（见 11.2） |
+| `POST /timelines/:id/clips`、`PATCH …/clips/:clip_id`（move / trim / split / delete）、`POST /timelines/:id/music` | 在内存里用与旧实现相同的变换（`timeline.transforms.*`）算出新时间线，再走与 PUT 同一条翻译，所以校验与报错（400、404、409 `OVERLAP`）与旧行为一致 |
+
+### 12.2 时间线翻译规则（`translateTimeline`）
+
+- **视频轨 = `compose.segments`**。起点由“顺序 + `gap_before_ms`”累加，所以任意不重叠的绝对起点都能表达：`gap = 起点 - 上一片段终点`。移动某片段会同时调整它后面的 gap，其余片段的绝对位置不变（与旧行为一致）。
+- 片段顺序里镜头首次出现的次序 = 镜头顺序。组内重排 = `setChildren`；跨段落移动的镜头并入它新位置前一个镜头所在的段落（最长不降子序列里的镜头保持原段落）。`PUT order` 同此规则，所以旧的“任意全排列”仍可用，但被移动的镜头会换段落（旧实现里段落标记留在原行上）。
+- 某镜头一个视频片段都不剩 = 删除该镜头（内核 `deleteSegment` 的语义，四个视图一起消失，台词行保留，可撤销）。旧实现只是把片段从时间线移走、分镜还在。
+- 没有素材的片段（`src_in/out` 为空）：裁剪只改时长（`in` 不变）；新拆出的片段从同镜头上一片段的终点开始。
+- 字幕轨由台词行推导：接受文字修改（行数与台词行数一致时逐行改写；该镜头没有台词行时新建旁白行）与样式修改（写 `compose.params.subtitle_overrides[首个有声行 id]`）；字幕/配音的起止时间忽略，永远跟随视频片段。
+- 音乐轨 = `compose.params.music`，整体替换（绝对起点，可重叠）；音乐片段的 `text`（曲目名）不进图。
+- 轨道音量、静音、混音（`timelines.settings.mix`）不在图里，保存时直接写时间线表（见 12.5）。
+- 每次 PUT / 片段编辑仍保证 `version` +1（图没变化时补一次），旧编辑器的乐观并发不变。
+
+### 12.3 拒绝与近似的情形（全部有错误码表条目）
+
+| 情形 | 结果 |
+|---|---|
+| 视频片段没有 `storyboard_id` 或指向不存在的分镜 | 409 `GRAPH_UNSUPPORTED_EDIT` |
+| 手改视频片段的素材（`asset_ref`）、音量、`style` 里除 `transition` 以外的键，或把片段改属于另一个分镜 | 409 `GRAPH_UNSUPPORTED_EDIT` |
+| 同一分镜的片段被别的分镜的片段隔开 | 409 `TIMELINE_ORDER_UNSUPPORTED` |
+| 字幕：删除、同一分镜多条（拆分）、无对应分镜、行数与台词行数对不上 | 409 `GRAPH_UNSUPPORTED_EDIT` |
+| 配音：改素材/音量、单独删除 | 409 `GRAPH_UNSUPPORTED_EDIT` |
+| `PUT /storyboards/:id` 的 `segment_title` 指向不存在的段落 | 409 `GRAPH_UNSUPPORTED_EDIT`（镜头只能在已有段落间移动） |
+| 片段超出镜头生成时长、`duration` 为负/非数字等 | 400 `VALIDATION` / `INTENT`（整体回滚） |
+| 近似：`duration` 为 0/空 -> 5 秒默认；`segment_index` 忽略（由段落顺序推出）；`storyboard_number` 物化后重排为 1..N 连续；字幕/配音起止时间忽略；音乐片段曲目名丢失；`dialogue/narration/action` 列由行文字拼接，行内换行规则同导入；被多个镜头共用的行改写时对该镜头断开再新建，不牵连别的镜头 | — |
+| 旧规则照旧：重叠 409 `OVERLAP`、非法值 400、版本过期 409 `CONFLICT`、片段不存在 404 | — |
+
+### 12.4 其它行为变化
+
+- `assemble`：字幕轨现在由台词行推导（旁白行也出字幕，见 §10.6），不再只取 `dialogue` 列；片段 id 为 `seg_N`。
+- 整集重建分镜（`generateStoryboard`，流式增量入库）直接重写 `storyboards` 行：这些入口在软删除旧行处调用 `compat.resetGraph` 丢弃旧图（撤销历史随之清空），下次写入从新分镜重新导入，避免旧图在下次物化时把新行软删除。
+- 旧生成流程直接写的素材列图里不知情：`assemble` 时补成采用版本；其余时候以旧表为准（物化对 `video_url` 只增不清）。
+- `splitStoryboardByAudio` / `rebuildVideoPromptForStoryboard` 在仓库里引用了未定义的函数（`parseDialogueToEntries`、`charSpeechWeight`、`inferPrimaryOnScreenCharacter`、`loadCharactersForStoryboardPrompt`、`buildCharacterAppearanceText`、`buildVoiceAnchorMap`、`buildCharacterVoiceAnchors`），与本改动无关，调用即抛 ReferenceError；本次只改了它们的写入路径，图写入部分由 `compat.splitShotByPlans` 的测试覆盖。
+
+### 12.5 剩余绕过内核的写入
+
+下面这些仍直接写旧表（物化只写“由图派生的列”，不会覆盖它们；但图和视图看不到它们）：
+
+- **生成结果列（归生成编排 I1，应改为 `recordGeneration`）**：`storyboards.video_url / local_path / image_url / audio_local_path / narration_audio_local_path / status / error_msg / adopted_video_id / first_frame_image_id / last_frame_*`、`composed_image`、`main_panel_idx`（`videoService`、`imageService`、`routes/audio.js`、工作台 `adopt-video`、`upscale`、`tailFrameLinkService`、`storyboardFrameBinding`、`dramaImportService` 的图片绑定）。在此之前：图里的采用版本不更新、`assemble` 才会同步素材、`status` 里 `processing/failed` 仍是队列运行态。
+- **`episodes.script_content`（归剧本/配音/字幕 I2）**：`PUT /dramas/:id/episodes`（`dramaService`）、`scriptgen` 建项目、`dramaImport` / `novelImport`；剧本行改动只在图里，物化不写回此列。
+- **图外的分镜列与关联表**：`scene_id`、`result`、`polished_prompt`、`continuity_snapshot`、`universal_segment_text`、`creation_mode`、`layout_description`、`lighting_style`、`depth_of_field`、`angle_h/v/s`；`frame_prompts`、`storyboard_characters`、`storyboard_props`。
+- **新剧集的初次入库**：`scriptgenService.persist`、`sampleProjectService`、`dramaImportService` 与服务层 `storyboardService.createStoryboard/updateStoryboard` 在图还不存在时直接写行，首次经 REST 写入时才导入；若对已有图的剧集调用它们，图会在下次物化时盖掉这些行——此类入口应走 `compat`。
+- **时间线表里图不管的部分**：轨道 `volume/muted`、`timelines.settings.mix`（`PUT /timelines/:id` 直接写）；服务层 `timeline.saveTimeline/addClip/…/assembleFromStoryboard` 保留为库函数（仅测试与兼容使用，生产路由已不再调用）。
+- **整集重建分镜**：直接写行，靠 `compat.resetGraph` 作废旧图（见 11.4），不经意图层。

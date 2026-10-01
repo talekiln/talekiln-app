@@ -989,8 +989,8 @@ async function processImageGeneration(db, log, imageGenId) {
                   try { charList = JSON.parse(sbCharRow?.characters || '[]'); } catch (_) { charList = []; }
                   if (!charList.find((c) => Number(typeof c === 'object' && c != null ? c.id : c) === dChar.id)) {
                     charList.push({ id: dChar.id, name: dChar.name });
-                    db.prepare('UPDATE storyboards SET characters = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL')
-                      .run(JSON.stringify(charList), new Date().toISOString(), Number(row.storyboard_id));
+                    // characters 是项目图里的镜头字段：经内核提交
+                    require('../kernel/compat').setShotFields(db, [{ id: Number(row.storyboard_id), patch: { characters: charList } }]);
                     log.info('[图生] Step2.1 已将角色写入 storyboards.characters', { id: imageGenId, name: dChar.name });
                   }
                 } catch (_) {}
@@ -1664,8 +1664,8 @@ function syncStoryboardCharacters(db, log, storyboardId) {
     }
 
     if (updated) {
-      db.prepare('UPDATE storyboards SET characters = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL')
-        .run(JSON.stringify(charList), new Date().toISOString(), Number(storyboardId));
+      // characters 是项目图里的镜头字段：经内核提交
+      require('../kernel/compat').setShotFields(db, [{ id: Number(storyboardId), patch: { characters: charList } }]);
       if (log) log.info('[分镜角色补全] 补全完成', { storyboard_id: storyboardId, added });
     }
   } catch (err) {
