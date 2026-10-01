@@ -92,7 +92,7 @@ test('trim 只让 compose 过期，不让 video/narration 过期；sceneKey 只�
   for (const s of K.shotOrder(g)) assert.equal(after[s] !== before[s], s === 'shot_2');
 });
 
-test('sceneKey：含 video/narration 资产 hash、segments in/out/transition；不含音乐、gap、位置', () => {
+test('sceneKey：含 video/narration 资产 hash、片段 in/out、烧进画面的字幕文字与样式；不含音乐、gap、转场（G02 不渲染转场）、位置', () => {
   const g = adoptAll(fixtureGraph());
   const base = K.sceneKey(g, 'shot_3');
   const withMusic = apply(g, I.timeline.addMusic(g, { asset_ref: 'm.mp3', start_ms: 0, duration_ms: 1000 }));
@@ -100,7 +100,13 @@ test('sceneKey：含 video/narration 资产 hash、segments in/out/transition；
   const gap = apply(g, I.timeline.moveSegment(g, 'seg_3', { gap_before_ms: 700 }));
   assert.equal(K.sceneKey(gap, 'shot_3'), base);
   const tr = apply(g, I.timeline.setTransition(g, 'seg_3', 'fade'));
-  assert.notEqual(K.sceneKey(tr, 'shot_3'), base);
+  assert.equal(K.sceneKey(tr, 'shot_3'), base, 'G02 plan.rs does not read transitions');
+  const line = K.linesOfShot(g, 'shot_3').find((l) => K.SPOKEN_KINDS.includes(g.nodes[l].params.kind));
+  const text = apply(g, I.script.rewriteLine(g, line, { text: '改过的字幕' }));
+  assert.notEqual(K.sceneKey(text, 'shot_3'), base, 'subtitles are burned in: text edit changes the scene');
+  assert.equal(K.sceneKey(text, 'shot_1'), K.sceneKey(g, 'shot_1'));
+  const style = apply(g, { tx_id: 'style', ops: [{ op: 'setParam', node: 'compose_1', path: ['subtitle_overrides'], value: { [line]: { font_size: 44 } } }] });
+  assert.notEqual(K.sceneKey(style, 'shot_3'), base, 'subtitle style is part of the scene');
   const newAsset = apply(g, I.shot.recordGeneration(g, 'nar_3', { version_id: 'n2', asset: { ref: 'n2.mp3', hash: 'other' } }));
   assert.notEqual(K.sceneKey(newAsset, 'shot_3'), base);
   const newVideo = apply(g, I.shot.recordGeneration(g, 'vid_3', { version_id: 'v2', asset: { ref: 'v2.mp4', hash: 'other' } }));

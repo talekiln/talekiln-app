@@ -112,3 +112,59 @@ test('回归：重排镜头必须让合成过期（compose 的 cacheKey 含镜�
   const last = g2.groups[g2.group_order[0]].children.filter((c) => g2.nodes[c].type === 'shot').slice(-1)[0];
   assert.deepEqual(K.applyTx(g2, K.intents.shot.moveShotToGroup(g2, last, g2.group_order[1], 0)).invalidated, []);
 });
+
+// ---------- 生成输入（参考图 / 尾帧 / 模型）进 cacheKey：预言机与内核各自推导 ----------
+test('预言机会抓到：内核的 cacheKey 漏掉生成输入参数（参考图、尾帧、模型）', () => {
+  const g = fresh();
+  const T = O.shotsInOrder(g)[1];
+  const c = O.chain(g, T);
+  const edits = {
+    'image.reference_hashes': K.intents.shot.setShotReferences(g, T, { reference_hashes: ['ref:a'] }),
+    'video.tail_frame_hash': K.intents.shot.setShotReferences(g, T, { tail_frame_hash: 'tail:a' }),
+    'image.model': K.intents.shot.setShotReferences(g, T, { image_model: 'm-a' }),
+    'video.model': K.intents.shot.setShotReferences(g, T, { video_model: 'm-b' }),
+  };
+  for (const [name, tx] of Object.entries(edits)) {
+    const after = K.applyTx(g, tx).graph;
+    assert.ok(O.expectedStale(after).includes(c.video) && O.expectedStale(after).includes('compose_1'), `${name}: oracle sees the downstream go stale`);
+    assert.deepEqual(K.staleSet(after), O.expectedStale(after), `${name}: kernel agrees with the oracle`);
+    I.checkGraph(after);
+    // 变异：假装内核的 cacheKey 不看这些参数（旧行为）——I5 必须报警
+    const blind = (orig) => (x) => {
+      const y = structuredClone(x);
+      for (const n of Object.values(y.nodes)) for (const k of ['reference_hashes', 'tail_frame_hash']) delete n.params[k];
+      for (const id of [c.image, c.video]) y.nodes[id].params.model = 'default';
+      return orig(y);
+    };
+    withPatch('cacheKeys', blind, () => assert.throws(() => I.checkGraph(after), /I5/, `${name}: a kernel blind to generation inputs is caught`));
+  }
+});
+
+test('setNodeParam / setShotReferences：校验与空事务', () => {
+  const g = fresh();
+  const T = O.shotsInOrder(g)[0];
+  const c = O.chain(g, T);
+  const { canvas, shot } = K.intents;
+  for (const [label, fn] of Object.entries({
+    'unknown param': () => canvas.setNodeParam(g, c.video, ['nope'], 1),
+    'segments are not editable here': () => canvas.setNodeParam(g, O.composeNode(g), ['segments'], []),
+    'bad seed type': () => canvas.setNodeParam(g, c.image, ['seed'], 'x'),
+    'nested path': () => canvas.setNodeParam(g, c.image, ['model', 'x'], 'x'),
+    'required param cannot be cleared': () => canvas.setNodeParam(g, c.image, ['model'], null),
+    'bad hash list': () => canvas.setNodeParam(g, c.image, ['reference_hashes'], [1]),
+    'param of another type': () => canvas.setNodeParam(g, c.image, ['tail_frame_hash'], 'x'),
+    'missing node': () => canvas.setNodeParam(g, 'nope', ['seed'], 1),
+    'bad line kind': () => canvas.setNodeParam(g, O.linesInOrder(g)[0], ['kind'], 'poem'),
+    'shot without video node reference': () => shot.setShotReferences(g, 'nope', {}),
+  })) assert.throws(fn, (e) => e instanceof K.KernelError && ['INTENT', 'NOT_FOUND'].includes(e.code), label);
+  assert.equal(canvas.setNodeParam(g, c.image, ['seed'], g.nodes[c.image].params.seed).ops.length, 0, 'same value = empty tx');
+  assert.equal(canvas.setNodeParam(g, c.image, ['seed'], 5, { tx_id: 'x' }).label, 'setNodeParam');
+  // 设置再清除：回到与从未设置过完全相同的图（cacheKey 也相同）
+  const set = K.applyTx(g, shot.setShotReferences(g, T, { reference_hashes: ['r'], tail_frame_hash: 't' })).graph;
+  const back = K.applyTx(set, shot.setShotReferences(set, T, { reference_hashes: [], tail_frame_hash: null })).graph;
+  assert.equal(K.toJSON(back), K.toJSON(g));
+  assert.deepEqual(K.staleSet(back), []);
+  // 镜头时长经 setNodeParam 与 setShotField 一致（片段联动）
+  const d = g.nodes[T].params.duration_ms + 500;
+  assert.equal(K.toJSON(K.applyTx(g, canvas.setNodeParam(g, T, ['duration_ms'], d, { tx_id: 'a' })).graph), K.toJSON(K.applyTx(g, shot.setShotField(g, T, { duration_ms: d }, { tx_id: 'a' })).graph));
+});

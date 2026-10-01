@@ -1,7 +1,7 @@
 'use strict';
 // 投影：graph -> 视图模型，纯函数，不存任何东西。
 const G = require('./graph');
-const { cacheKeys, nodeState, staleSet, sceneKey } = require('./invalidation');
+const { cacheKeys, nodeState, staleSet } = require('./invalidation');
 
 // 视图里的 params/style 用键排序的副本：快照重载（规范 JSON）前后，视图逐字节相同
 const plain = (v) => (v === undefined ? v : JSON.parse(G.canonicalJSON(v)));
@@ -64,6 +64,7 @@ function usedMs(g, shotId) {
 /** 分镜视图：场景组 -> 有序镜头；对白是关联行文字拼接，状态与 cacheKey 摘要来自失效计算。 */
 function shotView(g) {
   const keys = cacheKeys(g);
+  const sceneKeyOf = sceneKeys(g);
   return {
     groups: g.group_order.map((gid) => ({
       id: gid,
@@ -86,7 +87,7 @@ function shotView(g) {
           video: stateOf(g, parts.video, keys),
           narration: stateOf(g, parts.narration, keys),
           keys: { shot: short(keys[id]), image: short(keys[parts.image]), video: short(keys[parts.video]), narration: short(keys[parts.narration]) },
-          scene_key: sceneKey(g, id),
+          scene_key: sceneKeyOf[id],
         };
       }),
     })),
@@ -111,6 +112,13 @@ function clip(id, start, dur, extra) {
  * 没有 compose 节点时返回四条空轨。
  */
 function timelineView(g) {
+  return buildTimeline(g).view;
+}
+
+/** timelineView 与场景缓存键共用：同时返回每个镜头的视频/字幕/旁白片段及其素材身份（hash）。 */
+function buildTimeline(g) {
+  const perShot = {};
+  const identity = (asset, kind) => (asset ? { kind, id: asset.hash ?? asset.ref ?? null } : null);
   const tracks = Object.fromEntries(TRACKS.map((k) => [k, { id: `track_${k}`, kind: k, name: k, volume: 1, muted: false, clips: [] }]));
   const cid = G.composeId(g);
   if (cid) {
@@ -125,12 +133,15 @@ function timelineView(g) {
       const va = adoptedAsset(g, parts.video);
       const ia = adoptedAsset(g, parts.image);
       const asset = va && va.ref ? { ref: va.ref, kind: 'video' } : ia && ia.ref ? { ref: ia.ref, kind: 'image' } : null;
+      const rec = { video: [], subtitle: [], narration: [], src: va && va.ref ? identity(va, 'video') : ia && ia.ref ? identity(ia, 'image') : null };
+      perShot[shotId] = rec;
       let first = null;
       let last = null;
       for (const s of effectiveSegments(g, shotId)) {
         cursor += s.gap_before_ms;
         const dur = s.out_ms - s.in_ms;
         if (first === null) first = cursor;
+        rec.video.push(s.id);
         tracks.video.clips.push(clip(s.id, cursor, dur, {
           src_in_ms: asset ? s.in_ms : null, src_out_ms: asset ? s.out_ms : null,
           asset_ref: asset ? asset.ref : null, asset_kind: asset ? asset.kind : null,
@@ -154,14 +165,18 @@ function timelineView(g) {
           const start = Math.max(0, Math.min(span, c.start_ms));
           const end = Math.max(start, Math.min(span, c.end_ms));
           if (end - start <= 0) return;
+          rec.subtitle.push(`sub_${shotId}_${i + 1}`);
           tracks.subtitle.clips.push(clip(`sub_${shotId}_${i + 1}`, first + start, end - start, { storyboard_id: sb, text: c.text, style: subStyle }));
         });
       } else if (text) {
+        rec.subtitle.push(`sub_${shotId}`);
         tracks.subtitle.clips.push(clip(`sub_${shotId}`, first, span, { storyboard_id: sb, text, style: subStyle }));
       }
       if (na && na.ref) {
         const audioMs = metaDuration(g, parts.narration);
         const nd = audioMs ? Math.min(span, audioMs) : span;
+        rec.narration.push(`nar_${shotId}`);
+        rec.narrationSrc = identity(na, 'audio');
         tracks.narration.clips.push(clip(`nar_${shotId}`, first, nd, {
           src_in_ms: 0, src_out_ms: nd, asset_ref: na.ref, asset_kind: 'audio', storyboard_id: sb,
         }));
@@ -177,8 +192,47 @@ function timelineView(g) {
   const list = TRACKS.map((k) => tracks[k]);
   let duration = 0;
   for (const t of list) for (const c of t.clips) duration = Math.max(duration, c.start_ms + c.duration_ms);
-  return { duration_ms: duration, tracks: list };
+  return { view: { duration_ms: duration, tracks: list }, perShot };
 }
+
+/**
+ * 场景缓存键（对接 G02 render.plan，packages/core/src/plan.rs）：每个镜头一个键，等于“该镜头各视频片段在 G02 里的场景键所依据的字段”的摘要。
+ * G02 把时间线按视频片段切成场景，场景键 = 渲染器版本 + 输出设置 + 视频（素材身份、srcIn/srcOut、音量）+
+ * 与该场景时间重叠的字幕（相对起止、文字、样式——字幕是烧进画面的）+ 与之重叠的旁白（相对起点、时长、素材身份、srcIn、音量）。
+ * 内核按同样的字段对每个片段取摘要：素材身份用采用版本的 asset.hash（没有 hash 退回 ref），时间用相对场景起点的毫秒。
+ * 不含：音乐、gap（gap 是独立的空场景）、画布坐标、转场（G02 目前不渲染转场，也不进场景键）、输出设置（整片统一）。
+ * 同一镜头的所有片段合成一个键，所以镜头里任何一个场景变了，这个键就变。
+ */
+function sceneKeys(g) {
+  const { view, perShot } = buildTimeline(g);
+  const byId = {};
+  for (const t of view.tracks) for (const c of t.clips) byId[c.id] = c;
+  const out = {};
+  for (const shotId of G.nodesOfType(g, 'shot')) {
+    const rec = perShot[shotId];
+    const scenes = [];
+    if (rec) {
+      for (const vid of rec.video) {
+        const v = byId[vid];
+        const a = v.start_ms;
+        const b = v.start_ms + v.duration_ms;
+        const rel = (c) => {
+          const s = Math.max(c.start_ms, a);
+          const e = Math.min(c.start_ms + c.duration_ms, b);
+          return e > s ? { s, e } : null;
+        };
+        scenes.push({
+          src: rec.src, src_in_ms: v.src_in_ms, src_out_ms: v.src_out_ms, volume: v.volume,
+          subtitles: rec.subtitle.map((id) => byId[id]).map((c) => { const o = rel(c); return o && { rel_start_ms: o.s - a, rel_end_ms: o.e - a, text: c.text, style: c.style }; }).filter(Boolean),
+          narration: rec.narration.map((id) => byId[id]).map((c) => { const o = rel(c); return o && { rel_start_ms: o.s - a, dur_ms: o.e - o.s, src: rec.narrationSrc, src_in_ms: (c.src_in_ms ?? 0) + (o.s - c.start_ms), volume: c.volume }; }).filter(Boolean),
+        });
+      }
+    }
+    out[shotId] = G.sha256(G.canonicalJSON({ scenes }));
+  }
+  return out;
+}
+const sceneKey = (g, shotId) => sceneKeys(g)[shotId];
 
 const COLUMN = { script_line: 0, shot: 1, image: 2, narration: 2, video: 3, compose: 4 };
 /** 未存 layout 的节点用确定性的分栏自动布局（只用于显示，不写回图）。 */
@@ -256,4 +310,4 @@ function toLegacyRows(g) {
   return { storyboards, timeline: timelineView(g) };
 }
 
-module.exports = { scriptView, shotView, timelineView, canvasView, toLegacyRows, autoLayout, usedMs, effectiveSegments, realVideoMs };
+module.exports = { sceneKey, sceneKeys, buildTimeline, scriptView, shotView, timelineView, canvasView, toLegacyRows, autoLayout, usedMs, effectiveSegments, realVideoMs };

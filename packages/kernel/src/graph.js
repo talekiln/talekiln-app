@@ -61,6 +61,46 @@ function defaultParams(type) {
   }
 }
 
+/**
+ * 各节点类型允许直接改的参数（画布属性面板 / setNodeParam / setShotReferences 的白名单与取值校验）。
+ * check(v) 返回错误说明或 null；optional = 允许用 null 清除（参数被删除，cacheKey 与“从未设置”相同）。
+ * 生成输入（image.model/reference_hashes、video.model/tail_frame_hash）和 seed、voice 一样是节点自己的参数，所以进 cacheKey。
+ */
+const isStr = (v) => typeof v === 'string';
+const posNum = (v) => typeof v === 'number' && Number.isFinite(v) && v > 0;
+const NODE_PARAM_RULES = {
+  script_line: {
+    kind: { check: (v) => (LINE_KINDS.includes(v) ? null : `must be one of ${LINE_KINDS.join('/')}`) },
+    speaker: { check: (v) => (isStr(v) ? null : 'must be a string') },
+    text: { check: (v) => (isStr(v) ? null : 'must be a string') },
+  },
+  shot: Object.fromEntries([
+    ...['title', 'description', 'location', 'time', 'shot_type', 'angle', 'movement', 'image_prompt', 'video_prompt'].map((k) => [k, { check: (v) => (isStr(v) ? null : 'must be a string') }]),
+    ['atmosphere', { optional: true, check: (v) => (isStr(v) ? null : 'must be a string') }],
+    ['characters', { check: (v) => (Array.isArray(v) ? null : 'must be an array') }],
+    ['duration_ms', { check: (v) => (isInt(v) && v > 0 ? null : 'must be a positive integer') }],
+  ]),
+  image: {
+    model: { check: (v) => (isStr(v) && v ? null : 'must be a non-empty string') },
+    seed: { check: (v) => (isInt(v) ? null : 'must be an integer') },
+    reference_hashes: { optional: true, check: (v) => (Array.isArray(v) && v.every((x) => isStr(x) && x) ? null : 'must be an array of non-empty strings') },
+  },
+  video: {
+    model: { check: (v) => (isStr(v) && v ? null : 'must be a non-empty string') },
+    seed: { check: (v) => (isInt(v) ? null : 'must be an integer') },
+    tail_frame_hash: { optional: true, check: (v) => (isStr(v) && v ? null : 'must be a non-empty string') },
+  },
+  narration: {
+    voice: { check: (v) => (isStr(v) && v ? null : 'must be a non-empty string') },
+    speed: { check: (v) => (posNum(v) ? null : 'must be a positive number') },
+  },
+  compose: {
+    fps: { check: (v) => (isInt(v) && v > 0 ? null : 'must be a positive integer') },
+    size: { check: (v) => (isStr(v) && /^\d+x\d+$/.test(v) ? null : 'must look like 1080x1920') },
+    aigc_label: { check: (v) => (typeof v === 'boolean' ? null : 'must be a boolean') },
+  },
+};
+
 function emptyGraph(projectId = null) {
   return { version: 1, project_id: projectId, nodes: {}, edges: [], groups: {}, group_order: [], layout: {}, versions: {}, adopted: {} };
 }
@@ -241,7 +281,7 @@ function validateGraph(g) {
 }
 
 module.exports = {
-  KernelError, NODE_TYPES, GENERATED_TYPES, LINE_KINDS, SPOKEN_KINDS, DEFAULT_SHOT_MS, PORTS,
+  KernelError, NODE_TYPES, NODE_PARAM_RULES, GENERATED_TYPES, LINE_KINDS, SPOKEN_KINDS, DEFAULT_SHOT_MS, PORTS,
   isObj, isInt, clone, canonicalJSON, sha256, defaultParams, emptyGraph, cloneGraph, toJSON, fromJSON, graphEquals,
   nodesOfType, composeId, groupOf, orderOf, shotOrder, lineOrder, edgesTo, edgesFrom, indexMap,
   linesOfShot, shotsOfLine, partsOfShot, spokenLines, shotDialogue, segmentsOfShot, adoptedVersion, validateGraph,

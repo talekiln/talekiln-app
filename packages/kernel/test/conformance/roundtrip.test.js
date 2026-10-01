@@ -190,6 +190,7 @@ test('意图足迹：每个意图只写它声明的路径；内核导出的每�
       moveShotToGroup: [() => shot.moveShotToGroup(g, s0, grp1, 0), P(`^groups\\.(${grp}|${grp1})\\.children$`)],
       addShot: [() => shot.addShot(g, { group: grp, params: { title: 'n' } }), P('^nodes\\.(shot|img|vid|nar)_\\d+\\.', '^edges\\.', '^edges#order$', '^groups\\.', `^nodes\\.${cid}\\.params\\.segments$`)],
       deleteShot: [() => shot.deleteShot(g, s0), P(`^nodes\\.(${s0}|${c0.image}|${c0.video}|${c0.narration})\\.`, '^edges\\.', '^edges#order$', '^groups\\.', '^layout\\.', '^versions\\.', '^adopted\\.', `^nodes\\.${cid}\\.params\\.segments$`)],
+      setShotReferences: [() => shot.setShotReferences(g, s0, { image_model: 'm-i', video_model: 'm-v', reference_hashes: ['r1'], tail_frame_hash: 't1' }), P(`^nodes\\.(${c0.image}|${c0.video})\\.params\\.(model|reference_hashes|tail_frame_hash)$`)],
       regenerateShot: [() => shot.regenerateShot(g, s0, { seed: 5 }), P(`^nodes\\.(${c0.image}|${c0.video})\\.params\\.seed$`)],
       setVoice: [() => shot.setVoice(g, s0, { voice: 'v', speed: 1.5 }), P(`^nodes\\.${c0.narration}\\.params\\.(voice|speed)$`)],
       recordGeneration: [() => S.generateTx(g, [c0.image]), P(`^versions\\.${c0.image}$`, `^adopted\\.${c0.image}$`)],
@@ -204,6 +205,7 @@ test('意图足迹：每个意图只写它声明的路径；内核导出的每�
     },
     canvas: {
       moveNode: [() => canvas.moveNode(g, s0, { x: 1, y: 2 }), P(`^layout\\.${s0}$`)],
+      setNodeParam: [() => canvas.setNodeParam(g, c0.narration, ['voice'], '另一个声音'), P(`^nodes\\.${c0.narration}\\.params\\.voice$`)],
       moveNodes: [() => canvas.moveNodes(g, { [s0]: { x: 1, y: 2 }, [cid]: { x: 3, y: 4 } }), P('^layout\\.')],
       connectNodes: [() => canvas.connectNodes(g, lines[1], s1, { port: 'lines' }), P('^edges\\.', '^edges#order$')],
       disconnectNodes: [() => canvas.disconnectNodes(g, { edge_id: line0Edge.id }), P('^edges\\.', '^edges#order$')],
@@ -259,13 +261,16 @@ test('携带表：每类事实由哪些视图携带，与声明一致', () => {
     'shot.legacy_id': [null, ['shot', 'timeline', 'canvas']], // 由下面单独处理（addNode 无法改 legacy_id，用重建图）
     'image.seed': [[set(c0.image, 'seed', 99)], ['shot', 'canvas']], // shot 视图只带 key 摘要与状态
     'video.model': [[set(c0.video, 'model', 'm2')], ['shot', 'canvas']],
+    'image.model': [[set(c0.image, 'model', 'm1')], ['shot', 'canvas']],
+    'image.reference_hashes（锁定参考图）': [[set(c0.image, 'reference_hashes', ['ref:a'])], ['shot', 'canvas']],
+    'video.tail_frame_hash（尾帧）': [[set(c0.video, 'tail_frame_hash', 'tail:a')], ['shot', 'canvas']],
     'narration.voice': [[set(c0.narration, 'voice', '另一个声音')], ['shot', 'canvas']],
     'segment.in/out': [segs((s) => ({ ...s, in_ms: s.in_ms + 1 })), ['shot', 'timeline', 'canvas']],
     'segment.gap_before_ms': [segs((s) => ({ ...s, gap_before_ms: 5 })), ['timeline', 'canvas']],
-    'segment.transition': [segs((s) => ({ ...s, transition: 'fade' })), ['shot', 'timeline', 'canvas']], // shot：scene_key（场景缓存键）里含转场
+    'segment.transition': [segs((s) => ({ ...s, transition: 'fade' })), ['timeline', 'canvas']], // 转场不进场景缓存键（G02 目前不渲染转场）
     'compose.music': [[set(cid, 'music', [{ id: 'mus_1', asset_ref: 'm.mp3', start_ms: 0, duration_ms: 500, src_in_ms: 0, volume: 1 }])], ['timeline', 'canvas']],
     'compose.fps/size/aigc_label': [[set(cid, 'fps', 24)], ['canvas']],
-    'compose.subtitle_overrides': [[set(cid, 'subtitle_overrides', { [spoken]: { font_size: 40 } })], ['timeline', 'canvas']],
+    'compose.subtitle_overrides': [[set(cid, 'subtitle_overrides', { [spoken]: { font_size: 40 } })], ['shot', 'timeline', 'canvas']], // shot：字幕样式烧进画面，进场景缓存键
     'layout': [[{ op: 'setLayout', node: s0, pos: { x: 1, y: 2 } }], ['canvas']],
     'shot order (group children)': [[{ op: 'setChildren', group: g.group_order.find((x) => g.groups[x].children.filter((c) => g.nodes[c].type === 'shot').length >= 2), ids: (() => { const gid = g.group_order.find((x) => g.groups[x].children.filter((c) => g.nodes[c].type === 'shot').length >= 2); return [...g.groups[gid].children].reverse(); })() }], ['shot', 'timeline', 'canvas', 'script']],
   };

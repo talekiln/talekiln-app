@@ -2,6 +2,7 @@
 const response = require('../response');
 const referenceLockService = require('../services/referenceLockService');
 const videoService = require('../services/videoService');
+const kernelInputs = require('../kernel/inputs');
 
 /** P1-07 reference locks and P1-08 shot candidate/adopt endpoints. */
 function routes(db, log) {
@@ -13,16 +14,23 @@ function routes(db, log) {
       response.internalError(res, err.message);
     }
   };
+  const syncRefs = () => {
+    try { for (const r of kernelInputs.syncReferences(db)) if (r.error) log.error('reference-locks sync', { episode_id: r.episode_id, error: r.error }); } catch (e) { log.error('reference-locks sync', { error: e.message }); }
+  };
   return {
     listLocks: guard('reference-locks list', (req, res) => {
       const ids = String(req.query.ids || '').split(',').filter(Boolean);
       response.success(res, referenceLockService.listLocks(db, String(req.query.type || ''), ids));
     }),
+    // 锁定/解除参考图后，把各剧集镜头的参考图哈希同步进图（经内核事务）：受影响镜头的 image/video/合成立刻变“过期”
     setLock: guard('reference-locks set', (req, res) => {
-      response.success(res, referenceLockService.setLock(db, typeOf(req), req.params.id, req.body || {}));
+      const lock = referenceLockService.setLock(db, typeOf(req), req.params.id, req.body || {});
+      syncRefs();
+      response.success(res, lock);
     }),
     clearLock: guard('reference-locks clear', (req, res) => {
       referenceLockService.clearLock(db, typeOf(req), req.params.id);
+      syncRefs();
       response.success(res, { message: '已解除锁定' });
     }),
     candidates: guard('video-candidates', (req, res) => {
