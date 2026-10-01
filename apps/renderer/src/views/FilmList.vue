@@ -107,6 +107,15 @@
             @click="openProject(d.id)"
           >
             <div class="project-card-actions" @click.stop>
+              <el-button
+                v-if="d.episodes?.length"
+                size="small"
+                plain
+                type="primary"
+                title="剧本 / 分镜 / 时间线 / 画布 四视图编辑"
+                data-test="open-views"
+                @click="openViews(d)"
+              >四视图</el-button>
               <el-button size="small" circle :icon="Download" title="导出项目" :loading="exportingId === d.id" @click="onExport(d)" />
               <el-button size="small" circle :icon="Edit" title="编辑" @click="openEditDialog(d)" />
               <el-button size="small" type="danger" plain circle :icon="Delete" title="删除" @click="onDelete(d)" />
@@ -736,6 +745,11 @@ async function submitEdit() {
   } finally {
     editSaving.value = false
   }
+}
+
+function openViews(d) {
+  const ep = d.episodes?.[0]
+  if (ep) router.push({ path: `/episodes/${ep.id}/script`, query: { drama: String(d.id) } })
 }
 
 function openProject(id) {

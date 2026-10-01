@@ -260,3 +260,13 @@ Node { id, type, params, legacy_id? }
 - **新剧集的初次入库**：`scriptgenService.persist`、`sampleProjectService`、`dramaImportService` 与服务层 `storyboardService.createStoryboard/updateStoryboard` 在图还不存在时直接写行，首次经 REST 写入时才导入；若对已有图的剧集调用它们，图会在下次物化时盖掉这些行——此类入口应走 `compat`。
 - **时间线表里图不管的部分**：轨道 `volume/muted`、`timelines.settings.mix`（`PUT /timelines/:id` 直接写）；服务层 `timeline.saveTimeline/addClip/…/assembleFromStoryboard` 保留为库函数（仅测试与兼容使用，生产路由已不再调用）。
 - **整集重建分镜**：直接写行，靠 `compat.resetGraph` 作废旧图（见 11.4），不经意图层。
+
+## 13. U1 四视图界面（剧本 / 分镜 / 时间线 / 画布）
+
+代码：`apps/renderer/src/stores/projectViews.js`（共享 store）、`utils/projectViews.js`（纯逻辑，`test/projectViews.test.js`）、`components/ViewSwitcher.vue`、`views/ScriptView.vue`、`views/CanvasView.vue`、`components/canvas/*`；浏览器端到端 `apps/renderer/test/e2e/fourViews.e2e.mjs`（缺 Chromium 时跳过；`--shots docs/screenshots` 重新截图）。
+
+- 路由：`/episodes/:id/script`、`/episodes/:id/canvas`、`/episodes/:id/storyboard`（查出项目后跳到 `/project/:dramaId/storyboard?episode=`）、既有 `/episodes/:id/timeline`；入口在项目列表卡片「四视图」与剧集卡片。
+- 共享 store 只存服务端数据（graph / stale / seq / can_undo / can_redo + 四个视图投影）和两项 UI 状态（选择、播放头）。所有编辑 `POST /intent`（画布属性面板里没有意图的字段用 `POST /tx` 的 `setParam`），返回后整体回读；失败时显示内核的错误文案并回读。
+- 选择 `{kind: line|shot|segment|node, id}` 切换视图时不变，各视图用 `focusIn(view, selection)` 找对应对象（行 → 第一个关联镜头 → 第一个视频片段 → 画布节点）。
+- 顶栏撤销 / 重做 / Ctrl+Z / Ctrl+Shift+Z = 内核历史；时间线页保留编辑器自己的 Ctrl+Z（走 `PUT /timelines` 改道后同样进内核历史）。分镜表、时间线编辑器保存完成后刷新共享 store，被顶栏撤销 / 重做后重新读取各自的旧表数据。
+- 局限：画布没有新增节点 / 场景组改名的界面；分镜页与时间线页的内部数据仍来自旧表（物化），不是投影直读；画布未存 layout 的节点用显示用的自动布局（不写回图）。
