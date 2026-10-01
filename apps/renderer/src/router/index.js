@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { shouldShowOnboarding } from '@/utils/onboarding'
 import { useAccountStore } from '@/stores/account'
+import { useProjectViewsStore } from '@/stores/projectViews'
 import { routeDecision, isStale } from '@/utils/account'
 
 const router = createRouter({
@@ -71,6 +72,30 @@ const router = createRouter({
       name: 'episode-timeline',
       component: () => import('@/views/TimelineEditor.vue'),
       meta: { title: '时间线编辑' }
+    },
+    // 四视图：同一份项目图的剧本 / 分镜 / 时间线 / 画布投影，选择与历史共享
+    {
+      path: '/episodes/:id/script',
+      name: 'episode-script',
+      component: () => import('@/views/ScriptView.vue'),
+      meta: { title: '剧本视图' }
+    },
+    {
+      path: '/episodes/:id/canvas',
+      name: 'episode-canvas',
+      component: () => import('@/views/CanvasView.vue'),
+      meta: { title: '画布视图' }
+    },
+    {
+      // 只有剧集 id 时（如从剧本 / 画布视图的直达链接）：查出所属项目后进入分镜表
+      path: '/episodes/:id/storyboard',
+      name: 'episode-storyboard',
+      component: () => import('@/views/StoryboardPage.vue'),
+      beforeEnter: async (to) => {
+        const drama = await useProjectViewsStore().resolveDrama(Number(to.params.id))
+        return drama ? { path: `/project/${drama}/storyboard`, query: { ...to.query, episode: String(to.params.id) }, replace: true } : { path: '/' }
+      },
+      meta: { title: '分镜表' }
     },
     {
       path: '/episodes/:id/export',
