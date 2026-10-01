@@ -129,11 +129,15 @@
             :disabled="!selectedConfigModels.length"
           >
             <el-option
-              v-for="m in selectedConfigModels"
-              :key="m"
-              :label="m"
-              :value="m"
-            />
+              v-for="m in modelOptions"
+              :key="m.id"
+              :label="m.label === m.id ? m.id : `${m.label}（${m.id}）`"
+              :value="m.id"
+            >
+              <span>{{ m.id }}</span>
+              <span v-if="m.priceHint" class="model-price-hint">{{ m.priceHint }}</span>
+              <span v-if="m.fromCatalog" class="model-price-hint">云端推荐</span>
+            </el-option>
           </el-select>
           <p class="field-tip">
             {{ selectedConfigModels.length ? '从该配置的可用模型中选择' : '请先选择 AI 配置' }}
@@ -161,7 +165,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { sceneModelMapAPI } from '@/api/sceneModelMap'
 import { aiAPI } from '@/api/ai'
-import { getSelectableModels } from '@/utils/modelSelection'
+import { getSelectableModels, getCatalogModels, mergeModelOptions } from '@/utils/modelSelection'
+import { catalogAPI } from '@/api/catalog'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -226,6 +231,18 @@ const filteredConfigs = computed(() => {
 // 获取选中配置的可用模型列表
 const selectedConfigModels = computed(() => {
   return getSelectableModels(configs.value, form.value.service_type, form.value.config_id)
+})
+
+// 云端目录（失败时为空，不影响本地配置的模型）
+const catalog = ref(null)
+const selectedConfig = computed(() => configs.value.find((c) => c.id === form.value.config_id) || null)
+// 本地配置的模型在前；云端目录里同一平台（provider 与目录一致）的模型作为补充，并带价格提示
+const modelOptions = computed(() => {
+  const provider = String(selectedConfig.value?.provider || '').toLowerCase()
+  const fromCatalog = selectedConfig.value && provider
+    ? getCatalogModels(catalog.value, form.value.service_type, provider)
+    : []
+  return mergeModelOptions(selectedConfigModels.value, fromCatalog)
 })
 
 function serviceTypeLabel(type) {
@@ -379,6 +396,7 @@ function resetForm() {
 }
 
 onMounted(() => {
+  catalogAPI.get().then((c) => { catalog.value = c }).catch(() => {})
   load()
 })
 </script>
@@ -440,5 +458,10 @@ onMounted(() => {
   font-size: 12px;
   color: #999;
   line-height: 1.4;
+}
+.model-price-hint {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--text-secondary, #888);
 }
 </style>

@@ -8,11 +8,14 @@ const { loadConfig } = require('./config/index.js');
 const logger = require('./logger.js');
 const { setupRouter } = require('./routes/index.js');
 const { createAiTaskStore, createAiTaskQueue, createWorker, createDownloader, withDownloads, queueOptionsFromConfig, buildQueueProviders } = require('./queue');
-const { createSpendService } = require('./spend');
+const { createSpendService, createEstimator } = require('./spend');
+const { createCloud } = require('./cloud');
+const { localTokenGuard } = require('./utils/localToken');
 
-function createAiQueue({ config, db, log, storageRoot, providers, onTaskFinished }) {
+function createAiQueue({ config, db, log, storageRoot, providers, onTaskFinished, cloud }) {
   const store = createAiTaskStore(db);
-  const spend = createSpendService(db);
+  // 价格表：已验证的云端目录优先，否则内置 prices.json（刷新后下次启动生效）
+  const spend = createSpendService(db, { estimator: createEstimator(cloud.catalog.effectivePrices()) });
   const downloader = createDownloader({ storageDir: storageRoot });
   const queue = createAiTaskQueue({
     store,
@@ -57,16 +60,7 @@ function createApp(opts = {}) {
 
   const app = express();
   // 本地服务令牌：由桌面主进程每次启动生成并注入；未设置时（纯开发模式）不校验
-  const localToken = process.env.TALEKILN_LOCAL_TOKEN;
-  if (localToken) {
-    const crypto = require('crypto');
-    const expected = Buffer.from(localToken);
-    app.use((req, res, next) => {
-      const got = Buffer.from(String(req.headers['x-talekiln-token'] || ''));
-      if (got.length === expected.length && crypto.timingSafeEqual(got, expected)) return next();
-      res.status(401).json({ error: 'unauthorized' });
-    });
-  }
+  app.use(localTokenGuard(process.env.TALEKILN_LOCAL_TOKEN));
 
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true }));
@@ -106,9 +100,10 @@ function createApp(opts = {}) {
   });
 
   // 持久化 AI 任务队列 + worker（由 server.js / 桌面主进程调用 aiQueue.worker.start()）
-  const aiQueue = createAiQueue({ config, db, log, storageRoot, providers: opts.queueProviders || buildQueueProviders({ db, storageDir: storageRoot }), onTaskFinished: opts.onTaskFinished });
+  const cloud = opts.cloud || createCloud({ config, db, log: logger });
+  const aiQueue = createAiQueue({ cloud, config, db, log, storageRoot, providers: opts.queueProviders || buildQueueProviders({ db, storageDir: storageRoot }), onTaskFinished: opts.onTaskFinished });
 
-  app.use('/api/v1', setupRouter(config, db, log, aiQueue));
+  app.use('/api/v1', setupRouter(config, db, log, aiQueue, cloud));
 
   // 前端静态资源（sxy：web/dist）；Electron 打包时可设 WEB_DIST_PATH
   const webDist = process.env.WEB_DIST_PATH || path.join(process.cwd(), '..', 'frontweb', 'dist');
@@ -156,7 +151,10 @@ function createApp(opts = {}) {
     }
   });
 
-  return { app, config, db, aiQueue };
+  // 启动时尽力刷新一次目录（云端未配置/离线都静默跳过）
+  if (cloud.isConfigured() && opts.cloudAutoSync !== false) cloud.catalog.refresh().catch(() => {});
+
+  return { app, config, db, aiQueue, cloud };
 }
 
 module.exports = { createApp };

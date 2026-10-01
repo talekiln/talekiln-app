@@ -26,7 +26,7 @@ const scriptgenRoutes = require('./scriptgen');
 const workbenchRoutes = require('./workbench');
 const onboardingRoutes = require('./onboarding');
 
-function setupRouter(cfg, db, log, aiQueue) {
+function setupRouter(cfg, db, log, aiQueue, cloud) {
   const r = express.Router();
   const drama = dramaRoutes(db, cfg, log);
   const task = taskRoutes(db, log);
@@ -367,6 +367,19 @@ function setupRouter(cfg, db, log, aiQueue) {
     r.get('/ai-tasks/:id', aiTasks.get);
     r.post('/ai-tasks/:id/retry', aiTasks.retry);
     r.post('/ai-tasks/:id/cancel', aiTasks.cancel);
+  }
+
+  // ---------- cloud: account / catalog / referral (B05, B06, C07) ----------
+  if (cloud) {
+    const c = require('./cloud')(cloud, log);
+    r.post('/account/register', c.register);
+    r.post('/account/login', c.login);
+    r.post('/account/logout', c.logout);
+    r.get('/account/status', c.status);
+    r.post('/account/refresh', c.refresh);
+    r.get('/catalog', c.catalog);
+    r.post('/catalog/refresh', c.catalogRefresh);
+    r.get('/referral/:provider', c.referral);
   }
 
   // ---------- spend control (D06) ----------

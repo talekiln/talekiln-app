@@ -1,9 +1,17 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { shouldShowOnboarding } from '@/utils/onboarding'
+import { useAccountStore } from '@/stores/account'
+import { routeDecision, isStale } from '@/utils/account'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    {
+      path: '/login',
+      name: 'login',
+      component: () => import('@/views/Login.vue'),
+      meta: { title: '登录' }
+    },
     {
       path: '/',
       name: 'list',
@@ -103,6 +111,13 @@ router.beforeEach(async (to) => {
   if (to.meta.title) {
     document.title = `${to.meta.title} - LocalMiniDrama`
   }
+  // 登录门禁：仅当本地配置 cloud.require_login 为 true 时生效；状态查不到（本地服务异常）不拦截
+  const account = useAccountStore()
+  if (to.name !== 'login' && (!account.loaded || isStale(account.lastAt, Date.now()))) {
+    await account.fetch({ sync: true })
+  }
+  const gate = routeDecision(account.status, to)
+  if (gate !== true && gate !== undefined) return gate
   if (!onboardingChecked && to.name === 'list') {
     onboardingChecked = true
     try {

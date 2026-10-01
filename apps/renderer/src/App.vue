@@ -4,7 +4,17 @@
   </div>
 </template>
 
-<script setup lang="ts">
+<script setup>
+import { onBeforeUnmount, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAccountStore } from '@/stores/account'
+import { routeDecision } from '@/utils/account'
+
+// 后台定期同步登录/授权状态；会话失效或授权过期且开启门禁时回到登录页
+const router = useRouter()
+const account = useAccountStore()
+onMounted(() => account.startWatcher(router, routeDecision))
+onBeforeUnmount(() => account.stopWatcher())
 </script>
 
 <style>

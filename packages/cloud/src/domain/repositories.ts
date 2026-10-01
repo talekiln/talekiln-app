@@ -122,6 +122,13 @@ export interface FeedbackRepository {
   findById(id: string): Promise<FeedbackRecord | null>;
 }
 
+export interface ReferralClick { id: string; code: string; src: string | null; createdAt: Date }
+
+export interface ReferralClickRepository {
+  create(c: { code: string; src: string | null; createdAt: Date }): Promise<ReferralClick>;
+  countByCode(code: string): Promise<number>;
+}
+
 export const REPOS = Symbol('REPOS');
 export interface Repositories {
   accounts: AccountRepository;
@@ -131,4 +138,5 @@ export interface Repositories {
   settings: SettingRepository;
   telemetry: TelemetryRepository;
   feedback: FeedbackRepository;
+  referralClicks: ReferralClickRepository;
 }

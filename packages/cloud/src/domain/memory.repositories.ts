@@ -12,6 +12,7 @@ export function createMemoryRepositories(): Repositories {
   const settings = new Map<string, unknown>();
   const telemetry: TelemetryRow[] = [];
   const feedback = new Map<string, FeedbackRecord>();
+  const clicks: { id: string; code: string; src: string | null; createdAt: Date }[] = [];
 
   return {
     accounts: {
@@ -123,6 +124,10 @@ export function createMemoryRepositories(): Repositories {
         return [...feedback.values()].reverse().slice(0, limit).map(({ diagnostic: _d, ...rest }) => ({ ...rest }));
       },
       async findById(id) { const r = feedback.get(id); return r ? { ...r } : null; },
+    },
+    referralClicks: {
+      async create(c) { const rec = { ...c, id: randomUUID() }; clicks.push(rec); return { ...rec }; },
+      async countByCode(code) { return clicks.filter((x) => x.code === code).length; },
     },
   };
 }
