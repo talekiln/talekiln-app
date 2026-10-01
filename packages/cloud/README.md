@@ -87,12 +87,19 @@ curl localhost:3000/health
 - `POST /admin/invites` `{ plan?, expiresInDays? }` → `{ code, plan, expiresAt }`。邀请码为 72 位随机串。
 - `GET /admin/invites`：列出邀请码及使用情况。
 
+### `GET /catalog[?since=<version>]`
+公开。返回 `{ version, kid, signature, issued_at, catalog: { providers, models, prices, announcements } }`。`version` 为目录规范化 JSON 的 sha256 前缀，`signature` 是对 `version` 的 ES256 JWS（与许可证同一密钥，公钥见 JWKS），客户端先校验哈希再验签。`since` 等于当前版本时只回 `{ version, unchanged: true }`。默认价格为示例价；用 `CATALOG_FILE`（JSON 路径）覆盖。
+
+### `GET /r/:code[?src=]`
+推广跳转：记录点击（`ReferralClick`）后 302 到配置中的目标。目标仅来自配置（默认各平台密钥页，`REFERRAL_LINKS` JSON `{code: url}` 覆盖），必须是 https、无内嵌凭据、主机在白名单（默认三个平台主机 + `REFERRAL_ALLOWED_HOSTS` 逗号分隔追加），配置不合规则启动失败；未知码返回 404，没有开放重定向。
+
 ## 数据库
 
-Schema：`prisma/schema.prisma`；迁移已检入 `prisma/migrations/`（`pnpm prisma migrate deploy` 应用）。表：`Account`、`InviteCode`、`Device`、`RefreshToken`。
+Schema：`prisma/schema.prisma`；迁移已检入 `prisma/migrations/`（`pnpm prisma migrate deploy` 应用）。表：`Account`、`InviteCode`、`Device`、`RefreshToken`、`ReferralClick`。
 
 ## 已知限制 / 后续
 
+- `/r/:code` 未做限流，点击统计可被刷。
 - 未实现登录限流、邮箱验证、找回密码。
 - 邀请码激活为"先建账号、原子抢码、失败回滚账号"，不是单事务；极端崩溃下可能留下无邀请码关联的账号。
 - Prisma 仓储与迁移 SQL 需要真实 PostgreSQL 做集成验证（单元测试覆盖的是内存仓储上的同一套服务逻辑）。

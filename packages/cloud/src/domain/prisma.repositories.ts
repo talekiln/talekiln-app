@@ -52,5 +52,9 @@ export function createPrismaRepositories(db: PrismaClient): Repositories {
         await db.refreshToken.updateMany({ where: { accountId, revokedAt: null }, data: { revokedAt: now } });
       },
     },
+    referralClicks: {
+      create: (c) => db.referralClick.create({ data: c }),
+      countByCode: (code) => db.referralClick.count({ where: { code } }),
+    },
   };
 }

@@ -9,6 +9,7 @@ export function createMemoryRepositories(): Repositories {
   const invites = new Map<string, InviteCode>();
   const devices = new Map<string, Device>();
   const tokens = new Map<string, RefreshTokenRecord>();
+  const clicks: { id: string; code: string; src: string | null; createdAt: Date }[] = [];
 
   return {
     accounts: {
@@ -92,6 +93,10 @@ export function createMemoryRepositories(): Repositories {
       async revokeAllForAccount(accountId, now) {
         for (const t of tokens.values()) if (t.accountId === accountId && !t.revokedAt) t.revokedAt = now;
       },
+    },
+    referralClicks: {
+      async create(c) { const rec = { ...c, id: randomUUID() }; clicks.push(rec); return { ...rec }; },
+      async countByCode(code) { return clicks.filter((x) => x.code === code).length; },
     },
   };
 }

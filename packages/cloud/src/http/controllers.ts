@@ -1,9 +1,12 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { z } from 'zod';
 import { AccessGuard, requireAdmin, type AuthedRequest } from './guard';
 import { AuthService } from '../services/auth.service';
 import { DeviceService } from '../services/device.service';
 import { LicenceService } from '../services/licence.service';
+import { CatalogService } from '../services/catalog.service';
+import { ReferralService } from '../services/referral.service';
 
 const device = z.object({ fingerprint: z.string().min(8).max(200), name: z.string().min(1).max(100) });
 const email = z.string().email().max(200);
@@ -67,5 +70,28 @@ export class AdminController {
   @Get('invites') async listInvites(@Req() req: AuthedRequest) {
     requireAdmin(req);
     return this.auth.listInvites();
+  }
+}
+
+/** 公开：模型/价格/公告目录。?since=<version> 命中则只回 { version, unchanged }。 */
+@Controller('catalog')
+export class CatalogController {
+  constructor(@Inject(CatalogService) private readonly catalog: CatalogService) {}
+
+  @Get() get(@Query('since') since?: string) {
+    return this.catalog.get(typeof since === 'string' ? since : undefined);
+  }
+}
+
+/** 推广跳转：记录点击后 302 到配置里的目标（目标不取自请求）。 */
+@Controller('r')
+export class ReferralController {
+  constructor(@Inject(ReferralService) private readonly referrals: ReferralService) {}
+
+  @Get(':code') async go(@Param('code') code: string, @Query('src') src: string | undefined, @Res() res: Response) {
+    const target = await this.referrals.resolve(code, typeof src === 'string' ? src : undefined);
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.redirect(302, target);
   }
 }

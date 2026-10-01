@@ -75,10 +75,18 @@ export interface RefreshTokenRepository {
   revokeAllForAccount(accountId: string, now: Date): Promise<void>;
 }
 
+export interface ReferralClick { id: string; code: string; src: string | null; createdAt: Date }
+
+export interface ReferralClickRepository {
+  create(c: { code: string; src: string | null; createdAt: Date }): Promise<ReferralClick>;
+  countByCode(code: string): Promise<number>;
+}
+
 export const REPOS = Symbol('REPOS');
 export interface Repositories {
   accounts: AccountRepository;
   invites: InviteRepository;
   devices: DeviceRepository;
   refreshTokens: RefreshTokenRepository;
+  referralClicks: ReferralClickRepository;
 }
