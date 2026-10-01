@@ -349,6 +349,16 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
   r.post('/timelines/:id/clips', timelines.addClip);
   r.patch('/timelines/:id/clips/:clip_id', timelines.patchClip);
 
+  // ---------- data kernel: project graph / views / tx / intents ----------
+  const kernelRoutes = require('./kernel')(db, log);
+  r.get('/episodes/:id/graph', kernelRoutes.getGraph);
+  r.get('/episodes/:id/views/:view', kernelRoutes.getView);
+  r.post('/episodes/:id/tx', kernelRoutes.postTx);
+  r.post('/episodes/:id/intent', kernelRoutes.postIntent);
+  r.post('/episodes/:id/undo', kernelRoutes.postUndo);
+  r.post('/episodes/:id/redo', kernelRoutes.postRedo);
+  r.post('/episodes/:id/import-legacy', kernelRoutes.importLegacy);
+
   // ---------- export / render (G06) and AIGC marking settings (G04) ----------
   {
     let exporter = null;

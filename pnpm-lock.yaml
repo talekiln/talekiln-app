@@ -134,8 +134,13 @@ importers:
 
   packages/core: {}
 
+  packages/kernel: {}
+
   packages/local:
     dependencies:
+      '@talekiln/kernel':
+        specifier: workspace:*
+        version: link:../kernel
       '@volcengine/openapi':
         specifier: ^1.36.1
         version: 1.36.2
