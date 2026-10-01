@@ -1,0 +1,46 @@
+'use strict';
+const { CAPABILITIES, PHASE1_PROVIDERS } = require('./capabilities');
+const { ProviderError, ERROR_CODES } = require('./errors');
+
+/**
+ * Adapter shape: { id, label, capabilities: { 'text.stream': fn, ... } }.
+ * Adapters outside PHASE1_PROVIDERS may be registered but are never listed or resolvable.
+ */
+function createRegistry(phase1 = PHASE1_PROVIDERS) {
+  const adapters = new Map();
+  return {
+    register(adapter) {
+      if (!adapter || !adapter.id || !adapter.capabilities || typeof adapter.capabilities !== 'object') {
+        throw new TypeError('invalid provider adapter');
+      }
+      for (const k of Object.keys(adapter.capabilities)) {
+        if (!CAPABILITIES.includes(k)) throw new TypeError(`unknown capability: ${k}`);
+      }
+      adapters.set(adapter.id, adapter);
+      return this;
+    },
+    list() {
+      return [...adapters.values()]
+        .filter((a) => phase1.includes(a.id))
+        .map((a) => ({ id: a.id, label: a.label || a.id, capabilities: Object.keys(a.capabilities) }));
+    },
+    get(id) {
+      const a = adapters.get(id);
+      if (!a || !phase1.includes(id)) {
+        throw new ProviderError(ERROR_CODES.PROVIDER_NOT_AVAILABLE, String(id));
+      }
+      return a;
+    },
+    /** Call by capability: registry.call('bailian', 'image.generate', req) */
+    call(providerId, capability, req) {
+      const a = this.get(providerId);
+      const fn = a.capabilities[capability];
+      if (typeof fn !== 'function') {
+        throw new ProviderError(ERROR_CODES.CAPABILITY_NOT_SUPPORTED, `${providerId}:${capability}`);
+      }
+      return fn(req || {});
+    },
+  };
+}
+
+module.exports = { createRegistry };
