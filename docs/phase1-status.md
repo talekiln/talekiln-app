@@ -51,7 +51,7 @@
 | G06 导出页 | 已做（Linux 真 lycore + ffmpeg 测过，页面用模拟接口截图） | `/episodes/:id/export`：分辨率/帧率/编码器/位置、进度轮询、取消、打开文件夹；本地服务经 `LYCORE_ENDPOINT` 连接 lycore，桌面主进程尚未启动 lycore 并设置该变量，因此打包后暂不可用 |
 | 服务商开关 | 已做 | `providers.enabled` 统一控制注册表、队列、向导、AI 配置页、模型目录、获取 Key 链接和提示文案；默认 `['bailian']`；新增服务商步骤见 docs/provider-extension.md |
 | 百炼全流程覆盖审计 | 已做（文档） | docs/bailian-flow-coverage.md：逐步骤列真实验证 / 仅夹具 / 缺；顺手修了队列共享 Key、默认模型与请求形态、本地图内联三处接线 |
-| 百炼端到端脚本 | 已写，未用真 Key 跑 | scripts/bailian-e2e.mjs（3 镜、花费上限默认 5 元）；用本地模拟百炼（HTTP + WebSocket）和真 lycore 跑通过编排；手动工作流 bailian-live.yml 的 run_e2e 选项，真实运行待有 Key 的会话 |
+| 百炼端到端脚本 | 已在 Windows 用真 Key 跑通 11/11 阶段（2026-10-01，估算 4.605 元） | scripts/bailian-e2e.mjs（3 镜、花费上限默认 5 元）；用本地模拟百炼（HTTP + WebSocket）和真 lycore 跑通过编排；手动工作流 bailian-live.yml 的 run_e2e 选项，真实运行待有 Key 的会话 |
 | I2 生成项目建图 / 旁白写回 / 词级字幕 / 真实片长 | 已做（假文本模型与假 TTS 测试，未用真 Key，未在浏览器打开） | scriptgen 同事务写角色表并建项目图；`POST /episodes/:id/voiceover` 估价后确认、经内核写回、旧列物化；词级字幕与真实片长为内核投影；时间线编辑器“旁白配音”抽屉；见 kernel-design §11 |
 | I1 出图/出视频走队列并写回内核 | 已做（假服务商测试，未真 Key 跑，未在浏览器打开） | `packages/local/src/generation/`：按 cacheKey 派生幂等键、先估算再建任务（整批算一次运行的额度）、缓存命中直接采用旧版本、首帧图完成后自动接视频、成功即 commit 采用版本并物化旧列、写入真实时长；`/episodes/:id/generate`、`/episodes/:id/generation/status`；分镜表与工作台改用确认弹窗 + 状态芯片，旧同步按钮在 `generation.legacy_enabled`（默认关）之后。图片提示词等编辑仍走旧路由，图感知要等旧写路由改调意图层 |
 | 数据内核 K1 核心 | 已做 | packages/kernel：图、操作事务、撤销、失效、四种投影、意图层；设计见 docs/kernel-design.md |
@@ -60,5 +60,5 @@
 | 内核接线 I1 出图出视频走队列写回内核 | 已做（模拟数据） | /episodes/:id/generate，估价确认，幂等，缓存命中，崩溃恢复 |
 | 内核接线 I2 剧本入库/配音/词级字幕/真实片长 | 已做（模拟数据） | 配音未进队列和任务中心 |
 | 内核接线 I3 旧写接口改走内核 | 已做 | 镜头与时间线编辑全部经内核；剩余绕过清单见 kernel-design §12.5 |
-| 只接百炼 + 扩展文档 + 全流程覆盖审计 + 端到端脚本 | 已做（脚本未用真 Key 跑） | providers.enabled 默认只开百炼；docs/bailian-flow-coverage.md |
+| 只接百炼 + 扩展文档 + 全流程覆盖审计 + 端到端脚本 | 已做（Windows 真 Key 端到端通过） | providers.enabled 默认只开百炼；docs/bailian-flow-coverage.md |
 | 云端真 Postgres 验证 | 已做 | 33 个测试在内存库与 Postgres 上同一套断言通过；CI 加 Postgres 任务 |
