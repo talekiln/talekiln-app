@@ -175,7 +175,7 @@ describe('catalog and referral routes', () => {
     app.get('/referral/:provider', cloudRoutes(cloud, {}).referral);
     const s = await new Promise((r) => { const x = app.listen(0, '127.0.0.1', () => r(x)); });
     const b = `http://127.0.0.1:${s.address().port}`;
-    assert.deepEqual((await (await fetch(`${b}/referral/ark`)).json()).data, { url: DIRECT_KEY_PAGES.ark, via: 'direct' });
+    assert.deepEqual((await (await fetch(`${b}/referral/bailian`)).json()).data, { url: DIRECT_KEY_PAGES.bailian, via: 'direct' });
     assert.equal((await fetch(`${b}/referral/unknown`)).status, 404);
     s.close();
   });
@@ -183,8 +183,8 @@ describe('catalog and referral routes', () => {
 
 describe('referral key-page helper', () => {
   it('routes through the cloud /r/:code when configured, tagging the source', () => {
-    const r = resolveKeyPage({ baseUrl: 'https://cloud.mytalekiln.com/', provider: 'Ark' });
-    assert.deepEqual(r, { url: 'https://cloud.mytalekiln.com/r/ark?src=addkey', via: 'referral' });
+    const r = resolveKeyPage({ baseUrl: 'https://cloud.mytalekiln.com/', provider: 'Bailian' });
+    assert.deepEqual(r, { url: 'https://cloud.mytalekiln.com/r/bailian?src=addkey', via: 'referral' });
   });
 
   it('keeps a base URL path prefix', () => {
@@ -206,7 +206,7 @@ describe('referral key-page helper', () => {
   });
 
   it('sanitises src', () => {
-    const r = resolveKeyPage({ baseUrl: 'https://cloud.mytalekiln.com', provider: 'ark', src: 'a b&c=d' });
+    const r = resolveKeyPage({ baseUrl: 'https://cloud.mytalekiln.com', provider: 'bailian', src: 'a b&c=d' });
     assert.equal(new URL(r.url).searchParams.get('src'), 'abcd');
   });
 });

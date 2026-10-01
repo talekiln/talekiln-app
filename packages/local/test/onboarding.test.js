@@ -1,4 +1,4 @@
-const { describe, it, before, after } = require('node:test');
+const { describe, it, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
@@ -9,6 +9,7 @@ const { runMigrationsAndEnsure } = require('../src/db/migrate');
 const secrets = require('../src/secrets');
 const aiConfigService = require('../src/services/aiConfigService');
 const onboarding = require('../src/services/onboardingService');
+const enablement = require('../src/providers/enablement');
 
 const log = { info() {}, warn() {}, error() {}, errorw() {}, warnw() {} };
 // Fake key assembled at runtime so no key-like literal sits in the repo.
@@ -26,19 +27,42 @@ function memStore() {
 
 describe('onboarding state', () => {
   before(() => secrets.setSecretStore(memStore()));
-  after(() => secrets.setSecretStore(null));
+  after(() => { secrets.setSecretStore(null); enablement.resetEnabled(); });
+  beforeEach(() => enablement.resetEnabled());
 
   it('is needed on a fresh database, starting at welcome', () => {
     const st = onboarding.getStatus(openDb());
     assert.deepEqual({ needed: st.needed, step: st.step, has_key: st.has_key }, { needed: true, step: 'welcome', has_key: false });
   });
 
+  it('defaults to bailian only: no provider-choice step, provider implied', () => {
+    const st = onboarding.getStatus(openDb());
+    assert.deepEqual(st.providers, [{ id: 'bailian', label: '阿里云百炼' }]);
+    assert.deepEqual(st.steps, ['welcome', 'key', 'test', 'done']);
+    assert.equal(st.provider, 'bailian');
+  });
+
+  it('shows the provider step again once a second provider is enabled', () => {
+    enablement.configureEnabled(['bailian', 'ark']);
+    const db = openDb();
+    const st = onboarding.getStatus(db);
+    assert.deepEqual(st.steps, ['welcome', 'provider', 'key', 'test', 'done']);
+    assert.deepEqual(st.providers.map((p) => p.id), ['bailian', 'ark']);
+    assert.equal(st.provider, null);
+    assert.equal(onboarding.saveState(db, { provider: 'ark' }).provider, 'ark');
+  });
+
+  it('refuses a provider that is not enabled', () => {
+    const db = openDb();
+    assert.throws(() => onboarding.saveState(db, { provider: 'ark' }), /服务商/);
+  });
+
   it('resumes the saved step and provider; skipping hides it', () => {
     const db = openDb();
-    onboarding.saveState(db, { step: 'key', provider: 'ark' });
+    onboarding.saveState(db, { step: 'key', provider: 'bailian' });
     let st = onboarding.getStatus(db);
     assert.equal(st.step, 'key');
-    assert.equal(st.provider, 'ark');
+    assert.equal(st.provider, 'bailian');
     assert.equal(st.needed, true);
     st = onboarding.saveState(db, { dismissed: true });
     assert.equal(st.needed, false);

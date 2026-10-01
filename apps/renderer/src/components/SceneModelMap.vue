@@ -167,6 +167,8 @@ import { sceneModelMapAPI } from '@/api/sceneModelMap'
 import { aiAPI } from '@/api/ai'
 import { getSelectableModels, getCatalogModels, mergeModelOptions } from '@/utils/modelSelection'
 import { catalogAPI } from '@/api/catalog'
+import { onboardingAPI } from '@/api/onboarding'
+import { providerIdForConfig } from '@/utils/providerEnablement'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -235,10 +237,12 @@ const selectedConfigModels = computed(() => {
 
 // 云端目录（失败时为空，不影响本地配置的模型）
 const catalog = ref(null)
+// 已开放服务商（config.yaml providers.enabled）；用于把配置里的 dashscope 等映射到目录里的 bailian
+const enabledProviders = ref(null)
 const selectedConfig = computed(() => configs.value.find((c) => c.id === form.value.config_id) || null)
 // 本地配置的模型在前；云端目录里同一平台（provider 与目录一致）的模型作为补充，并带价格提示
 const modelOptions = computed(() => {
-  const provider = String(selectedConfig.value?.provider || '').toLowerCase()
+  const provider = providerIdForConfig(enabledProviders.value, selectedConfig.value?.provider) || ''
   const fromCatalog = selectedConfig.value && provider
     ? getCatalogModels(catalog.value, form.value.service_type, provider)
     : []
@@ -397,6 +401,7 @@ function resetForm() {
 
 onMounted(() => {
   catalogAPI.get().then((c) => { catalog.value = c }).catch(() => {})
+  onboardingAPI.providers().then((l) => { enabledProviders.value = l }).catch(() => {})
   load()
 })
 </script>

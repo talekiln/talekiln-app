@@ -4,6 +4,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { createProviders, ERROR_CODES, ProviderError } = require('../src/providers');
+// 方舟代码保留但默认隐藏（providers.enabled 默认只有 bailian）；本文件测试方舟，所以显式开启。
+require('../src/providers/enablement').configureEnabled(['bailian', 'ark']);
 
 const fx = (n) => fs.readFileSync(path.join(__dirname, 'fixtures', 'ark', n), 'utf8');
 

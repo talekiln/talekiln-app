@@ -1,6 +1,10 @@
 import request from '@/utils/request'
 
 export const onboardingAPI = {
+  /** 已开放的服务商（config.yaml providers.enabled）：[{ id, label, aliases }] */
+  providers() {
+    return request.get('/providers', { silentError: true })
+  },
   /** { needed, has_key, dismissed, step, provider, config_id } */
   status() {
     return request.get('/onboarding/status')
