@@ -30,8 +30,8 @@
 | G03/G05 渲染导出 | 已做（Linux 真 ffmpeg 测过） | 硬件编码器、Windows 路径、取消需 Windows 真机 |
 | B01–B03 云端账号与授权 | 已做（无数据库验证） | 迁移与 Prisma 仓库待真 Postgres 验证 |
 | D04/D05 角色库与镜头工作台 | 已做（未在浏览器打开） | 锁定参考图对火山经典路径可能无效 |
-| A09 lycore 进程守护 | 已做（Linux 验证） | client/supervisor.js：core.hello 探测、退避重启、上限后上报、干净退出；未接入 desktop 主进程 |
-| A10 ffmpeg 供应 | 部分 | 下载/校验/续传已做并测试；清单为 TODO 占位，需填真实 LGPL 构建与 sha256，见 docs/ffmpeg-lgpl.md |
+| A09 lycore 进程守护 | 已做（Windows 打包版验证） | client/supervisor.js：core.hello 探测、退避重启、上限后上报、干净退出；desktop 主进程经 `apps/desktop/core-runtime.js` 拉起、退出时关闭、多次崩溃弹窗提示 |
+| A10 ffmpeg 供应 | 已做（随包内置） | 安装包内置固定版本的 LGPL ffmpeg（`scripts/ffmpeg-pin.json` 固定地址与 sha256，`scripts/fetch-ffmpeg.mjs` 构建时下载校验，CI 打包前执行）；`ffmpeg-manifest.json` 的下载路径保留为可选后备，仍是占位 |
 | B04 licence.status | 已做（自测令牌） | ES256/JWKS/宽限期；已用 node:crypto 签发的令牌互通，未用云端真实令牌验证 |
 | C06 首次引导向导 | 已做（headless Chromium 截图验证） | 欢迎→选服务商→粘贴 Key→连通测试→完成（只开放一个服务商时跳过“选服务商”，截图是旧版两家并列）；可跳过、可续接，配好 Key 后不再出现；“获取 Key”按钮走 getKeyReferralUrl 占位函数（推广跳转待接）；连通测试复用 aiConfigService.testConnection，真 Key 联通未验证；Electron 内未跑 |
 | C08 内置示例项目 | 已做（headless Chromium 截图验证） | POST /api/v1/samples/:id/seed 本地生成 5 镜分镜 + 脚本生成的占位图/提示音，幂等，不调用任何 AI；首页“试试示例项目”入口；音频暂未在界面播放 |
@@ -48,7 +48,7 @@
 | E05 花费页 | 已做（模拟接口数据截图，未连真实服务） | `/spend`：按日/服务商/模型汇总、月度上限、逐任务费用、导出 CSV；价格仍为示例价 |
 | F05 背景音乐 | 已做（未跑 Electron） | 音乐库（用户导入 + 程序合成的示例配乐）、添加到音乐轨（可循环铺满）、音量/压低/响度写入时间线 JSON；render.plan 与 render.start 原本就支持音乐轨与压低 |
 | G04 AI 生成内容标识 | 部分 | 画面水印“AI生成”+ MP4 元数据 AIGC，默认开；字段、位置、大小、时长必须由法务确认，见 docs/aigc-marking.md |
-| G06 导出页 | 已做（Linux 真 lycore + ffmpeg 测过，页面用模拟接口截图） | `/episodes/:id/export`：分辨率/帧率/编码器/位置、进度轮询、取消、打开文件夹；本地服务经 `LYCORE_ENDPOINT` 连接 lycore，桌面主进程尚未启动 lycore 并设置该变量，因此打包后暂不可用 |
+| G06 导出页 | 已做（Linux 真 lycore + ffmpeg 测过，页面用模拟接口截图） | `/episodes/:id/export`：分辨率/帧率/编码器/位置、进度轮询、取消、打开文件夹；本地服务经 `LYCORE_ENDPOINT` 连接 lycore，桌面主进程已启动 lycore 并设置该变量；Windows 打包版（unpacked 与 NSIS 安装包均已构建）经接口实测导出成功（h264+aac，含 AIGC 标识）；界面点击导出需 Task 4 人工复核 |
 | 服务商开关 | 已做 | `providers.enabled` 统一控制注册表、队列、向导、AI 配置页、模型目录、获取 Key 链接和提示文案；默认 `['bailian']`；新增服务商步骤见 docs/provider-extension.md |
 | 百炼全流程覆盖审计 | 已做（文档） | docs/bailian-flow-coverage.md：逐步骤列真实验证 / 仅夹具 / 缺；顺手修了队列共享 Key、默认模型与请求形态、本地图内联三处接线 |
 | 百炼端到端脚本 | 已在 Windows 用真 Key 跑通 11/11 阶段（2026-10-01，估算 4.605 元） | scripts/bailian-e2e.mjs（3 镜、花费上限默认 5 元）；用本地模拟百炼（HTTP + WebSocket）和真 lycore 跑通过编排；手动工作流 bailian-live.yml 的 run_e2e 选项，真实运行待有 Key 的会话 |
