@@ -6,4 +6,5 @@ module.exports = {
   ...require('./worker'),
   ...require('./download'),
   ...require('./taskView'),
+  ...require('./providerAdapter'),
 };
