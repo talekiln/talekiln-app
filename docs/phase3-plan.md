@@ -41,3 +41,5 @@
 ## 进度
 
 （随合入更新）
+
+- P3-P 插件适配器：分支 `p3-plugins`。SDK 签名/验签与 `sign-plugin.mjs`，本地迁移 32 `installed_plugins`、插件宿主（扫描、离线验签、开发者模式、安装/删除、接入注册表与队列）与 `/plugins` 接口，云端 PluginRegistry（登记/审核/签名/公开目录，迁移 `20261005000000_plugin_registry`），插件页 `/settings/plugins`。详见 `docs/phase3-plugins.md`；真实厂商插件未写，真机未验。
