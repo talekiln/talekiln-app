@@ -1,5 +1,7 @@
 <template>
   <div class="film-list">
+    <!-- 云端公告（桌面端由主进程推送；可关闭，按公告 id 记在 localStorage） -->
+    <AnnouncementBar />
     <header class="header">
       <div class="header-inner">
         <h1 class="logo">
@@ -391,6 +393,7 @@ import { characterLibraryAPI } from '@/api/characterLibrary'
 import { sceneLibraryAPI } from '@/api/sceneLibrary'
 import { propLibraryAPI } from '@/api/propLibrary'
 import AIConfigContent from '@/components/AIConfigContent.vue'
+import AnnouncementBar from '@/components/AnnouncementBar.vue'
 import { uploadAPI } from '@/api/upload'
 import { aiAPI } from '@/api/ai'
 import { seedSampleLocation } from '@/utils/sample'

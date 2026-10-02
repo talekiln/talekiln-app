@@ -36,6 +36,9 @@
       "startup-error.js",
       "updater.js",
       "updater-logic.js",
+      "cloud-check.js",
+      "cloud-check-logic.js",
+      "preload.js",
       "update-config.json",
       "package.json",
       "node_modules/**/*"
