@@ -9,25 +9,25 @@
 | A07 本地服务只听本机 | 已做 | 127.0.0.1 + 每次启动令牌 |
 | A02 代码审计 | 已做 | docs/audit.md，13 项必改 |
 | A03 许可证扫描 | 已做 | docs/licenses.md，`pnpm licenses:check`；仅 sharp-libvips 为 LGPL |
-| A08 lycore 骨架 | 已做（Linux 验证） | Windows 命名管道由 CI 首次验证 |
+| A08 lycore 骨架 | 已做（Windows 打包版验证） | 命名管道在 Windows 打包版实测可用（任务 1/4） |
 | C01 适配器接口 | 已做 | providers/；服务商开关 `providers.enabled`（config.yaml，默认只开百炼，方舟代码保留但隐藏），见 docs/provider-extension.md |
 | C02 百炼适配器 | 部分 | 文本/图像/视频/配音已写，契约测试用模拟数据；CosyVoice 报文、错误码字符串、默认模型名待真 Key 验证 |
 | C03 方舟 + 火山语音适配器 | 部分 | 契约测试用模拟数据；默认模型名、Seedance 参数形式、语音地址与鉴权头待真 Key 验证 |
-| C04 Key 存系统密钥 | 已做（未跑 Electron） | safeStorage 密文落盘，接口只回末 4 位，日志脱敏，旧明文自动迁移 |
+| C04 Key 存系统密钥 | 已做（Windows 打包版验证） | safeStorage 密文落盘，接口只回末 4 位，日志脱敏，旧明文自动迁移；任务 4 在打包版实测：`secrets.enc.json` 只有密文、重启后 Key 仍可用（解密后真的发到了服务商）、日志无明文 |
 | E01 任务队列持久化 | 已做 | ai_tasks 状态机、幂等键、崩溃三点测试；未接入现有路由 |
 | F02 时间线数据模型 | 已做 | 四轨、校验、从分镜装配、REST 路由；前端编辑器（F03）未做 |
-| G01 媒体探测与编码器检测 | 已做（Linux 验证） | lycore media.probe / encoder.detect，Windows 真机显卡检测待测 |
+| G01 媒体探测与编码器检测 | 已做（Windows 真机验证） | lycore media.probe / encoder.detect；任务 4 在本机检测到 h264_qsv / h264_mf 可用、nvenc / amf / libx264 不可用，推荐 qsv 并以之导出成功 |
 | F03 时间线编辑器首版 | 部分 | 四轨、拖拽、吸附、切分、预览；缺波形、缩略图、旁白/音乐播放 |
 | D02 分镜模板 / F01 配音字幕 / C05 连通测试 | 已做（联网会话） | PR #2、#3 已合入 |
 | D01 新建项目 / D03 分镜表 | 已做（未在浏览器打开） | 同步生成，无进度流 |
 | E02 队列工作器 | 已做 | 限并发、429 退避、断点下载、sha256 入库；尚未接入真实适配器 |
-| E03 唤醒对账/托盘/通知 | 已做（未跑 Electron） | 托盘图标为占位 |
+| E03 唤醒对账/托盘/通知 | 已做（Windows 打包版验证了代码路径） | 托盘图标为占位；任务 4：关闭按钮隐藏到托盘、任务失败触发 Notification.show、resume 事件触发对账都在打包版验证；托盘可见 / 通知气泡可见 / 退出确认对话框 / 真实睡眠待人眼确认（见 windows-test-results/2026-10-02.md） |
 | E04 任务中心 | 已做（未在浏览器打开） | |
 | F04 快捷键/撤销 | 已做（未在浏览器测） | |
 | F06 自动保存与恢复 | 部分 | localStorage 草稿恢复，未用 IndexedDB |
 | G02 渲染计划与场景缓存 | 已做 | 只改一镜只重渲一镜 |
 | D06 花费确认与上限 / 队列接适配器 | 已做（模拟数据） | 价格表已换为百炼公开价目（2025-12-19 版，`configs/prices.json`），未逐条核对的条目标 `verified:false` 仍按示例价提示；任务完成后用结果里的用量写 `spend_log.actual`（任务 3） |
-| G03/G05 渲染导出 | 已做（Linux 真 ffmpeg 测过） | 硬件编码器、Windows 路径、取消需 Windows 真机 |
+| G03/G05 渲染导出 | 已做（Windows 真机验证） | 任务 4：h264_qsv 硬件编码、中文 + 空格路径（数据目录、ffmpeg 目录、输出路径）、导出中取消不留半成品、场景缓存二次导出 4/5 命中均实测通过 |
 | B01–B03 云端账号与授权 | 已做（无数据库验证） | 迁移与 Prisma 仓库待真 Postgres 验证 |
 | D04/D05 角色库与镜头工作台 | 已做（未在浏览器打开） | 锁定参考图对火山经典路径可能无效 |
 | A09 lycore 进程守护 | 已做（Windows 打包版验证） | client/supervisor.js：core.hello 探测、退避重启、上限后上报、干净退出；desktop 主进程经 `apps/desktop/core-runtime.js` 拉起、退出时关闭、多次崩溃弹窗提示 |
@@ -38,7 +38,7 @@
 | H04 自动更新 | 已做（未跑 Electron） | electron-updater 接入，纯逻辑有测试；更新源为占位，须配 publisherName 才启用；见 docs/auto-update.md |
 | H05 签名与误报清单 | 部分 | docs/release-signing.md；CI 签名步骤为骨架，未在真实 Secrets 下跑过 |
 | H06 统一错误码与脱敏 | 已做 | error-codes.json 为唯一来源，local 响应与 toast 共用；脱敏补 Bearer/sk-/LTAI/签名链接/刷新令牌/许可证 JWT；见 docs/error-codes.md |
-| I01 测试矩阵 | 已做（文档） | docs/test-matrix.md；真机项均待测 |
+| I01 测试矩阵 | 已做（文档） | docs/test-matrix.md；任务 4 已覆盖 B1/B2/B4/C2/D5/E1/E2/G1–G4/H1/H2/I1 的可自动化部分，剩余人眼项见 windows-test-results/2026-10-02.md |
 | H01 运营后台 | 已做（未在浏览器打开） | apps/admin 五屏（登录/邀请码/用户/公告与目录/概览），云端 /admin/* 独立管理员认证；vite build 通过 |
 | H02 使用统计 | 已做（内存仓储验证） | 云端 POST /telemetry 白名单、概览聚合；客户端 opt-in 模块已写，尚未接入应用事件与设置开关 |
 | H03 反馈与诊断包 | 已做（无 Electron/Postgres 验证） | GET /api/v1/diagnostics/bundle 脱敏 zip（植入假密钥测试）；云端 POST /feedback 有大小与限流；诊断包直接存库，未用 OSS 临时凭证；界面入口未做 |
@@ -48,7 +48,7 @@
 | E05 花费页 | 已做（模拟接口数据截图，未连真实服务） | `/spend`：按日/服务商/模型汇总、月度上限、逐任务费用、导出 CSV；任务 3 后显示预估与实际（含回传用量：计费时长/字符/张数）、注明价目版本与日期 |
 | F05 背景音乐 | 已做（未跑 Electron） | 音乐库（用户导入 + 程序合成的示例配乐）、添加到音乐轨（可循环铺满）、音量/压低/响度写入时间线 JSON；render.plan 与 render.start 原本就支持音乐轨与压低 |
 | G04 AI 生成内容标识 | 部分 | 画面水印“AI生成”+ MP4 元数据 AIGC，默认开；字段、位置、大小、时长必须由法务确认，见 docs/aigc-marking.md |
-| G06 导出页 | 已做（Linux 真 lycore + ffmpeg 测过，页面用模拟接口截图） | `/episodes/:id/export`：分辨率/帧率/编码器/位置、进度轮询、取消、打开文件夹；本地服务经 `LYCORE_ENDPOINT` 连接 lycore，桌面主进程已启动 lycore 并设置该变量；Windows 打包版（unpacked 与 NSIS 安装包均已构建）经接口实测导出成功（h264+aac，含 AIGC 标识）；界面点击导出需 Task 4 人工复核 |
+| G06 导出页 | 已做（Linux 真 lycore + ffmpeg 测过，页面用模拟接口截图） | `/episodes/:id/export`：分辨率/帧率/编码器/位置、进度轮询、取消、打开文件夹；本地服务经 `LYCORE_ENDPOINT` 连接 lycore，桌面主进程已启动 lycore 并设置该变量；Windows 打包版（unpacked 与 NSIS 安装包均已构建）经接口实测导出成功（h264+aac，含 AIGC 标识）；任务 4 在 Windows 打包版经接口实测 720p/1080p、中文 + 空格路径、取消、场景缓存（见 windows-test-results/2026-10-02.md），导出页能打开，点按钮走一遍仍待人眼 |
 | 服务商开关 | 已做 | `providers.enabled` 统一控制注册表、队列、向导、AI 配置页、模型目录、获取 Key 链接和提示文案；默认 `['bailian']`；新增服务商步骤见 docs/provider-extension.md |
 | 百炼全流程覆盖审计 | 已做（文档） | docs/bailian-flow-coverage.md：逐步骤列真实验证 / 仅夹具 / 缺；顺手修了队列共享 Key、默认模型与请求形态、本地图内联三处接线 |
 | 百炼端到端脚本 | 已在 Windows 用真 Key 跑通 11/11 阶段（2026-10-01，估算 4.605 元） | scripts/bailian-e2e.mjs（3 镜、花费上限默认 5 元）；用本地模拟百炼（HTTP + WebSocket）和真 lycore 跑通过编排；手动工作流 bailian-live.yml 的 run_e2e 选项，真实运行待有 Key 的会话 |
@@ -61,6 +61,7 @@
 | 内核接线 I1 出图出视频走队列写回内核 | 已做（模拟数据） | /episodes/:id/generate，估价确认，幂等，缓存命中，崩溃恢复 |
 | 内核接线 I2 剧本入库/配音/词级字幕/真实片长 | 已做（模拟数据） | 配音已于任务 3 进队列/任务中心（`voiceover/queue.js`） |
 | 任务 3：配音进队列 / 真实花费回写 / 画布新增节点 | 已做（代码 + 单测；未真 Key 在界面点击验证） | 配音 `POST /episodes/:id/voiceover` 改为建 `/ai-tasks`（kind tts），估价/确认/402 不变，worker 完成后由 `voiceover/queue.js` 经内核 `recordGeneration` 写回旁白版本与词级字幕，新增 `GET .../voiceover/status`，配音抽屉轮询并显示排队/生成中/失败；任务结果 `usage` 写进 `spend_log.usage/actual`（视频计费时长 × 分辨率价、配音字符、图片张数），花费页显示预估/实际/用量；`prices.json` 换为百炼公开价目（2025-12-19）；画布工具栏新增节点（shot/script_line/image/video/narration，经 `canvas.addNodeAt`）、场景组改名（新意图 `canvas.renameGroup`），时间线页的本地撤销/重做按钮移除，Ctrl+Z/Y 改为先保存再走内核历史。见 windows-test-results/2026-10-02.md |
+| 任务 4：Windows 人工检查 | 已做（打包版自动化实测 + 人眼清单） | 按 test-matrix：20 个页面逐个打开无控制台异常（含剧本页、画布页、视图切换栏、花费页、登录页）；safeStorage 密文落盘 / 重启可用 / 日志脱敏；关闭隐藏到托盘；通知与唤醒对账的代码路径；中文 + 空格路径下的数据目录、ffmpeg 目录和导出输出；h264_qsv 导出 720p/1080p、取消、场景缓存；干净退出。托盘可见、通知气泡、退出确认对话框、真实睡眠、界面点导出按钮列为人眼清单。发现 5 个观察项（时间线页重复提示、开发态 better-sqlite3 ABI 不匹配、缓存 4/5 命中、数据目录不可自定义、ffmpeg 无 libx264）。见 windows-test-results/2026-10-02.md |
 | 内核接线 I3 旧写接口改走内核 | 已做 | 镜头与时间线编辑全部经内核；剩余绕过清单见 kernel-design §12.5 |
 | 只接百炼 + 扩展文档 + 全流程覆盖审计 + 端到端脚本 | 已做（Windows 真 Key 端到端通过） | providers.enabled 默认只开百炼；docs/bailian-flow-coverage.md |
 | 云端真 Postgres 验证 | 已做 | 33 个测试在内存库与 Postgres 上同一套断言通过；CI 加 Postgres 任务 |
