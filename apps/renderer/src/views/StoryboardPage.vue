@@ -52,11 +52,15 @@
           <el-input-number v-model="row.duration" :min="0.5" :max="30" :step="0.5" :precision="1" size="small" controls-position="right" @change="touch(row)" />
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="90" align="center">
+      <el-table-column label="状态" width="110" align="center">
         <template #default="{ row }">
           <el-tooltip :disabled="!genFailure(row)" :content="genFailure(row)" placement="top">
             <el-tag v-if="gen.chip(row.id)" size="small" :type="gen.chip(row.id).type" data-test="gen-chip">{{ gen.chip(row.id).label }}</el-tag>
             <el-tag v-else size="small" :type="row.status === 'completed' ? 'success' : row.status === 'failed' ? 'danger' : 'info'">{{ statusLabel(row.status) }}</el-tag>
+          </el-tooltip>
+          <!-- P3-C 一致性：与锁定参考图的评分（只读） -->
+          <el-tooltip v-if="consChip(row.id)" :content="consHint(row.id)" placement="top">
+            <el-tag size="small" :type="consChip(row.id).type" class="cons-tag" data-test="consistency-chip">{{ consChip(row.id).label }}</el-tag>
           </el-tooltip>
         </template>
       </el-table-column>
@@ -83,11 +87,13 @@ import { ArrowDown, ArrowLeft, ArrowUp, Delete, Plus } from '@element-plus/icons
 import { dramaAPI } from '@/api/drama'
 import { storyboardsAPI } from '@/api/storyboards'
 import { scriptgenAPI } from '@/api/scriptgen'
+import { consistencyAPI } from '@/api/consistency'
 import GenerateDialog from '@/components/GenerateDialog.vue'
 import ViewSwitcher from '@/components/ViewSwitcher.vue'
 import { useProjectViewsStore } from '@/stores/projectViews'
 import { useGeneration } from '@/composables/useGeneration'
 import { failureText, isBusy } from '@/utils/generationView'
+import { badgeForShot, busyCount, consistencyHint, consistencyShotMap } from '@/utils/consistencyView'
 import {
   createAutosaver, moveRow, patchFromRow, removeRow, rowFromApi, rowWarnings,
   saveStateText, sortRows, statusLabel, totalDuration,
@@ -115,6 +121,23 @@ function onRowClick(row) {
 const gen = useGeneration(episodeId)
 const genFailure = (row) => failureText(gen.shotStatus(row.id))
 const saver = createAutosaver({ delay: 800, onState: (s) => { saveState.value = s } })
+// P3-C 一致性评分（只读）：按旧表 id 查；一批任务跑完后拉一次、稍后再拉一次（评分在写回后后台完成）
+const consistency = ref(null)
+const consMap = computed(() => consistencyShotMap(consistency.value))
+const consChip = (id) => badgeForShot(consMap.value, id)
+const consHint = (id) => consistencyHint(consMap.value.get(Number(id)), consistency.value?.min_score)
+let consTimer = null
+async function loadConsistency() {
+  if (!episodeId.value) return
+  try { consistency.value = await consistencyAPI.episodeReport(episodeId.value) } catch (_) { /* request.js 已提示 */ }
+}
+watch(() => busyCount(gen.status.value), (now, before) => {
+  if (before > 0 && now === 0) {
+    loadConsistency()
+    clearTimeout(consTimer)
+    consTimer = setTimeout(loadConsistency, 4000)
+  }
+})
 
 async function load() {
   loading.value = true
@@ -130,6 +153,7 @@ async function load() {
     const data = await dramaAPI.getStoryboards(episodeId.value)
     rows.value = sortRows((data.storyboards || []).map(rowFromApi))
     gen.refresh()
+    loadConsistency()
     views.load(episodeId.value, { drama: route.params.dramaId })
   } finally {
     loading.value = false
@@ -213,7 +237,10 @@ onMounted(() => {
   load()
   window.addEventListener('beforeunload', beforeUnload)
 })
-onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', beforeUnload)
+  clearTimeout(consTimer)
+})
 </script>
 
 <style scoped>
@@ -228,4 +255,5 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 .thumb { width: 90px; height: 90px; border-radius: 4px; display: block; margin: 0 auto; }
 .thumb-empty { display: flex; align-items: center; justify-content: center; background: var(--el-fill-color-light); color: var(--el-text-color-placeholder); font-size: 12px; }
 .warn { margin-top: 4px; font-size: 12px; color: var(--el-color-warning); }
+.cons-tag { margin-top: 4px; }
 </style>
