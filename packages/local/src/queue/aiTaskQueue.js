@@ -22,11 +22,19 @@ const SUBMIT_UNCERTAIN = 'SUBMIT_UNCERTAIN';
  *   jitter(ms) -> ms                            applied to the 429 wait (Retry-After or backoff)
  *   pollDelay(task) -> ms                       delay before the next poll of a still-running task
  *   crash(point): called at 'before_submit' | 'after_submit' | 'after_id_write'
- *   maxPollErrors
+ *   maxPollErrors                               consecutive poll OR download errors before the task fails
+ *   downloadBackoff(provider, err, attempt) -> ms   wait before the next download attempt (default 15s*2^(n-1), cap 5min)
  *   spendGuard(task) -> { ok: true } | { ok: false, message }   checked before a queued task is claimed;
  *     a refusal fails the task with SPEND_LIMIT (never submitted, retryable once limits change)
  */
-function createAiTaskQueue({ store, providers, limits = {}, now = () => Date.now(), backoff, jitter = (ms) => ms, pollDelay = null, hooks = {}, crash = () => {}, maxPollErrors = 5, spendGuard = null }) {
+
+/**
+ * Download attempts are slow-paced on purpose: each one already retries inside download.js for ~13s, and the
+ * typical cause (network not back yet after sleep/wake, DNS EAI_AGAIN) takes tens of seconds to clear.
+ */
+const defaultDownloadBackoff = (p, err, attempt) => Math.min(300000, 15000 * 2 ** Math.max(0, attempt - 1));
+
+function createAiTaskQueue({ store, providers, limits = {}, now = () => Date.now(), backoff, jitter = (ms) => ms, pollDelay = null, hooks = {}, crash = () => {}, maxPollErrors = 5, spendGuard = null, downloadBackoff = defaultDownloadBackoff }) {
   const pausedUntil = new Map(); // provider -> epoch ms (429 backoff, shared by all tasks of the provider)
   const defaultBackoff = (p, err, attempt) => Math.min(60000, 1000 * 2 ** Math.max(0, attempt - 1));
   const computeBackoff = backoff || defaultBackoff;
@@ -139,7 +147,14 @@ function createAiTaskQueue({ store, providers, limits = {}, now = () => Date.now
       store.succeed(id, out === undefined ? stored : out);
     } catch (err) {
       if (err instanceof CrashSignal) throw err;
-      store.fail(id, codeOf(err), err && err.message);
+      // The vendor already produced the result; only this machine failed to fetch it. Transient errors
+      // (network down after wake, 429/5xx) keep the task in 'downloading' with its result and retry later.
+      const n = task.poll_attempts + 1;
+      const retryable = err && (err.code === ERROR_CODES.RATE_LIMITED || err.code === ERROR_CODES.NETWORK);
+      if (!retryable || n >= maxPollErrors) { store.fail(id, codeOf(err), err && err.message); return; }
+      store.transition(id, 'downloading', 'downloading', {
+        poll_attempts: n, next_attempt_at: now() + downloadBackoff(task.provider, err, n), error_code: codeOf(err), error_message: err.message,
+      });
     }
   }
 
@@ -179,12 +194,17 @@ function createAiTaskQueue({ store, providers, limits = {}, now = () => Date.now
 
   /** One scheduler pass: poll due vendor tasks, then submit queued tasks within concurrency limits. */
   async function tick() {
-    const summary = { submitted: 0, polled: 0 };
+    const summary = { submitted: 0, polled: 0, downloaded: 0 };
     const t0 = now();
     for (const t of store.listByState(['submitted', 'polling'], { dueAt: t0 })) {
       if (isPaused(t.provider)) continue;
       await pollOne(t);
       summary.polled++;
+    }
+    for (const t of store.listByState(['downloading'], { dueAt: t0 })) {
+      if (!facade(t.provider) || !facade(t.provider).download) continue; // finish()/reconcile() settle these
+      await downloadOne(t.id);
+      summary.downloaded++;
     }
     const byProvider = new Map();
     for (const t of store.listByState(['queued'], { dueAt: t0 })) {
@@ -208,4 +228,4 @@ function createAiTaskQueue({ store, providers, limits = {}, now = () => Date.now
   return { enqueue, tick, reconcile, submitOne, pollOne, isPaused, pausedUntil, ACTIVE };
 }
 
-module.exports = { createAiTaskQueue, CrashSignal, SUBMIT_UNCERTAIN };
+module.exports = { createAiTaskQueue, CrashSignal, SUBMIT_UNCERTAIN, defaultDownloadBackoff };

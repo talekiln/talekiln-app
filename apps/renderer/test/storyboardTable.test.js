@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   rowFromApi, moveRow, removeRow, renumber, totalDuration, rowWarnings, patchFromRow,
-  createAutosaver, buildProjectRequest, statusLabel, saveStateText,
+  createAutosaver, buildProjectRequest, statusLabel, saveStateText, newShotPayload,
 } from '../src/utils/storyboardTable.js'
 
 const rows = [1, 2, 3].map((n) => ({ id: n * 10, no: n, description: 'd', dialogue: '', duration: 3, thumb: '', status: 'pending' }))
@@ -114,4 +114,38 @@ test('labels', () => {
   assert.equal(statusLabel('completed'), '已完成')
   assert.equal(statusLabel('weird'), '待生成')
   assert.equal(saveStateText('dirty'), '有未保存的修改')
+})
+
+test('autosaver default timers work when setTimeout rejects a foreign this (browser Illegal invocation)', async () => {
+  // Chrome throws "TypeError: Illegal invocation" when window.setTimeout is called with a plain object as `this`
+  // (e.g. `({ setTimeout }).setTimeout(fn, 0)`); mimic that so the regression stays visible under node.
+  const origSet = globalThis.setTimeout
+  const origClear = globalThis.clearTimeout
+  const guard = (orig) => function (...args) {
+    if (this !== undefined && this !== globalThis) throw new TypeError('Illegal invocation')
+    return orig.apply(globalThis, args)
+  }
+  globalThis.setTimeout = guard(origSet)
+  globalThis.clearTimeout = guard(origClear)
+  try {
+    const calls = []
+    const a = createAutosaver({ delay: 1 })
+    assert.doesNotThrow(() => a.schedule('order', async () => calls.push('saved')))
+    assert.doesNotThrow(() => a.schedule('order', async () => calls.push('saved2')))
+    assert.doesNotThrow(() => a.cancel('nothing'))
+    await new Promise((r) => origSet(r, 20))
+    assert.deepEqual(calls, ['saved2'])
+    assert.equal(a.state, 'saved')
+  } finally {
+    globalThis.setTimeout = origSet
+    globalThis.clearTimeout = origClear
+  }
+})
+
+test('newShotPayload appends an empty shot at the end (no placeholder text to clear by hand)', () => {
+  const p = newShotPayload(7, rows)
+  assert.deepEqual(p, { episode_id: 7, storyboard_number: 4, description: '', duration: 3 })
+  assert.deepEqual(newShotPayload(7, []), { episode_id: 7, storyboard_number: 1, description: '', duration: 3 })
+  // 空描述的新行要立刻带上「画面描述为空」提示，提醒用户补上
+  assert.ok(rowWarnings(rowFromApi({ id: 99, storyboard_number: 4, ...p })).includes('画面描述为空'))
 })

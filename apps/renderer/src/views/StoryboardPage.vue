@@ -28,7 +28,8 @@
       </el-button>
     </div>
 
-    <el-table v-loading="loading" :data="rows" row-key="id" border empty-text="暂无分镜" :row-class-name="rowClass" @row-click="onRowClick">
+    <!-- 表格撑满剩余高度、只在表体内滚动，这样往下拉时表头一直在（el-table 本身 overflow:hidden，sticky 表头行不通）。 -->
+    <el-table v-loading="loading" :data="rows" row-key="id" border height="100%" class="sb-table" empty-text="暂无分镜" :row-class-name="rowClass" @row-click="onRowClick">
       <el-table-column label="镜号" width="64" align="center">
         <template #default="{ row }">{{ row.no }}</template>
       </el-table-column>
@@ -40,7 +41,7 @@
       </el-table-column>
       <el-table-column label="画面描述" min-width="280">
         <template #default="{ row }">
-          <el-input v-model="row.description" type="textarea" :autosize="{ minRows: 2, maxRows: 6 }" @input="touch(row)" />
+          <el-input v-model="row.description" type="textarea" :autosize="{ minRows: 2, maxRows: 6 }" placeholder="请输入画面描述" @input="touch(row)" />
           <div v-for="w in rowWarnings(row)" :key="w" class="warn">{{ w }}</div>
         </template>
       </el-table-column>
@@ -98,7 +99,7 @@ import { openDirector } from '@/composables/useDirectorPanel'
 import { failureText, isBusy } from '@/utils/generationView'
 import { badgeForShot, busyCount, consistencyHint, consistencyShotMap } from '@/utils/consistencyView'
 import {
-  createAutosaver, moveRow, patchFromRow, removeRow, rowFromApi, rowWarnings,
+  createAutosaver, moveRow, newShotPayload, patchFromRow, removeRow, rowFromApi, rowWarnings,
   saveStateText, sortRows, statusLabel, totalDuration,
 } from '@/utils/storyboardTable'
 
@@ -186,12 +187,7 @@ async function addRow() {
   adding.value = true
   try {
     await saver.flush()
-    const sb = await storyboardsAPI.create({
-      episode_id: episodeId.value,
-      storyboard_number: rows.value.length + 1,
-      description: '新镜头',
-      duration: 3,
-    })
+    const sb = await storyboardsAPI.create(newShotPayload(episodeId.value, rows.value))
     rows.value = [...rows.value, rowFromApi(sb)]
   } catch (e) {
     ElMessage.error(e.message || '添加失败')
@@ -247,9 +243,12 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.sb-shell { min-height: 100vh; }
+.sb-shell { height: 100vh; display: flex; flex-direction: column; }
 :deep(.el-table .is-focus > td.el-table__cell) { background: var(--el-color-primary-light-9) !important; }
-.storyboard-page { max-width: 1200px; margin: 0 auto; padding: 24px; }
+/* 单元格顶部对齐：描述下方出现「画面描述为空」等提示时，输入框不会因垂直居中而上移。 */
+:deep(.el-table td.el-table__cell) { vertical-align: top; }
+.storyboard-page { width: 100%; max-width: 1200px; margin: 0 auto; padding: 24px; box-sizing: border-box; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.sb-table { flex: 1; min-height: 0; }
 .page-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
 .page-title { margin: 0; font-size: 20px; }
 .summary { color: var(--el-text-color-secondary); font-size: 13px; }
