@@ -37,7 +37,15 @@ const ERROR_TEXT = {
   CLOUD_UNREACHABLE: '无法连接云端，请检查网络后重试',
   CLOUD_NOT_CONFIGURED: '尚未配置云端地址，请先在 config.yaml 中设置 cloud.base_url',
   CLOUD_ERROR: '云端暂时不可用，请稍后重试',
-  SECRET_STORE_UNAVAILABLE: '系统密钥加密不可用，无法安全保存登录状态'
+  SECRET_STORE_UNAVAILABLE: '系统密钥加密不可用，无法安全保存登录状态',
+  // P2-C 短信 / 微信登录
+  INVALID_CODE: '验证码错误',
+  CODE_EXPIRED: '验证码已过期或尚未发送，请重新获取',
+  INVITE_REQUIRED: '首次登录需要邀请码',
+  QR_EXPIRED: '二维码已过期或已使用，请刷新',
+  LOGIN_METHOD_UNAVAILABLE: '该登录方式暂不可用，请改用邮箱密码登录',
+  CLOUD_RATE_LIMITED: '操作过于频繁，请稍后再试',
+  ACCOUNT_DISABLED: '账号已停用，请联系管理员'
 }
 
 /** 从 axios 错误里取本地接口的错误码，映射成中文提示；未知情况退回服务端文案或通用提示。 */
