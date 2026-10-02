@@ -1,11 +1,55 @@
-import type { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import type {
-  AdminAuditRecord, AdminRoleRecord, AnnouncementRecord, Entitlements, PlanVersion, ReleaseRecord, Repositories,
+  AdminAuditRecord, AdminRoleRecord, AnnouncementRecord, Entitlements, PlanVersion, PluginReviewRecord, PluginVersionRecord, ReleaseRecord, Repositories,
 } from './repositories';
 
 // Prisma 实现（需要真实 PostgreSQL 才能验证）。
 export function createPrismaRepositories(db: PrismaClient): Repositories {
   return {
+    plugins: {
+      async upsertPlugin(p, now) {
+        return db.plugin.upsert({
+          where: { name: p.name },
+          create: { ...p, createdAt: now, updatedAt: now },
+          update: { label: p.label, homepage: p.homepage, updatedAt: now },
+        });
+      },
+      findPluginByName: (name) => db.plugin.findUnique({ where: { name } }),
+      listPlugins: () => db.plugin.findMany({ orderBy: { name: 'asc' } }),
+      async createVersion(v, now) {
+        return toPluginVersion(await db.pluginVersion.create({
+          data: {
+            ...v, manifest: v.manifest as Prisma.InputJsonValue, fileHashes: v.fileHashes as Prisma.InputJsonValue,
+            createdAt: now, updatedAt: now,
+          },
+          include: { plugin: { select: { name: true } } },
+        }));
+      },
+      async findVersion(id) {
+        const r = await db.pluginVersion.findUnique({ where: { id }, include: { plugin: { select: { name: true } } } });
+        return r ? toPluginVersion(r) : null;
+      },
+      async listVersions(f) {
+        return (await db.pluginVersion.findMany({
+          where: { pluginId: f.pluginId, reviewStatus: f.reviewStatus },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: f.limit,
+          include: { plugin: { select: { name: true } } },
+        })).map(toPluginVersion);
+      },
+      async setReview(id, r, now) {
+        const u = await db.pluginVersion.updateMany({ where: { id }, data: { ...r, updatedAt: now } });
+        return u.count === 1 ? toPluginVersion(await db.pluginVersion.findUniqueOrThrow({ where: { id }, include: { plugin: { select: { name: true } } } })) : null;
+      },
+      async setSignature(id, s, now) {
+        const u = await db.pluginVersion.updateMany({
+          where: { id },
+          data: { signature: s.signature === null ? Prisma.DbNull : (s.signature as unknown as Prisma.InputJsonValue), signedAt: s.signedAt, signedBy: s.signedBy, updatedAt: now },
+        });
+        return u.count === 1 ? toPluginVersion(await db.pluginVersion.findUniqueOrThrow({ where: { id }, include: { plugin: { select: { name: true } } } })) : null;
+      },
+      addReview: async (r) => toPluginReview(await db.pluginReview.create({ data: r })),
+      listReviews: async (versionId) => (await db.pluginReview.findMany({ where: { versionId }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] })).map(toPluginReview),
+    },
     announcements: {
       async create(a, now) {
         return toAnnouncement(await db.announcement.create({ data: { ...a, createdAt: now, updatedAt: now } }));
@@ -420,4 +464,23 @@ function toAdminRole(r: { accountId: string; role: string; grantedBy: string | n
 
 function toAudit(r: { id: string; at: Date; actorId: string | null; actorEmail: string | null; actorRole: string | null; action: string; targetType: string | null; targetId: string | null; ok: boolean; status: number; detail: Prisma.JsonValue | null; ip: string | null }): AdminAuditRecord {
   return { ...r, actorRole: r.actorRole as AdminAuditRecord['actorRole'], detail: r.detail };
+}
+
+function toPluginVersion(r: {
+  id: string; pluginId: string; version: string; manifest: Prisma.JsonValue; fileHashes: Prisma.JsonValue; hash: string;
+  packageUrl: string; sha256: string; signature: Prisma.JsonValue | null; signedAt: Date | null; signedBy: string | null;
+  reviewStatus: string; reviewedAt: Date | null; reviewedBy: string | null; submittedBy: string | null; createdAt: Date; updatedAt: Date;
+  plugin: { name: string };
+}): PluginVersionRecord {
+  const { plugin, ...rest } = r;
+  return {
+    ...rest, pluginName: plugin.name,
+    manifest: r.manifest as Record<string, unknown>, fileHashes: r.fileHashes as Record<string, string>,
+    signature: (r.signature ?? null) as PluginVersionRecord['signature'],
+    reviewStatus: r.reviewStatus as PluginVersionRecord['reviewStatus'],
+  };
+}
+
+function toPluginReview(r: { id: string; versionId: string; action: string; notes: string; actorId: string | null; actorEmail: string | null; createdAt: Date }): PluginReviewRecord {
+  return { ...r, action: r.action as PluginReviewRecord['action'] };
 }

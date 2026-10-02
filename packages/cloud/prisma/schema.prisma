@@ -345,3 +345,57 @@ model AdminAudit {
   @@index([actorId, at])
   @@index([targetType, targetId])
 }
+
+// ---- P3-P：插件注册表（登记、版本、审核、官方签名） ----
+// 云端不保存插件包本身：只记 manifest、每个文件的 sha256、包的下载地址与包哈希。
+// 签名覆盖 canonicalJson({ manifest, files }) —— 与 @talekiln/plugin-sdk verifySignature 的算法一致。
+
+model Plugin {
+  id        String          @id @default(uuid())
+  name      String          @unique // manifest.name，即本地的服务商 id
+  label     String
+  homepage  String?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  versions  PluginVersion[]
+}
+
+model PluginVersion {
+  id           String         @id @default(uuid())
+  pluginId     String
+  plugin       Plugin         @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  version      String
+  manifest     Json // 提交时的 manifest（含 files，不含 signature）
+  fileHashes   Json // { "<相对路径>": "<sha256 hex>" }
+  hash         String // sha256(签名载荷)，与本地插件页展示的指纹一致
+  packageUrl   String
+  sha256       String // 插件包（zip）的 sha256
+  signature    Json? // { alg, kid, value }，签名后才有
+  signedAt     DateTime?
+  signedBy     String?
+  reviewStatus String         @default("pending") // pending | approved | rejected
+  reviewedAt   DateTime?
+  reviewedBy   String?
+  submittedBy  String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  reviews      PluginReview[]
+
+  @@unique([pluginId, version])
+  @@index([reviewStatus, createdAt])
+  @@index([hash])
+}
+
+// 审核记录：只增不改。
+model PluginReview {
+  id         String        @id @default(uuid())
+  versionId  String
+  version    PluginVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  action     String // submit | approve | reject | sign
+  notes      String        @default("")
+  actorId    String?
+  actorEmail String?
+  createdAt  DateTime      @default(now())
+
+  @@index([versionId, createdAt])
+}
