@@ -15,12 +15,13 @@ function ensureDir(dir) {
 }
 
 /**
- * 解析 ZIP Buffer，返回 project.json 内容和媒体文件 Map
+ * 解析 ZIP（Buffer，或本机 ZIP 文件的绝对路径），返回 project.json 内容和媒体文件 Map
  * @returns {{ data: object, files: Map<string,Buffer> }}
  */
 function parseZip(zipBuffer) {
   let zip;
   try {
+    if (typeof zipBuffer === 'string' && !fs.existsSync(zipBuffer)) throw new Error('missing');
     zip = new AdmZip(zipBuffer);
   } catch (e) {
     throw new Error('ZIP 文件损坏，无法解析');
@@ -123,6 +124,7 @@ function saveExtraImages(storagePath, projectDir, category, files, zipPaths, pre
  * @param {Buffer} zipBuffer
  * @returns {{ drama_id: number, title: string }}
  */
+/** zipBuffer：ZIP 的 Buffer，或本机 ZIP 文件路径（云备份恢复先落临时文件再解包）。 */
 function importDrama(db, cfg, log, zipBuffer) {
   const storagePath = getStoragePath(cfg);
   const { data, files } = parseZip(zipBuffer);

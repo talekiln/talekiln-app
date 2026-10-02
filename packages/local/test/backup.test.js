@@ -151,9 +151,11 @@ describe('s3 client: operations against the fake server', () => {
     await assert.rejects(client({ region: 'eu-west-1' }).listObjectsV2(''), (e) => e.code === 'BACKUP_AUTH' && /us-east-1/.test(e.message));
     await assert.rejects(client({ secretKey: 'nope' }).headBucket(), (e) => e.code === 'BACKUP_AUTH' && e.status === 401); // HEAD 没有响应体，只有状态码
     assert.equal(srv.requests.length - n0, 4);
-    // 载荷被改动（哈希不匹配）也被拒
+    // 载荷被改动（哈希不匹配）也被拒：真实 S3 回 400 XAmzContentSHA256Mismatch，不是凭据错误，也不重试
     const tampered = async (url, init) => globalThis.fetch(url, { ...init, body: Buffer.from('0rig') }); // 同长度，只改内容
-    await assert.rejects(client({ fetchImpl: tampered }).putObject('x', Buffer.from('orig')), (e) => e.code === 'BACKUP_AUTH');
+    const n1 = srv.requests.length;
+    await assert.rejects(client({ fetchImpl: tampered }).putObject('x', Buffer.from('orig')), (e) => e.code === 'BACKUP_FAILED' && e.status === 400 && e.s3Code === 'XAmzContentSHA256Mismatch');
+    assert.equal(srv.requests.length - n1, 1);
   });
 
   it('retries 5xx / 429 with exponential backoff and gives up after 3 attempts; 4xx is not retried', async () => {
@@ -192,6 +194,48 @@ describe('s3 client: operations against the fake server', () => {
     await assert.rejects(c.putObject('stream2.bin', Readable.from([data])), (e) => /contentLength/.test(e.message));
     srv.failNext(500, 1);
     await assert.rejects(c.putObject('stream3.bin', Readable.from([data]), { contentLength: data.length }), (e) => e.code === 'BACKUP_FAILED');
+  });
+
+  it('putFile signs the file sha256 (server re-hashes it), is retried by reopening the file; getObjectToFile streams to disk with sha256', async () => {
+    const c = client();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tk-s3-file-'));
+    const src = path.join(dir, 'src.bin');
+    const chunk = Buffer.alloc(1024 * 1024);
+    for (let i = 0; i < chunk.length; i++) chunk[i] = (i * 31 + 7) & 0xff;
+    fs.writeFileSync(src, Buffer.concat([chunk, chunk, chunk])); // 3 MB，足以跨多个流块
+    const expected = s3.sha256Hex(fs.readFileSync(src));
+    assert.equal(await s3.sha256File(src), expected);
+
+    const before = srv.requests.length;
+    const r = await c.putFile('file.bin', src, { contentType: 'application/zip' });
+    assert.deepEqual([r.sha256, r.size], [expected, 3 * 1024 * 1024]);
+    const put = srv.requests.slice(before).find((q) => q.method === 'PUT');
+    assert.equal(put.headers['x-amz-content-sha256'], expected); // 不是 UNSIGNED-PAYLOAD：服务端已对照实际载荷重算过
+    assert.equal(put.headers['content-length'], String(3 * 1024 * 1024));
+    assert.equal(s3.sha256Hex(srv.objects.get('tk-test/file.bin').body), expected);
+
+    // 签了错误的哈希 -> 假 S3 以 XAmzContentSHA256Mismatch 拒绝（映射为 BACKUP_FAILED，不重试）
+    const n0 = srv.requests.length;
+    await assert.rejects(c.putFile('bad.bin', src, { sha256: 'f'.repeat(64) }), (e) => e.code === 'BACKUP_FAILED' && e.s3Code === 'XAmzContentSHA256Mismatch');
+    assert.equal(srv.requests.length - n0, 1);
+    assert.equal(srv.objects.has('tk-test/bad.bin'), false);
+
+    // 文件上传可重放：注入一次 500 后第二次成功
+    srv.failNext(500, 1);
+    const n1 = srv.requests.length;
+    await c.putFile('retry.bin', src);
+    assert.equal(srv.requests.length - n1, 2);
+    assert.equal(s3.sha256Hex(srv.objects.get('tk-test/retry.bin').body), expected);
+
+    // 流式下载到文件
+    const dst = path.join(dir, 'dst.bin');
+    const d = await c.getObjectToFile('file.bin', dst);
+    assert.deepEqual([d.sha256, d.size, d.contentType], [expected, 3 * 1024 * 1024, 'application/zip']);
+    assert.equal(s3.sha256Hex(fs.readFileSync(dst)), expected);
+    await assert.rejects(c.getObjectToFile('missing.bin', path.join(dir, 'missing.bin')), (e) => e.code === 'NOT_FOUND' && e.status === 404);
+    assert.equal(fs.existsSync(path.join(dir, 'missing.bin')), false);
+    await assert.rejects(c.putFile('nofile.bin', path.join(dir, 'nope.bin')), (e) => e.code === 'BACKUP_FAILED' && /读不到/.test(e.message));
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });
 
@@ -362,6 +406,91 @@ describe('backup service: against the fake S3', () => {
     srv.objects.delete(`tk-test/${run.key.replace(/\.zip$/, '.json')}`);
     db.exec('DELETE FROM backup_runs');
     await assert.rejects(svc.restore(run.key), (e) => e.code === 'BACKUP_CHECKSUM' && /清单/.test(e.message));
+  });
+
+  it('ZIP never sits in memory as a whole: backup streams a temp file, restore downloads to a temp file; a >64 MB payload round-trips with equal sha256', async () => {
+    const seeded = await seededDb({ withTimeline: false });
+    const storage = path.join(seeded.dir, 'storage');
+    const store = memSecretStore();
+    secrets.setSecretStore(store);
+    const BIG = 65 * 1024 * 1024; // > 64 MB
+    const seen = { exportOut: null, importArg: null, importSha: null };
+    // 导出：按约定把 ZIP 写进 outFile（这里用生成数据代替真正的 ZIP，避免把 65 MB 塞进 adm-zip）
+    const exportDrama = (d, c, l, id, opts) => {
+      seen.exportOut = opts.outFile;
+      const fd = fs.openSync(opts.outFile, 'w');
+      const block = Buffer.alloc(1024 * 1024);
+      for (let i = 0; i < block.length; i++) block[i] = (i * 131 + 17) & 0xff;
+      for (let written = 0; written < BIG; written += block.length) fs.writeSync(fd, block, 0, Math.min(block.length, BIG - written));
+      fs.closeSync(fd);
+      return { file: opts.outFile, size: fs.statSync(opts.outFile).size, title: `大项目 ${id}`, version: '1.4' };
+    };
+    // 导入：收到的是临时文件路径，而不是 Buffer
+    const importDrama = async (d, c, l, zipPath) => {
+      seen.importArg = zipPath;
+      assert.equal(typeof zipPath, 'string');
+      assert.ok(fs.existsSync(zipPath));
+      seen.importSha = await s3.sha256File(zipPath);
+      return { drama_id: 4242, title: '大项目 恢复' };
+    };
+    const svc = createBackupService({ db: seeded.db, config: { storage: { local_path: storage } }, log, exportDrama, importDrama, clientOptions: { sleep: noSleep } });
+    svc.putSettings({ endpoint: srv.url, bucket: 'tk-test', prefix: 'talekiln', access_key: srv.accessKey, secret_key: srv.secretKey, auto: 'off', keep: 10 });
+    const dramaId = seeded.db.prepare('SELECT drama_id FROM episodes WHERE id = ?').get(seeded.episodeId).drama_id;
+    assert.equal(svc.tempDir, path.join(storage, 'tmp', 'backup'));
+
+    const heapBefore = process.memoryUsage().heapUsed;
+    const { run } = await svc.backupDrama(dramaId);
+    assert.equal(run.status, 'done');
+    assert.equal(run.size, BIG);
+    assert.ok(seen.exportOut.startsWith(svc.tempDir), seen.exportOut);
+    assert.equal(fs.existsSync(seen.exportOut), false); // 用完即删
+    const obj = srv.objects.get(`tk-test/${run.key}`);
+    assert.equal(obj.body.length, BIG);
+    assert.equal(s3.sha256Hex(obj.body), run.sha256);
+    const put = srv.requests.find((q) => q.method === 'PUT' && q.path.endsWith(path.posix.basename(run.key)));
+    assert.equal(put.headers['x-amz-content-sha256'], run.sha256); // 文件 sha256 作为签名载荷，假 S3 已核对
+    const manifest = JSON.parse(srv.objects.get(`tk-test/${run.key.replace(/\.zip$/, '.json')}`).body.toString());
+    assert.deepEqual([manifest.size, manifest.sha256, manifest.export_version, manifest.title], [BIG, run.sha256, '1.4', `大项目 ${dramaId}`]);
+    // 本进程没有为整包多分配一份内存（假 S3 自己持有一份 65 MB，所以阈值放宽到 1.5 倍包大小）
+    assert.ok(process.memoryUsage().heapUsed - heapBefore < BIG * 1.5, 'heap grew by more than 1.5x the payload');
+
+    const r = await svc.restore(run.key);
+    assert.deepEqual([r.drama_id, r.title, r.size, r.sha256], [4242, '大项目 恢复', BIG, run.sha256]);
+    assert.equal(seen.importSha, run.sha256); // 往返 sha256 一致
+    assert.ok(seen.importArg.startsWith(svc.tempDir));
+    assert.equal(fs.existsSync(seen.importArg), false);
+    assert.deepEqual(fs.readdirSync(svc.tempDir), []); // 临时目录干净
+
+    // 下载内容被改动 -> 校验失败，临时文件也删掉，导入不会被调用
+    obj.body = Buffer.concat([obj.body.subarray(0, 1024), Buffer.from('x'), obj.body.subarray(1025)]);
+    seen.importArg = null;
+    await assert.rejects(svc.restore(run.key), (e) => e.code === 'BACKUP_CHECKSUM');
+    assert.equal(seen.importArg, null);
+    assert.deepEqual(fs.readdirSync(svc.tempDir), []);
+    srv.objects.clear();
+  });
+
+  it('legacy exporters that only return a Buffer still work, and leftover temp ZIPs are cleaned at startup', async () => {
+    const seeded = await seededDb({ withTimeline: false });
+    const storage = path.join(seeded.dir, 'storage');
+    secrets.setSecretStore(memSecretStore());
+    const tmp = path.join(storage, 'tmp', 'backup');
+    fs.mkdirSync(tmp, { recursive: true });
+    fs.writeFileSync(path.join(tmp, 'backup-1-stale.zip'), 'stale');
+    fs.writeFileSync(path.join(tmp, 'keep.txt'), 'not a zip');
+    const exportDrama = (d, c, l, id) => ({ buffer: Buffer.from('PK-legacy-' + id), title: '旧式导出' });
+    const svc = createBackupService({ db: seeded.db, config: { storage: { local_path: storage } }, log, exportDrama, clientOptions: { sleep: noSleep } });
+    assert.deepEqual(fs.readdirSync(tmp), ['keep.txt']);
+    svc.putSettings({ endpoint: srv.url, bucket: 'tk-test', prefix: 'talekiln', access_key: srv.accessKey, secret_key: srv.secretKey, auto: 'off', keep: 10 });
+    const dramaId = seeded.db.prepare('SELECT drama_id FROM episodes WHERE id = ?').get(seeded.episodeId).drama_id;
+    const { run } = await svc.backupDrama(dramaId);
+    assert.equal(run.status, 'done');
+    assert.equal(srv.objects.get(`tk-test/${run.key}`).body.toString(), 'PK-legacy-' + dramaId);
+    assert.equal(run.sha256, s3.sha256Hex(Buffer.from('PK-legacy-' + dramaId)));
+    const manifest = JSON.parse(srv.objects.get(`tk-test/${run.key.replace(/\.zip$/, '.json')}`).body.toString());
+    assert.equal(manifest.export_version, null); // 不是 ZIP，读不到版本也不影响备份
+    assert.deepEqual(fs.readdirSync(tmp), ['keep.txt']);
+    srv.objects.clear();
   });
 
   it('prune keeps the newest `keep` snapshots per drama (zip and manifest) and runs after each backup', async () => {

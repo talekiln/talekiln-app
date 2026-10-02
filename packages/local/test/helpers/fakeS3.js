@@ -2,7 +2,7 @@
 /**
  * 测试用的进程内假 S3（node:http）：path-style，一个桶。
  *  - 用配置的 Secret Key 在服务端重算 SigV4 签名，不一致返回 403 SignatureDoesNotMatch；
- *    载荷哈希（x-amz-content-sha256）也会对照实际请求体校验（UNSIGNED-PAYLOAD 除外）。
+ *    载荷哈希（x-amz-content-sha256）也会对照实际请求体校验（UNSIGNED-PAYLOAD 除外）——文件流式上传签的是文件 sha256，同样在这里被重算核对。
  *    这里的规范化 / 编码是独立实现的，不从 src/backup/s3.js 引用，所以客户端与服务端互为对照。
  *  - 实现 HeadBucket / CreateBucket / PutObject / GetObject / HeadObject / DeleteObject / ListObjectsV2（含 prefix、max-keys、continuation-token）。
  *  - failNext(status, n)：接下来 n 个请求直接返回该状态（测重试）；requests 记录每个请求；objects 可直接改（测校验失败）。
@@ -32,7 +32,8 @@ function verify(req, rawPath, query, body, { accessKey, secretKey, region }) {
   if (!amzDate || !amzDate.startsWith(dateStamp)) return { code: 'AccessDenied', message: 'x-amz-date missing or does not match credential scope' };
   const payloadHash = req.headers['x-amz-content-sha256'];
   if (!payloadHash) return { code: 'AccessDenied', message: 'x-amz-content-sha256 missing' };
-  if (payloadHash !== 'UNSIGNED-PAYLOAD' && payloadHash !== sha256(body)) return { code: 'XAmzContentSHA256Mismatch', message: 'payload hash mismatch' };
+  // 真实 S3 对载荷哈希不符返回 400（不是 403）
+  if (payloadHash !== 'UNSIGNED-PAYLOAD' && payloadHash !== sha256(body)) return { status: 400, code: 'XAmzContentSHA256Mismatch', message: 'payload hash mismatch' };
   const names = signedHeaders.split(';');
   const canonHeaders = names.map((n) => `${n}:${String(req.headers[n] === undefined && n === 'host' ? req.headers.host : req.headers[n] || '').trim().replace(/\s+/g, ' ')}\n`).join('');
   const canonPath = rawPath.split('/').map((seg) => enc(decodeURIComponent(seg))).join('/') || '/';
@@ -69,7 +70,7 @@ async function startFakeS3({ accessKey = 'ci', secretKey = 'ci-throwaway-minio',
         return errorXml(res, status, status === 503 ? 'SlowDown' : 'InternalError', 'injected failure');
       }
       const bad = verify(req, rawPath, u.searchParams, body, cfg);
-      if (bad) return errorXml(res, 403, bad.code, bad.message, bad.region ? `<Region>${bad.region}</Region>` : '');
+      if (bad) return errorXml(res, bad.status || 403, bad.code, bad.message, bad.region ? `<Region>${bad.region}</Region>` : '');
       const segs = rawPath.replace(/^\/+/, '').split('/');
       const b = decodeURIComponent(segs[0] || '');
       const key = segs.slice(1).map((s) => decodeURIComponent(s)).join('/');
@@ -87,6 +88,9 @@ async function startFakeS3({ accessKey = 'ci', secretKey = 'ci-throwaway-minio',
       }
       const full = `${b}/${key}`;
       if (req.method === 'PUT') {
+        // 流式 / 文件上传必须声明 content-length，且与实际收到的字节数一致（真实 S3 对不上会 IncompleteBody）
+        const declared = req.headers['content-length'];
+        if (declared !== undefined && Number(declared) !== body.length) return errorXml(res, 400, 'IncompleteBody', `content-length ${declared} but got ${body.length}`);
         const etag = crypto.createHash('md5').update(body).digest('hex');
         objects.set(full, { body, contentType: req.headers['content-type'] || 'binary/octet-stream', lastModified: new Date().toUTCString(), etag });
         res.writeHead(200, { etag: `"${etag}"` });

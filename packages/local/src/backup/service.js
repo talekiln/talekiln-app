@@ -13,7 +13,9 @@
  * 明文只在内存里，落盘的是 Electron safeStorage 的密文。GET /settings 只返回 has_secret。
  */
 const crypto = require('crypto');
-const { createS3Client, S3Error, validateEndpoint, BUCKET_RE, DEFAULT_REGION } = require('./s3');
+const fs = require('fs');
+const path = require('path');
+const { createS3Client, S3Error, validateEndpoint, sha256File, BUCKET_RE, DEFAULT_REGION } = require('./s3');
 const { getGlobalSetting, setGlobalSetting } = require('../services/settingsService');
 const secrets = require('../secrets');
 
@@ -39,7 +41,6 @@ class BackupError extends Error {
   }
 }
 
-const sha256Hex = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 const stampOf = (date) => date.toISOString().replace(/:/g, '-');
 /** 时间戳 -> ISO；不匹配返回 null。 */
 function isoOfStamp(stamp) {
@@ -123,20 +124,46 @@ function normalizeSettings(patch, current = DEFAULTS) {
  * @param {import('better-sqlite3').Database} o.db
  * @param {object} o.config            应用配置（storage.local_path 给导出 / 导入服务用）
  * @param {object} [o.log]
- * @param {Function} [o.exportDrama]   (db, cfg, log, dramaId) => { buffer, title }
- * @param {Function} [o.importDrama]   (db, cfg, log, zipBuffer) => { drama_id, title }
+ * @param {Function} [o.exportDrama]   (db, cfg, log, dramaId, { outFile }) => { file, size, title, version }（也接受旧式 { buffer, title }）
+ * @param {Function} [o.importDrama]   (db, cfg, log, zipPath) => { drama_id, title }（收到的是临时 ZIP 文件路径）
+ * @param {string}   [o.tempDir]       临时文件目录，默认 <storage.local_path>/tmp/backup
  * @param {Function} [o.fetchImpl]     注入给 S3 客户端
  * @param {Function} [o.now]           () => Date
  * @param {string} [o.appVersion]
  * @param {object} [o.clientOptions]   透传给 createS3Client（测试调小超时 / 退避）
  */
-function createBackupService({ db, config, log = console, exportDrama, importDrama, fetchImpl, now = () => new Date(), appVersion = null, clientOptions = {} } = {}) {
+function createBackupService({ db, config, log = console, exportDrama, importDrama, fetchImpl, now = () => new Date(), appVersion = null, clientOptions = {}, tempDir } = {}) {
   if (!db) throw new Error('db is required');
   const doExport = exportDrama || require('../services/dramaExportService').exportDrama;
   const doImport = importDrama || require('../services/dramaImportService').importDrama;
   const cfg = config || {};
   const info = (m, extra) => { try { log && log.info && log.info(m, extra); } catch (_) {} };
   const warn = (m, extra) => { try { (log && (log.warn || log.warnw || log.info) || (() => {}))(m, extra); } catch (_) {} };
+
+  // ---------- 临时文件 ----------
+
+  const storageRoot = (() => {
+    const raw = (cfg.storage && cfg.storage.local_path) || './data/storage';
+    return path.isAbsolute(raw) ? raw : path.join(process.cwd(), raw);
+  })();
+  const tmpDir = tempDir || path.join(storageRoot, 'tmp', 'backup');
+  /** 新的临时文件路径（目录不存在就建）。 */
+  function tempFile(tag) {
+    fs.mkdirSync(tmpDir, { recursive: true });
+    return path.join(tmpDir, `${tag}-${crypto.randomBytes(6).toString('hex')}.zip`);
+  }
+  const removeQuietly = (file) => { if (file) { try { fs.rmSync(file, { force: true }); } catch (_) {} } };
+  /** 启动时清掉上次异常退出留下的临时 ZIP。 */
+  function cleanTempDir() {
+    try {
+      if (!fs.existsSync(tmpDir)) return 0;
+      let n = 0;
+      for (const f of fs.readdirSync(tmpDir)) if (f.endsWith('.zip')) { removeQuietly(path.join(tmpDir, f)); n++; }
+      if (n) info('backup temp files cleaned', { dir: tmpDir, removed: n });
+      return n;
+    } catch (_) { return 0; }
+  }
+  cleanTempDir();
 
   let chain = Promise.resolve();
   const exclusive = (fn) => { const p = chain.then(fn, fn); chain = p.catch(() => {}); return p; };
@@ -292,19 +319,26 @@ function createBackupService({ db, config, log = console, exportDrama, importDra
       pending.delete(d.id);
       const runId = insertRun({ drama_id: d.id, kind: 'backup', trigger, title: d.title });
       current = { ...runRow(runId) };
+      let tmp = null;
       try {
-        const { buffer, title } = doExport(db, cfg, log, d.id);
         const stamp = stampOf(now());
+        tmp = tempFile(`backup-${d.id}-${stamp}`);
+        // 导出服务直接把 ZIP 写进临时文件；旧式 / 注入的导出若只给 Buffer，就由这里落盘后立刻放掉引用
+        const exported = await doExport(db, cfg, log, d.id, { outFile: tmp });
+        const title = exported.title;
+        if (exported.buffer) { fs.writeFileSync(tmp, exported.buffer); exported.buffer = null; }
+        else if (exported.file && exported.file !== tmp) tmp = exported.file;
+        const size = fs.statSync(tmp).size;
         const base = `${s.prefix}/dramas/${d.id}/${stamp}`;
-        const sha = sha256Hex(buffer);
+        const sha = await sha256File(tmp);
         const manifest = {
-          drama_id: d.id, title, created_at: isoOfStamp(stamp), size: buffer.length, sha256: sha,
-          export_version: exportVersionOf(buffer), app_version: appVersion,
+          drama_id: d.id, title, created_at: isoOfStamp(stamp), size, sha256: sha,
+          export_version: exported.version || exportVersionOf(tmp), app_version: appVersion,
         };
-        await c.putObject(`${base}.zip`, buffer, { contentType: 'application/zip', sha256: sha });
+        await c.putFile(`${base}.zip`, tmp, { contentType: 'application/zip', sha256: sha });
         await c.putObject(`${base}.json`, Buffer.from(JSON.stringify(manifest), 'utf8'), { contentType: 'application/json' });
         online();
-        const row = finishRun(runId, { status: 'done', key: `${base}.zip`, size: buffer.length, sha256: sha, title });
+        const row = finishRun(runId, { status: 'done', key: `${base}.zip`, size, sha256: sha, title });
         lastError = null;
         info('drama backed up', { drama_id: d.id, key: row.key, size: row.size, trigger });
         if (s.keep > 0) {
@@ -318,16 +352,17 @@ function createBackupService({ db, config, log = console, exportDrama, importDra
         warn('drama backup failed', { drama_id: d.id, code: err.code, error: err.message });
         throw err;
       } finally {
+        removeQuietly(tmp);
         current = null;
       }
     });
   }
 
-  /** 从 ZIP 的 project.json 读 version（读不到返回 null，不影响备份）。 */
-  function exportVersionOf(buffer) {
+  /** 从 ZIP（文件路径或 Buffer）的 project.json 读 version（读不到返回 null，不影响备份）。只在导出服务没直接给 version 时用。 */
+  function exportVersionOf(zipFileOrBuffer) {
     try {
       const AdmZip = require('adm-zip');
-      const entry = new AdmZip(buffer).getEntry('project.json');
+      const entry = new AdmZip(zipFileOrBuffer).getEntry('project.json');
       return entry ? (JSON.parse(entry.getData().toString('utf8')).version || null) : null;
     } catch (_) { return null; }
   }
@@ -406,7 +441,7 @@ function createBackupService({ db, config, log = console, exportDrama, importDra
     return k;
   }
 
-  /** 恢复为新项目：下载 -> 对清单 sha256 校验 -> importDrama（标题重名自动加「导入N」，不会覆盖任何项目）。 */
+  /** 恢复为新项目：流式下载到临时文件 -> 对清单 sha256 校验 -> importDrama(临时文件路径)（标题重名自动加「导入N」，不会覆盖任何项目）。 */
   async function restore(key, { mode = 'new' } = {}) {
     if (mode !== 'new') throw new BackupError('BAD_REQUEST', '目前只支持恢复为新项目（mode: new），不会覆盖现有项目', 400);
     const s = rawSettings();
@@ -415,8 +450,10 @@ function createBackupService({ db, config, log = console, exportDrama, importDra
     return exclusive(async () => {
       const runId = insertRun({ drama_id: k.drama_id, kind: 'restore', trigger: 'manual' });
       current = { ...runRow(runId), key };
+      let tmp = null;
       try {
-        const { body } = await c.getObject(key); // 先取 ZIP：不存在时报 NOT_FOUND，而不是「缺少清单」
+        tmp = tempFile(`restore-${k.drama_id}-${k.stamp}`);
+        const dl = await c.getObjectToFile(key, tmp); // 先取 ZIP：不存在时报 NOT_FOUND，而不是「缺少清单」
         let manifest = null;
         try {
           manifest = JSON.parse((await c.getObject(key.replace(/\.zip$/, '.json'))).body.toString('utf8'));
@@ -428,18 +465,19 @@ function createBackupService({ db, config, log = console, exportDrama, importDra
         const expected = manifest && typeof manifest.sha256 === 'string' && /^[0-9a-f]{64}$/.test(manifest.sha256)
           ? manifest.sha256 : (localByKey().get(key) || {}).sha256 || null;
         if (!expected) throw new BackupError('BACKUP_CHECKSUM', '快照缺少清单（.json），本地也没有它的记录，无法校验完整性，已拒绝恢复', 409);
-        const actual = sha256Hex(body);
+        const actual = dl.sha256;
         if (actual !== expected) throw new BackupError('BACKUP_CHECKSUM', `快照校验失败：清单 sha256 ${expected.slice(0, 12)}… 与下载内容 ${actual.slice(0, 12)}… 不一致`, 409);
         let r;
-        try { r = doImport(db, cfg, log, body); } catch (e) { throw new BackupError('BACKUP_FAILED', `恢复失败：${(e && e.message) || e}`, 500); }
-        const row = finishRun(runId, { status: 'done', key, size: body.length, sha256: actual, title: r.title });
+        try { r = await doImport(db, cfg, log, tmp); } catch (e) { throw new BackupError('BACKUP_FAILED', `恢复失败：${(e && e.message) || e}`, 500); }
+        const row = finishRun(runId, { status: 'done', key, size: dl.size, sha256: actual, title: r.title });
         info('drama restored from backup', { key, new_drama_id: r.drama_id, title: r.title });
-        return { drama_id: r.drama_id, title: r.title, key, size: body.length, sha256: actual, source_drama_id: k.drama_id, run: row };
+        return { drama_id: r.drama_id, title: r.title, key, size: dl.size, sha256: actual, source_drama_id: k.drama_id, run: row };
       } catch (e) {
         const err = mapErr(e);
         finishRun(runId, { status: 'failed', error: err.message, key });
         throw err;
       } finally {
+        removeQuietly(tmp);
         current = null;
       }
     });
@@ -562,7 +600,7 @@ function createBackupService({ db, config, log = console, exportDrama, importDra
   return {
     getSettings, putSettings, testConnection, isConfigured,
     backupDrama, listSnapshots, restore, deleteSnapshot, prune, status, listRuns, tick, onExportFinished,
-    SECRET_REF, SETTINGS_KEY, DEFAULTS, AUTO_MODES,
+    SECRET_REF, SETTINGS_KEY, DEFAULTS, AUTO_MODES, tempDir: tmpDir, cleanTempDir,
   };
 }
 
