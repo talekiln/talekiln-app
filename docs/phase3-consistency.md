@@ -104,3 +104,7 @@ pnpm --filter ./apps/renderer test             # consistencyView.test.js
 - 评分与挑选都放在 lycore（Rust，无模型依赖），本机服务只做编排与存储；社区版没有内核时报告 `available=false`，界面不显示芯片。
 - 内核扩展保持最小：只给视频节点加可选参数 `reference_hashes`，默认不写。
 - 内核错误码（如 `-32020` 缺 ffmpeg）原样作为字符串错误码带回（错误码表已有文案），不另起新码。
+
+## 10. 人脸级（后续）
+
+第 7 节“同构图不同脸抓不到”的缺口已由 **P3-C 人脸级一致性** 补上：角色参考图另算一道人脸部分（本地 CPU 小模型 YuNet 检测 + SFace 特征，onnxruntime-node 推理，不联网），参考图与目标都有脸时 总分 = 0.6·人脸分 + 0.4·本文的原分，目标里没脸则至少给“检查”；模型缺失时只按本文的算法评分，报告 `face_available=false`。规则、配置、模型来源与许可、实测数字与未验证项见 `docs/phase3-face.md` 与 `docs/face-models.md`。
