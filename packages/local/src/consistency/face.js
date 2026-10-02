@@ -5,13 +5,14 @@
  *   检测  YuNet（face_detection_yunet_2023mar.onnx，MIT）：输入固定 640×640、BGR 0–255（OpenCV blobFromImage 默认），
  *         图片等比缩到长边 640 后右下补黑；三个步长（8/16/32）的 anchor-free 输出按 OpenCV objdetect/face_detect.cpp 解码：
  *         score = sqrt(cls·obj)，cx = (c + bbox[0])·s，w = exp(bbox[2])·s，关键点 (kps + 格点)·s，再做贪心 NMS（IoU 0.3）。
- *   识别  SFace（face_recognition_sface_2021dec_int8.onnx，Apache-2.0；也认 fp32 文件）：按 5 个关键点
+ *   识别  SFace（face_recognition_sface_2021dec_int8.onnx，Apache-2.0；目录里有 fp32 文件 face_recognition_sface_2021dec.onnx 时优先用它）：按 5 个关键点
  *         （右眼、左眼、鼻尖、右嘴角、左嘴角）做相似变换对齐到 112×112 的 ArcFace 标准点（OpenCV FaceRecognizerSF::alignCrop），
  *         双线性采样、边界补 0；blobFromImage(scale 1, mean 0, swapRB) 即 RGB 0–255 直接喂；输出 128 维，比余弦相似度。
  *         OpenCV 给的同人阈值：余弦 0.363。
  *   运行  onnxruntime-node 惰性 require：模块或模型文件缺失时 available() 为 false、status() 说明原因，服务照常启动
  *         （社区版可以不带模型）。会话只建一次并缓存；所有推理经一个串行队列（CPU 单会话，几个任务同时写回也不互相挤）。
- *   模型目录  env TALEKILN_MODELS_DIR > 配置 consistency.face.models_dir > 打包 <resources>/models/face > 开发 apps/desktop/resources/models/face。
+ *   模型目录  env TALEKILN_MODELS_DIR > 配置 consistency.face.models_dir > 桌面端传入的随包目录 bundledDir（<resources>/models/face）
+ *         > process.resourcesPath/models/face > 开发 apps/desktop/resources/models/face。前两个是显式指定、不检查存在；后面取第一个存在的。
  *   输入  图片用 sharp 解码（含 EXIF 旋转，工作分辨率长边 ≤ 1280）；视频用 ffmpeg 抽帧（utils/ffmpegPath 定位），
  *         与 lycore 一样在 (i + 0.5)·时长/n 处均匀取 sample_frames 帧。
  *
@@ -29,9 +30,10 @@ const EMB_DIM = 128;
 const WORK_MAX = 1280; // 工作分辨率上限（长边），检测与对齐都从这张图出发
 const MAX_FACES = 5; // 每帧最多给前几大的脸算特征
 const DEFAULTS = Object.freeze({ score_threshold: 0.7, nms_iou: 0.3, top_k: 5000, threads: Math.max(1, Math.min(4, os.cpus().length)) });
+/** 识别模型按列表顺序取第一个存在的：fp32（手动放入，约 37 MB）优先于随包的 int8（约 10 MB）；缺失时报 int8 的文件名。 */
 const MODEL_FILES = Object.freeze({
   detector: 'face_detection_yunet_2023mar.onnx',
-  recognizer: ['face_recognition_sface_2021dec_int8.onnx', 'face_recognition_sface_2021dec.onnx'],
+  recognizer: ['face_recognition_sface_2021dec.onnx', 'face_recognition_sface_2021dec_int8.onnx'],
 });
 /** OpenCV FaceRecognizerSF 的 112×112 标准点：右眼、左眼、鼻尖、右嘴角、左嘴角。 */
 const ARCFACE_DST = Object.freeze([[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366], [41.5493, 92.3655], [70.7299, 92.2041]]);
@@ -183,25 +185,29 @@ function faceScore(sim, { min_similarity = 0.363, min_score = 60 } = {}) {
 /** 与 lycore 相同的均匀取帧时刻：(i + 0.5)·时长/n。 */
 const sampleTimes = (duration, n) => Array.from({ length: Math.max(1, n) }, (_, i) => ((i + 0.5) * duration) / Math.max(1, n));
 
-/** 模型目录：显式（env / 配置）优先且不检查存在；隐式候选取第一个存在的，都不存在就报开发目录。 */
-function resolveModelsDir({ env = process.env, config = null, resourcesPath = process.resourcesPath, exists = fs.existsSync } = {}) {
+/**
+ * 模型目录：显式（env / 配置）优先且不检查存在；隐式候选（桌面端传入的随包目录、process.resourcesPath、开发目录）取第一个存在的，
+ * 都不存在就报开发目录（status() 里能看到找过哪）。
+ */
+function resolveModelsDir({ env = process.env, config = null, bundledDir = null, resourcesPath = process.resourcesPath, exists = fs.existsSync } = {}) {
   const c = (config && config.consistency && config.consistency.face) || {};
-  if (env.TALEKILN_MODELS_DIR) return { dir: path.resolve(env.TALEKILN_MODELS_DIR), source: 'env' };
-  if (typeof c.models_dir === 'string' && c.models_dir.trim()) return { dir: path.resolve(c.models_dir), source: 'config' };
+  if (typeof env.TALEKILN_MODELS_DIR === 'string' && env.TALEKILN_MODELS_DIR.trim()) return { dir: path.resolve(env.TALEKILN_MODELS_DIR.trim()), source: 'env' };
+  if (typeof c.models_dir === 'string' && c.models_dir.trim()) return { dir: path.resolve(c.models_dir.trim()), source: 'config' };
   const dev = path.join(__dirname, '..', '..', '..', '..', 'apps', 'desktop', 'resources', 'models', 'face');
   const implicit = [];
-  if (resourcesPath) implicit.push({ dir: path.join(resourcesPath, 'models', 'face'), source: 'packaged' });
+  if (typeof bundledDir === 'string' && bundledDir.trim()) implicit.push({ dir: path.resolve(bundledDir), source: 'bundled' });
+  if (typeof resourcesPath === 'string' && resourcesPath) implicit.push({ dir: path.join(resourcesPath, 'models', 'face'), source: 'packaged' });
   implicit.push({ dir: dev, source: 'dev' });
   return implicit.find((x) => exists(x.dir)) || implicit[implicit.length - 1];
 }
 
-/** 目录里的模型文件：{ detector, recognizer, variant } 或缺哪个就报哪个。 */
+/** 目录里的模型文件：{ detector, recognizer, variant: 'int8'|'fp32'|null, missing: [缺的文件名] }。 */
 function findModelFiles(dir) {
   const det = path.join(dir, MODEL_FILES.detector);
   const rec = MODEL_FILES.recognizer.map((f) => path.join(dir, f)).find((f) => fs.existsSync(f));
   const missing = [];
   if (!fs.existsSync(det)) missing.push(MODEL_FILES.detector);
-  if (!rec) missing.push(MODEL_FILES.recognizer[0]);
+  if (!rec) missing.push(MODEL_FILES.recognizer[MODEL_FILES.recognizer.length - 1]);
   return { detector: det, recognizer: rec || null, variant: rec && /int8/.test(path.basename(rec)) ? 'int8' : rec ? 'fp32' : null, missing };
 }
 
@@ -216,17 +222,19 @@ const run = (bin, args, { maxBuffer = 64 * 1024 * 1024 } = {}) => new Promise((r
 /**
  * @param {object} o
  * @param {string} [o.modelsDir]       模型目录（缺省按 resolveModelsDir）
+ * @param {string} [o.bundledDir]      桌面端随包的模型目录（<resources>/models/face），只在 env / 配置都没指定时作候选
  * @param {object} [o.config]          完整配置（读 consistency.face）
  * @param {object} [o.ort]             注入的 onnxruntime 模块（测试用）；缺省惰性 require('onnxruntime-node')
+ * @param {Function} [o.loadOrt]       自定义加载 onnxruntime 的函数（测试模块缺失的分支用）
  * @param {object} [o.log]
  */
-function createFaceEngine({ modelsDir = null, config = null, ort: ortModule = null, log = console, ffmpegPath = null, ffprobePath = null } = {}) {
+function createFaceEngine({ modelsDir = null, bundledDir = null, config = null, ort: ortModule = null, loadOrt = null, log = console, ffmpegPath = null, ffprobePath = null } = {}) {
   const c = (config && config.consistency && config.consistency.face) || {};
   const opts = {
     score_threshold: Number.isFinite(Number(c.score_threshold)) && c.score_threshold > 0 && c.score_threshold < 1 ? Number(c.score_threshold) : DEFAULTS.score_threshold,
     threads: Number.isInteger(c.threads) && c.threads >= 1 && c.threads <= 64 ? c.threads : DEFAULTS.threads,
   };
-  const resolved = modelsDir ? { dir: path.resolve(modelsDir), source: 'param' } : resolveModelsDir({ config });
+  const resolved = modelsDir ? { dir: path.resolve(modelsDir), source: 'param' } : resolveModelsDir({ config, bundledDir });
   const state = { loaded: null, loading: null, reason: null, error: null, variant: null, files: null };
   let ort = ortModule;
   let sharp = null;
@@ -249,8 +257,11 @@ function createFaceEngine({ modelsDir = null, config = null, ort: ortModule = nu
     state.loading = (async () => {
       try {
         if (!ort) {
-          try { ort = require('onnxruntime-node'); } catch (e) { state.reason = 'module_missing'; state.error = e && e.message; return false; }
+          try { ort = loadOrt ? loadOrt() : require('onnxruntime-node'); } catch (e) { state.reason = 'module_missing'; state.error = e && e.message; return false; }
         }
+        if (!ort || typeof ort.InferenceSession !== 'object' && typeof ort.InferenceSession !== 'function') { state.reason = 'module_missing'; state.error = 'onnxruntime-node 没有导出 InferenceSession'; return false; }
+        // SFace 的 ONNX 把初始化张量挂在图输入上，ORT 加载时会打一屏警告：全局与会话都只留错误
+        try { if (ort.env) ort.env.logLevel = 'error'; } catch (_) { /* ignore */ }
         try { sharp = require('sharp'); } catch (e) { state.reason = 'module_missing'; state.error = `sharp: ${e && e.message}`; return false; }
         const files = findModelFiles(resolved.dir);
         state.files = files;

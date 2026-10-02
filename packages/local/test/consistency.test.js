@@ -17,6 +17,8 @@ const { seededDb, log } = require('./helpers/kernelDb');
 const referenceLocks = require('../src/services/referenceLockService');
 const kernelInputs = require('../src/kernel/inputs');
 
+/** 人脸配置的默认值（settingsFrom 的 face 段）。 */
+const DEF_FACE = { enabled: true, min_similarity: 0.363, models_dir: null };
 const FAKE_CONFIGS = [{ provider: 'dashscope', api_key: 'fake-key-not-real', is_active: true, service_type: 'text' }];
 
 /** 假的队列服务商：image 同步完成、video 轮询一次成功；download 写入内容寻址目录（结果就在本机存储目录里）。 */
@@ -62,7 +64,7 @@ function fakeScorer({ scores = {}, pick = {}, available = true } = {}) {
   return s;
 }
 
-async function harness({ scorer = fakeScorer(), config = null } = {}) {
+async function harness({ scorer = fakeScorer(), config = null, face = null } = {}) {
   const { db, episodeId: ep, dir } = await seededDb();
   const storageDir = path.join(dir, 'storage');
   require('../src/kernel/legacy').importLegacy(db, ep);
@@ -72,7 +74,7 @@ async function harness({ scorer = fakeScorer(), config = null } = {}) {
   const spend = createSpendService(db);
   let gen = null;
   const worker = createWorker({ queue, store: taskStore, config: {}, onTaskFinished: (t) => { spend.recordFinished(t); if (gen) gen.onTaskFinished(t); }, onError() {} });
-  const consistency = createConsistencyService({ db, storageRoot: storageDir, config, scorer, generation: () => gen, log });
+  const consistency = createConsistencyService({ db, storageRoot: storageDir, config, scorer, face, generation: () => gen, log });
   gen = createGenerationService({
     db, store: taskStore, worker: { wake() {} }, spend, storageRoot: storageDir, getCore: null, listConfigs: () => FAKE_CONFIGS, catalogModels: () => [], log,
     onAdopted: (info) => consistency.onAdopted(info),
@@ -107,10 +109,10 @@ async function harness({ scorer = fakeScorer(), config = null } = {}) {
 
 describe('纯函数', () => {
   it('配置读取：非法值回退默认；建议阈值', () => {
-    assert.deepEqual(settingsFrom(null), { enabled: true, min_score: 60, sample_frames: 5 });
-    assert.deepEqual(settingsFrom({ consistency: { enabled: false, min_score: 75, sample_frames: 3 } }), { enabled: false, min_score: 75, sample_frames: 3 });
-    assert.deepEqual(settingsFrom({ consistency: { min_score: 'abc', sample_frames: 99 } }), { enabled: true, min_score: 60, sample_frames: 5 });
-    assert.deepEqual(settingsFrom({ consistency: { min_score: 101, sample_frames: 0 } }), { enabled: true, min_score: 60, sample_frames: 5 });
+    assert.deepEqual(settingsFrom(null), { enabled: true, min_score: 60, sample_frames: 5, face: DEF_FACE });
+    assert.deepEqual(settingsFrom({ consistency: { enabled: false, min_score: 75, sample_frames: 3 } }), { enabled: false, min_score: 75, sample_frames: 3, face: DEF_FACE });
+    assert.deepEqual(settingsFrom({ consistency: { min_score: 'abc', sample_frames: 99 } }), { enabled: true, min_score: 60, sample_frames: 5, face: DEF_FACE });
+    assert.deepEqual(settingsFrom({ consistency: { min_score: 101, sample_frames: 0 } }), { enabled: true, min_score: 60, sample_frames: 5, face: DEF_FACE });
     assert.equal(suggestionFor(60, 60), 'ok');
     assert.equal(suggestionFor(59.9, 60), 'check');
     assert.equal(suggestionFor(40, 60), 'check');
@@ -447,6 +449,150 @@ describe('REST', () => {
       assert.equal(r.body.data.picked.local_path, 'characters/main.png');
       assert.equal(referenceLocks.getLock(h.db, 'character', h.cid).local_path, 'characters/main.png');
       assert.equal((await call('POST', '/characters/999999/references/auto-pick', {})).status, 404);
+    } finally {
+      server.close();
+    }
+  });
+});
+
+// ---------------------------------------------------------------- 人脸部分（P3-C 人脸级一致性，假引擎；真模型见 face.test.js）
+
+/** 假人脸引擎：按参考图文件名给 compare 结果（缺省“同人 0.751”）；Error 则抛出；记录调用。 */
+function fakeFace({ available = true, results = {} } = {}) {
+  const calls = [];
+  return {
+    calls, results,
+    available: async () => available,
+    status: () => ({ available, reason: available ? null : 'models_missing' }),
+    async compare({ reference, target, sample_frames }) {
+      calls.push({ reference, target, sample_frames });
+      const r = results[path.basename(reference)];
+      if (r instanceof Error) throw r;
+      return r || { ref_faces: 1, target_faces: 1, matched_frames: 1, similarity: 0.751, frames: [{ t_ms: 0, faces: 1, similarity: 0.751 }], kind: 'image', took_ms: 12 };
+    },
+  };
+}
+
+describe('人脸部分', () => {
+  const NO_TARGET_FACE = { ref_faces: 1, target_faces: 0, matched_frames: 0, similarity: null, frames: [{ t_ms: 0, faces: 0, similarity: null }], kind: 'image', took_ms: 5 };
+  const NO_REF_FACE = { ref_faces: 0, target_faces: 0, matched_frames: 0, similarity: null, frames: [], kind: null, took_ms: 2 };
+  const charRow = (h, nodeId) => h.rows(nodeId).find((r) => r.entity_type === 'character');
+  const sceneRow = (h, nodeId) => h.rows(nodeId).find((r) => r.entity_type === 'scene');
+
+  it('settingsFrom 读 face 段：非法值回退默认，models_dir 去空白', () => {
+    assert.deepEqual(settingsFrom({ consistency: { face: { enabled: false, min_similarity: 0.5, models_dir: ' /m ' } } }).face, { enabled: false, min_similarity: 0.5, models_dir: '/m' });
+    assert.deepEqual(settingsFrom({ consistency: { face: { min_similarity: 1.5, models_dir: 7 } } }).face, DEF_FACE);
+    assert.deepEqual(settingsFrom({ consistency: { face: 'yes' } }).face, DEF_FACE);
+  });
+
+  it('只对角色参考图做人脸；双方有脸 -> 0.6·人脸分 + 0.4·原分，parts.face 存进行里，报告 face_available=true', async () => {
+    const face = fakeFace();
+    const h = await harness({ scorer: fakeScorer({ scores: { 'scene-77.png': 90, 'char-ref.png': 48 } }), face });
+    const s1 = h.lockFirstShot();
+    h.gen.create(h.ep, { shots: [s1], kind: 'image' });
+    await h.drain();
+    const img = kernel.partsOfShot(h.graph(), s1).image;
+    assert.equal(face.calls.length, 1, '场景参考图不做人脸');
+    assert.ok(face.calls[0].reference.endsWith('char-ref.png'));
+    assert.equal(face.calls[0].sample_frames, 5);
+    const scene = sceneRow(h, img);
+    assert.equal(scene.score, 90);
+    assert.equal(JSON.parse(scene.parts).face, undefined);
+    const ch = charRow(h, img);
+    assert.equal(ch.score, 70, 'round(0.6·84.4 + 0.4·48)');
+    assert.equal(ch.suggestion, 'ok');
+    const parts = JSON.parse(ch.parts);
+    assert.equal(parts.phash, 48, '原算法的部分保留');
+    assert.deepEqual(parts.face, { similarity: 0.751, score: 84.4, ref_faces: 1, target_faces: 1, matched_frames: 1, frames: [{ t_ms: 0, faces: 1, similarity: 0.751 }], kind: 'image', took_ms: 12 });
+    const report = await h.consistency.episodeReport(h.ep);
+    assert.equal(report.face_available, true);
+    assert.equal(report.face_reason, null);
+    const row = report.shots[0].image.scores.find((r) => r.entity_type === 'character');
+    assert.equal(row.parts.face.score, 84.4);
+    assert.equal(report.shots[0].suggestion, 'ok');
+  });
+
+  it('目标里没脸 -> 人脸分 0、总分 0.4·原分、至少 check；参考图没脸 -> 原分不变', async () => {
+    const face = fakeFace({ results: { 'char-ref.png': NO_TARGET_FACE } });
+    const h = await harness({ scorer: fakeScorer({ scores: { 'char-ref.png': 100 } }), face });
+    const s1 = h.lockFirstShot();
+    h.gen.create(h.ep, { shots: [s1], kind: 'image' });
+    await h.drain();
+    const img = kernel.partsOfShot(h.graph(), s1).image;
+    let ch = charRow(h, img);
+    assert.equal(ch.score, 40);
+    assert.equal(ch.suggestion, 'check');
+    assert.equal(JSON.parse(ch.parts).face.score, 0);
+    assert.equal(JSON.parse(ch.parts).face.target_faces, 0);
+    let report = await h.consistency.episodeReport(h.ep);
+    assert.equal(report.shots[0].suggestion, 'check');
+    assert.equal(report.shots[0].regenerate && report.shots[0].regenerate.kind, 'both', '按 check 建议给重做估价');
+
+    face.results['char-ref.png'] = NO_REF_FACE;
+    await h.consistency.rescoreShot({ id: h.graph().nodes[s1].legacy_id });
+    ch = charRow(h, img);
+    assert.equal(ch.score, 100);
+    assert.equal(ch.suggestion, 'ok');
+    assert.equal(JSON.parse(ch.parts).face.ref_faces, 0);
+    assert.equal(JSON.parse(ch.parts).face.score, null);
+    report = await h.consistency.episodeReport(h.ep);
+    assert.equal(report.shots[0].suggestion, 'ok');
+  });
+
+  it('人脸引擎出错 -> 这一行按原分存，parts.face 记错误；引擎不可用 -> 不调用、分数不变、报告 face_available=false 并给原因', async () => {
+    const boom = fakeFace({ results: { 'char-ref.png': new Error('boom') } });
+    let h = await harness({ scorer: fakeScorer({ scores: { 'char-ref.png': 48 } }), face: boom });
+    let s1 = h.lockFirstShot();
+    h.gen.create(h.ep, { shots: [s1], kind: 'image' });
+    await h.drain();
+    let ch = charRow(h, kernel.partsOfShot(h.graph(), s1).image);
+    assert.equal(ch.score, 48);
+    assert.equal(ch.suggestion, 'check');
+    assert.deepEqual(JSON.parse(ch.parts).face, { error: 'boom' });
+
+    const off = fakeFace({ available: false });
+    h = await harness({ scorer: fakeScorer({ scores: { 'char-ref.png': 48 } }), face: off });
+    s1 = h.lockFirstShot();
+    h.gen.create(h.ep, { shots: [s1], kind: 'image' });
+    await h.drain();
+    assert.equal(off.calls.length, 0);
+    ch = charRow(h, kernel.partsOfShot(h.graph(), s1).image);
+    assert.equal(ch.score, 48);
+    assert.equal(JSON.parse(ch.parts).face, undefined);
+    const report = await h.consistency.episodeReport(h.ep);
+    assert.equal(report.face_available, false);
+    assert.equal(report.face_reason, 'models_missing');
+  });
+
+  it('配置 consistency.face.enabled=false -> 不建引擎，报告 face_reason=disabled；缺省配置会自建引擎（惰性，不加载模型）', async () => {
+    const { db, episodeId: ep } = await seededDb();
+    const offSvc = createConsistencyService({ db, storageRoot: '/nonexistent', config: { consistency: { face: { enabled: false } } }, scorer: fakeScorer(), log });
+    assert.equal(offSvc.face, null);
+    assert.equal(offSvc.settings.face.enabled, false);
+    const report = await offSvc.episodeReport(ep);
+    assert.equal(report.face_available, false);
+    assert.equal(report.face_reason, 'disabled');
+    const defSvc = createConsistencyService({ db, storageRoot: '/nonexistent', config: null, scorer: fakeScorer(), log });
+    assert.ok(defSvc.face && typeof defSvc.face.compare === 'function');
+    assert.equal(defSvc.face.status().available, null, '还没加载');
+  });
+
+  it('REST：GET /episodes/:id/consistency 带 face_available 与每行的 parts.face', async () => {
+    const h = await harness({ scorer: fakeScorer({ scores: { 'char-ref.png': 48 } }), face: fakeFace() });
+    const s1 = h.lockFirstShot();
+    h.gen.create(h.ep, { shots: [s1], kind: 'image' });
+    await h.drain();
+    const app = express();
+    app.get('/episodes/:id/consistency', consistencyRoutes(h.consistency, log).episodeReport);
+    const server = await new Promise((ok) => { const s = app.listen(0, '127.0.0.1', () => ok(s)); });
+    try {
+      const res = await fetch(`http://127.0.0.1:${server.address().port}/episodes/${h.ep}/consistency`);
+      const body = await res.json();
+      assert.equal(res.status, 200);
+      assert.equal(body.data.face_available, true);
+      const row = body.data.shots[0].image.scores.find((r) => r.entity_type === 'character');
+      assert.equal(row.score, 70);
+      assert.equal(row.parts.face.similarity, 0.751);
     } finally {
       server.close();
     }

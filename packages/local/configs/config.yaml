@@ -78,10 +78,17 @@ director:
 
 # 角色一致性（P3-C）：生成完成后用渲染核心（lycore）给首帧图 / 视频与锁定参考图评分（感知哈希 + 直方图 + 主色调，不依赖模型）。
 # min_score：低于它给“检查”建议，再低 20 分给“重试”建议并附重做估价；sample_frames：视频均匀抽帧数。没有内核时静默不评分。
+# face：人脸级（本地小模型 YuNet + SFace，CPU、不联网）。角色参考图有脸时 总分 = 0.6·人脸分 + 0.4·色彩构图分；目标里没脸人脸分记 0 并至少给“检查”。
+#   min_similarity：余弦相似度的同人线（OpenCV 给的 0.363），人脸分 ≥ min_score 当且仅当 余弦 ≥ 它；models_dir：模型目录（留空按 TALEKILN_MODELS_DIR > 安装包 resources/models/face > 开发目录）。
+#   模型文件缺失时只按原算法评分，报告 face_available=false。见 docs/phase3-face.md。
 consistency:
   enabled: true
   min_score: 60
   sample_frames: 5
+  face:
+    enabled: true
+    min_similarity: 0.363
+    models_dir: ''
 # 云端（账号/许可证/目录/推广跳转）。base_url 留占位表示未配置；也可用环境变量 TALEKILN_CLOUD_URL 覆盖
 cloud:
   base_url: https://cloud.talekiln.example
