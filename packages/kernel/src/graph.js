@@ -64,7 +64,7 @@ function defaultParams(type) {
 /**
  * 各节点类型允许直接改的参数（画布属性面板 / setNodeParam / setShotReferences 的白名单与取值校验）。
  * check(v) 返回错误说明或 null；optional = 允许用 null 清除（参数被删除，cacheKey 与“从未设置”相同）。
- * 生成输入（image.model/reference_hashes、video.model/tail_frame_hash）和 seed、voice 一样是节点自己的参数，所以进 cacheKey。
+ * 生成输入（image.model/reference_hashes、video.model/reference_hashes/tail_frame_hash）和 seed、voice 一样是节点自己的参数，所以进 cacheKey。
  */
 const isStr = (v) => typeof v === 'string';
 const posNum = (v) => typeof v === 'number' && Number.isFinite(v) && v > 0;
@@ -88,6 +88,8 @@ const NODE_PARAM_RULES = {
   video: {
     model: { check: (v) => (isStr(v) && v ? null : 'must be a non-empty string') },
     seed: { check: (v) => (isInt(v) ? null : 'must be an integer') },
+    // 锁定参考图也直接进视频请求（P3-C），所以视频节点自己也记哈希；可选，未设置时 cacheKey 与旧图相同
+    reference_hashes: { optional: true, check: (v) => (Array.isArray(v) && v.every((x) => isStr(x) && x) ? null : 'must be an array of non-empty strings') },
     tail_frame_hash: { optional: true, check: (v) => (isStr(v) && v ? null : 'must be a non-empty string') },
   },
   narration: {

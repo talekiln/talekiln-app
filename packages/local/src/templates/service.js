@@ -252,7 +252,11 @@ function createTemplateService({
         const u = chars[slot].locked_ref;
         if (u && !refs.includes(u)) refs.push(u);
       }
-      if (refs.length) c.add(I.shot.setShotReferences(c.g, shotId, { reference_hashes: refs.slice(0, inputs.MAX_REFS).map(inputs.hashRef) }));
+      if (refs.length) {
+        const hashes = refs.slice(0, inputs.MAX_REFS).map(inputs.hashRef);
+        // 视频节点同样带锁定参考图（P3-C），否则生成前的输入同步会再写一次
+        c.add(I.shot.setShotReferences(c.g, shotId, { reference_hashes: hashes, video_reference_hashes: hashes }));
+      }
       shotIds.push(shotId);
     }
     return shotIds;

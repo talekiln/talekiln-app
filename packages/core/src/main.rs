@@ -1,3 +1,4 @@
+mod consistency;
 mod encoder;
 mod ffmpeg;
 mod licence;

@@ -68,6 +68,14 @@ pub struct Output {
     pub stderr: String,
 }
 
+/// Like `Output` but with stdout kept as raw bytes (rawvideo frames and other binary output).
+pub struct RawOutput {
+    pub status_ok: bool,
+    pub code: Option<i32>,
+    pub stdout: Vec<u8>,
+    pub stderr: String,
+}
+
 fn exe_names(tool: &str) -> Vec<String> {
     if cfg!(windows) {
         vec![format!("{tool}.exe"), format!("{tool}.cmd"), format!("{tool}.bat")]
@@ -105,8 +113,19 @@ pub fn locate(tool: &str, dir_param: Option<&str>) -> Result<PathBuf, FfError> {
     Err(FfError::missing(tool, &format!("{ENV_DIR} unset, not beside lycore, not on PATH")))
 }
 
-/// Run `exe args` with a timeout; the child is killed on timeout/drop.
+/// Run `exe args` with a timeout; the child is killed on timeout/drop. stdout is decoded as text.
 pub async fn run(exe: &Path, tool: &str, args: &[String], timeout_s: u64) -> Result<Output, FfError> {
+    let o = run_raw(exe, tool, args, timeout_s).await?;
+    Ok(Output {
+        status_ok: o.status_ok,
+        code: o.code,
+        stdout: String::from_utf8_lossy(&o.stdout).into_owned(),
+        stderr: o.stderr,
+    })
+}
+
+/// Run `exe args` with a timeout, keeping stdout as raw bytes (for `-f rawvideo -` style output).
+pub async fn run_raw(exe: &Path, tool: &str, args: &[String], timeout_s: u64) -> Result<RawOutput, FfError> {
     let mut cmd = Command::new(exe);
     cmd.args(args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
     #[cfg(windows)]
@@ -131,10 +150,10 @@ pub async fn run(exe: &Path, tool: &str, args: &[String], timeout_s: u64) -> Res
     match tokio::time::timeout(Duration::from_secs(timeout_s), work).await {
         Ok((a, b, st)) => {
             let st = st.map_err(|e| FfError::failed(format!("{tool} wait failed: {e}"), "", None))?;
-            Ok(Output {
+            Ok(RawOutput {
                 status_ok: st.success(),
                 code: st.code(),
-                stdout: String::from_utf8_lossy(&a).into_owned(),
+                stdout: a,
                 stderr: String::from_utf8_lossy(&b).into_owned(),
             })
         }
