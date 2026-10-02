@@ -1,0 +1,130 @@
+{
+  "started_at": "2026-10-02T13:20:16.251Z",
+  "work_dir": "/tmp/talekiln-e2e-N6EiKJ",
+  "pages": [
+    {
+      "name": "templates",
+      "ok": true,
+      "screenshots": [
+        "apps/renderer/e2e/screenshots/01-templates-detail.png",
+        "apps/renderer/e2e/screenshots/02-templates-apply-dialog.png",
+        "apps/renderer/e2e/screenshots/03-templates-applied.png"
+      ],
+      "notes": [
+        "模板数：11",
+        "估价：预计 ¥30.60，最高 ¥36.72",
+        "套用后项目数：2"
+      ],
+      "ms": 4205
+    },
+    {
+      "name": "plugins",
+      "ok": true,
+      "screenshots": [
+        "apps/renderer/e2e/screenshots/04-plugins-list.png",
+        "apps/renderer/e2e/screenshots/05-plugins-devmode-on.png",
+        "apps/renderer/e2e/screenshots/06-plugins-detail.png",
+        "apps/renderer/e2e/screenshots/07-plugins-devmode-off.png"
+      ],
+      "notes": [
+        "acme 行：可见",
+        "acme 签名标签：未签名"
+      ],
+      "ms": 4999
+    },
+    {
+      "name": "batches",
+      "ok": true,
+      "screenshots": [
+        "apps/renderer/e2e/screenshots/08-batch-form.png",
+        "apps/renderer/e2e/screenshots/09-batch-created.png",
+        "apps/renderer/e2e/screenshots/10-batch-paused.png",
+        "apps/renderer/e2e/screenshots/11-batch-resumed.png",
+        "apps/renderer/e2e/screenshots/12-batch-finished.png"
+      ],
+      "notes": [
+        "估算：全部完成预计 ¥10.20–12.24",
+        "暂停后状态：已暂停",
+        "批次最终状态：completed，已花费 1020 分"
+      ],
+      "ms": 12386
+    },
+    {
+      "name": "backup",
+      "ok": true,
+      "screenshots": [
+        "apps/renderer/e2e/screenshots/13-backup-empty.png",
+        "apps/renderer/e2e/screenshots/14-backup-saved.png",
+        "apps/renderer/e2e/screenshots/15-backup-test-failed.png"
+      ],
+      "notes": [
+        "测试连接：连不上对象存储（HeadBucket）：网络错误（fetch failed） 检查网络、地址与端口；家庭 NAS 上的 MinIO 需要在同一局域网内"
+      ],
+      "ms": 4033
+    },
+    {
+      "name": "storyboard",
+      "ok": true,
+      "screenshots": [
+        "apps/renderer/e2e/screenshots/16-storyboard-chips.png"
+      ],
+      "notes": [
+        "已锁定角色 老周 的参考图并勾到 5 个分镜",
+        "生成估算：{\"total\":11.2,\"max\":13.44,\"currency\":\"CNY\",\"sample_prices\":false,\"known\":true,\"by_item\":[{\"shot_id\":\"shot_1\",\"kind\":\"image\",\"estimate\":0.2,\"max\":0.24,\"basis\":\"1",
+        "一致性：{\"ok\":2,\"check\":1,\"retry\":2,\"unscored\":0}",
+        "一致性芯片：5 个；生成芯片：5 个"
+      ],
+      "ms": 18178
+    },
+    {
+      "name": "workbench",
+      "ok": true,
+      "screenshots": [
+        "apps/renderer/e2e/screenshots/17-workbench.png",
+        "apps/renderer/e2e/screenshots/18-workbench-region-edit.png"
+      ],
+      "notes": [
+        "一致性芯片：1；提示：首帧图与「老周」的锁定参考图相差较大（最低 37 分，人脸模型未安装，阈值 60）：重做首帧图 + 视频预计 ¥2.00（最高 ¥2.40）",
+        "提示词为空时确认按钮：禁用",
+        "改片估价：只改这 3 秒约 ¥1.80（整镜重做约 ¥1.80）；确认按钮：可用"
+      ],
+      "ms": 4060
+    },
+    {
+      "name": "director",
+      "ok": true,
+      "screenshots": [
+        "apps/renderer/e2e/screenshots/19-director-plan.png",
+        "apps/renderer/e2e/screenshots/20-director-applied.png",
+        "apps/renderer/e2e/screenshots/21-director-undone.png"
+      ],
+      "notes": [
+        "状态：待执行；步骤：1；影响：会改 镜头 1雨夜街头 · 修改（画面） 2 个生成节点会过期（图 / 视频 / 配音） 不会改 4 个镜头不受影响 其余镜头不变"
+      ],
+      "ms": 4304
+    }
+  ],
+  "console_errors": [
+    {
+      "url": "http://127.0.0.1:3091/settings/backup",
+      "text": "Failed to load resource: the server responded with a status of 502 (Bad Gateway)"
+    }
+  ],
+  "page_errors": [],
+  "server_errors": [
+    {
+      "status": 502,
+      "method": "POST",
+      "url": "/api/v1/backup/test"
+    }
+  ],
+  "api_4xx": [],
+  "failures": [],
+  "seed": {
+    "dramaId": 1,
+    "episodeId": 1,
+    "episodes": 1
+  },
+  "finished_at": "2026-10-02T13:21:10.431Z",
+  "logs": "/tmp/talekiln-e2e-N6EiKJ/logs"
+}
