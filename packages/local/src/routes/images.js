@@ -1,9 +1,11 @@
 const response = require('../response');
+const { legacyGuard } = require('./legacySpendGuard');
 const imageService = require('../services/imageService');
 const taskService = require('../services/taskService');
 const backgroundExtractionService = require('../services/backgroundExtractionService');
 
-function routes(db, cfg, log) {
+function routes(db, cfg, log, deps = {}) {
+  const guard = legacyGuard(deps.spend, 'image');
   return {
     list: (req, res) => {
       try {
@@ -16,6 +18,7 @@ function routes(db, cfg, log) {
       }
     },
     create: (req, res) => {
+      if (!guard(req, res)) return;
       try {
         const body = req.body || {};
         const rec = imageService.create(db, log, body);
