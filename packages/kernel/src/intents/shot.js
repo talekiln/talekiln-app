@@ -166,6 +166,49 @@ function regenerateShot(g, shotId, { seed, targets = ['image', 'video'] } = {}, 
   return U.mkTx('regenerateShot', ops, opts);
 }
 
+/**
+ * 选镜改片（P3-R）：把“时间段（入点/出点）+ 画面区域 + 一句话修改”记成该镜头 video 节点的参数 `edit`。
+ * 它和 seed 一样进 cacheKey，所以视频与合成过期、旧版本保留；结果由服务作为新版本记录，采用与否由用户在 A/B 对比后决定。
+ *   t0_ms / t1_ms：相对镜头视频起点的毫秒整数，0 <= t0 < t1 <= 视频时长（已采用版本的真实片长，未知时取 duration_ms）
+ *   rect：{ x, y, w, h } 归一化到 0..1（四位小数）；mode 'segment'（整段重做）可省略 = 整幅画面
+ *   prompt：修改说明；mode：'region'（只改区域）| 'segment'（整段）
+ * 需要已采用的视频版本（没有视频无从“改片”），其 id 记进 edit.base：同一修改作用在不同基底上 key 不同。
+ * 与当前 edit 完全相同 = 空事务。
+ */
+function editShotRegion(g, shotId, { t0_ms, t1_ms, rect, prompt, mode = 'region' } = {}, opts) {
+  U.need(g, shotId, 'shot');
+  const video = G.partsOfShot(g, shotId).video;
+  if (!video) throw U.intentError('shot has no video node');
+  const base = G.adoptedVersion(g, video);
+  if (!base || !base.asset || !base.asset.ref) throw U.intentError('shot has no adopted video to edit');
+  if (!G.EDIT_MODES.includes(mode)) throw U.intentError(`mode must be one of ${G.EDIT_MODES.join('/')}`);
+  const total = require('../projections').realVideoMs(g, shotId) || g.nodes[shotId].params.duration_ms || G.DEFAULT_SHOT_MS;
+  if (!Number.isInteger(t0_ms) || !Number.isInteger(t1_ms) || t0_ms < 0 || t1_ms <= t0_ms) throw U.intentError('t0_ms / t1_ms must be integers with 0 <= t0 < t1');
+  if (t1_ms > total) throw U.intentError(`t1_ms exceeds the video length (${total} ms)`);
+  if (typeof prompt !== 'string' || !prompt.trim()) throw U.intentError('prompt must be a non-empty string');
+  const r = G.normalizeRect(rect === undefined && mode === 'segment' ? { x: 0, y: 0, w: 1, h: 1 } : rect);
+  if (r.error) throw U.intentError(`rect: ${r.error}`);
+  const edit = { base: base.id, mode, t0_ms, t1_ms, rect: r.rect, prompt: prompt.trim() };
+  return U.mkTx('editShotRegion', U.paramOps(g, video, 'edit', edit), opts, { node: video, edit });
+}
+
+/**
+ * 采用镜头的某个视频版本，并让节点参数跟随该版本的“配方”：版本 metadata.edit 有则写进 params.edit，没有则清除。
+ * 这样采用改片结果后节点新鲜（key 含该 edit），采用回原版本也新鲜（key 回到整镜生成时的值），不会因为切换版本而误报过期。
+ * 版本不存在 -> INTENT。只采用、参数已一致 = 只有 adoptVersion 一个 op；版本已采用且参数一致 = 空事务。
+ */
+function adoptShotVersion(g, shotId, { version_id } = {}, opts) {
+  U.need(g, shotId, 'shot');
+  const video = G.partsOfShot(g, shotId).video;
+  if (!video) throw U.intentError('shot has no video node');
+  const v = (g.versions[video] || []).find((x) => x.id === version_id);
+  if (!v) throw U.intentError(`version not found: ${version_id}`);
+  const recipe = v.metadata && G.isObj(v.metadata.edit) ? v.metadata.edit : null;
+  const ops = U.paramOps(g, video, 'edit', recipe);
+  if (g.adopted[video] !== version_id) ops.push({ op: 'adoptVersion', node: video, version_id });
+  return U.mkTx('adoptShotVersion', ops, opts, { node: video, version_id });
+}
+
 /** 换音色/语速（只改该镜头的 narration 节点）。 */
 function setVoice(g, shotId, { voice, speed }, opts) {
   U.need(g, shotId, 'shot');
@@ -221,5 +264,5 @@ function recordGeneration(g, nodeId, { version_id, asset, metadata } = {}, opts)
 
 module.exports = {
   addShotOps, removeShotNodesOps, setShotField, addShot, deleteShot, splitShot, mergeShots, reorderShots, moveShotToGroup,
-  regenerateShot, setVoice, setShotReferences, recordGeneration,
+  regenerateShot, editShotRegion, adoptShotVersion, setVoice, setShotReferences, recordGeneration,
 };

@@ -233,7 +233,7 @@ describe('kernel REST', () => {
   it('every intent in the whitelist is part of the spec list and every spec intent is whitelisted', () => {
     const spec = {
       script: ['rewriteLine', 'insertLine', 'deleteLine', 'splitLine', 'mergeLines', 'reorderLines'],
-      shot: ['setShotField', 'splitShot', 'mergeShots', 'reorderShots', 'moveShotToGroup', 'addShot', 'deleteShot', 'regenerateShot'],
+      shot: ['setShotField', 'splitShot', 'mergeShots', 'reorderShots', 'moveShotToGroup', 'addShot', 'deleteShot', 'regenerateShot', 'editShotRegion'],
       timeline: ['trimSegment', 'moveSegment', 'splitSegment', 'deleteSegment', 'setTransition', 'addMusic'],
       canvas: ['moveNode', 'setNodeParam', 'connectNodes', 'disconnectNodes', 'addNodeAt', 'deleteNode'],
     };

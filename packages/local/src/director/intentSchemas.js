@@ -18,6 +18,7 @@ const EXCLUDED = Object.freeze({
   'canvas.disconnectNodes': '同 connectNodes',
   'canvas.addNodeAt': '同 connectNodes；新增镜头 / 台词请用 shot.addShot / script.insertLine',
   'canvas.deleteNode': '同 connectNodes；删除镜头 / 台词请用 shot.deleteShot / script.deleteLine',
+  'shot.editShotRegion': '选镜改片要先估价再确认提交生成任务，由工作台的改片面板发起，不在计划里直接执行',
 });
 
 const SHOT_FIELDS = {

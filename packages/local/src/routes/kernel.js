@@ -189,4 +189,5 @@ function routes(db, log) {
 }
 
 routes.INTENTS = INTENTS;
+routes.nodeVersions = nodeVersions; // P3-R：分镜工作台按视频节点取版本列表（与 GET /versions 同一份摘要）
 module.exports = routes;
