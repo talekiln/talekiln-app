@@ -463,6 +463,18 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
     r.post('/diagnostics/feedback', diag.sendFeedback);
   }
 
+  // P3-B
+  if (extras.batch) {
+    const batches = require('./batches')(extras.batch, log);
+    r.post('/batches', batches.create);
+    r.get('/batches', batches.list);
+    r.get('/batches/:id', batches.get);
+    r.post('/batches/:id/retry-failed', batches.retryFailed);
+    r.post('/batches/:id/cancel', batches.cancel);
+    r.post('/batches/:id/pause', batches.pause);
+    r.post('/batches/:id/resume', batches.resume);
+  }
+
   return r;
 }
 

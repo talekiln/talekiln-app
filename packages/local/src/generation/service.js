@@ -327,8 +327,8 @@ function createGenerationService({
 
   // ---------- 建任务 ----------
 
-  /** 同键任务已存在时：失败的重试、取消的换键重建、其余复用。 */
-  function enqueueOrReuse(item, key) {
+  /** 同键任务已存在时：失败的重试、取消的换键重建、其余复用。batch（P3-B）：所属批次，只作内部标记（不进幂等键、不发给服务商）。 */
+  function enqueueOrReuse(item, key, batch = null) {
     const spec = item.spec;
     const params = {
       ...spec.params,
@@ -336,6 +336,7 @@ function createGenerationService({
         episode_id: item.episode_id, shot_id: item.shot_id, storyboard_id: item.storyboard_id, node: item.node, kind: item.kind,
         cache_key: item.cache_key, ...(item.inputs ? { inputs: item.inputs } : {}), ...(item.then_video ? { then_video: true } : {}),
       },
+      ...(batch ? { _batch: batch } : {}),
     };
     let k = key;
     let existing = taskStore.getByKey(k);
@@ -379,6 +380,7 @@ function createGenerationService({
   /**
    * confirm=true：先估算和查额度（超限整批拒绝，不建任何任务），再采用缓存命中、建任务、唤醒 worker。
    * opts.skipCap 只给“首帧完成后接着出视频”的内部链用（点击时整批已批准过）。
+   * opts.batch（P3-B）：{ id, episode_id }，写进任务参数 `_batch`，接着出的视频任务沿用。
    */
   function create(ep, args = {}, opts = {}) {
     const kinds = kindsOf(args.kind);
@@ -408,7 +410,7 @@ function createGenerationService({
       if (item.action !== 'create') continue;
       item.episode_id = Number(ep);
       const key = idempotencyKey(ep, item);
-      const r = enqueueOrReuse(item, key);
+      const r = enqueueOrReuse(item, key, opts.batch || null);
       tasks.push({ shot_id: item.shot_id, storyboard_id: item.storyboard_id, kind: item.kind, outcome: r.outcome, task_id: r.task.id, state: r.task.state });
     }
     if (tasks.length && worker) worker.wake();
@@ -496,19 +498,19 @@ function createGenerationService({
       if (e instanceof SkipAdoption) return { adopted: false, reason: e.message };
       throw e;
     }
-    if (adoptedNow && gen.then_video) chainVideo(ep, gen);
+    if (adoptedNow && gen.then_video) chainVideo(ep, gen, (parseJson(task.params) || {})._batch || null);
     return { adopted: adoptedNow, reason: adoptedNow ? 'adopted' : 'superseded' };
   }
 
-  /** 首帧图落地后接着出视频（点击时整批估算已批准；提交时队列的花费守卫还会再查一次）。 */
-  function chainVideo(ep, gen) {
+  /** 首帧图落地后接着出视频（点击时整批估算已批准；提交时队列的花费守卫还会再查一次）。batch：首帧任务所属批次，沿用到视频任务。 */
+  function chainVideo(ep, gen, batch = null) {
     try {
       const { graph } = store.openProject(db, ep);
       const node = graph.nodes[gen.shot_id];
       if (!node) return;
       const parts = kernel.partsOfShot(graph, gen.shot_id);
       if (kernel.nodeState(graph, parts.image) !== 'fresh') return; // 首帧已被改过，不接着出
-      create(ep, { shots: [gen.shot_id], kind: 'video' }, { skipCap: true });
+      create(ep, { shots: [gen.shot_id], kind: 'video' }, { skipCap: true, batch });
     } catch (e) {
       warn('generation chain video', { error: e && e.message, shot: gen.shot_id });
     }
