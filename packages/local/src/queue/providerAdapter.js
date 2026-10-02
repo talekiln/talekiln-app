@@ -25,9 +25,17 @@ const { blobPath } = require('./download');
 
 const KINDS = Object.freeze(['image', 'video', 'tts']);
 const SERVICE_TYPES = { image: ['image', 'storyboard_image'], video: ['video'], tts: ['tts'] };
-const { KNOWN_PROVIDERS, getEnabled } = require('../providers/enablement');
+const { KNOWN_PROVIDERS, availableProviders } = require('../providers/enablement');
 // Config-provider names per queue provider; single source is providers/enablement.js.
 const PROVIDER_ALIASES = Object.fromEntries(Object.values(KNOWN_PROVIDERS).map((m) => [m.id, [...m.aliases]]));
+/**
+ * Saved-config `provider` values that belong to a queue provider. Built-ins have vendor-flavoured aliases; an installed
+ * plugin (P3-P) is addressed by its id only (the AI config row's provider = plugin name). Whether an id may be used at
+ * all is decided by enablement.availableProviders (validateSpec, registry), not here.
+ */
+function providerAliases(provider) {
+  return PROVIDER_ALIASES[provider] || [String(provider || '').toLowerCase()];
+}
 const SYNC_PREFIX = 'sync:';
 
 const encodeSync = (obj) => SYNC_PREFIX + Buffer.from(JSON.stringify(obj)).toString('base64url');
@@ -50,7 +58,7 @@ function parseSettings(s) {
 
 /** First active config (list order: default, priority) for a queue provider and kind. */
 function pickConfig(listConfigs, provider, kind) {
-  const names = PROVIDER_ALIASES[provider] || [provider];
+  const names = providerAliases(provider);
   for (const type of SERVICE_TYPES[kind] || []) {
     for (const c of listConfigs(type) || []) {
       if (c.is_active === false) continue;
@@ -67,7 +75,7 @@ function pickConfig(listConfigs, provider, kind) {
  */
 function pickSharedKeyConfig(listConfigs, provider, kind) {
   if (provider === 'ark' && kind === 'tts') return null;
-  const names = PROVIDER_ALIASES[provider] || [provider];
+  const names = providerAliases(provider);
   for (const type of ['text', 'image', 'storyboard_image', 'video', 'tts']) {
     for (const c of listConfigs(type) || []) {
       if (c.is_active === false || !c.api_key) continue;
@@ -238,14 +246,14 @@ function createQueueProvider(provider, { storageDir, listConfigs, createProvider
 }
 
 /**
- * Provider map for createApp({ queueProviders }): one queue provider per enabled provider id (providers.enabled).
- * Providers are always present; a missing config/key surfaces as a readable INVALID_API_KEY task error.
+ * Provider map for createApp({ queueProviders }): one queue provider per available provider id (providers.enabled
+ * plus active plugins). Providers are always present; a missing config/key surfaces as a readable INVALID_API_KEY task error.
  */
-function buildQueueProviders({ db, storageDir, listConfigs, createProviders, providers = getEnabled() }) {
+function buildQueueProviders({ db, storageDir, listConfigs, createProviders, providers = availableProviders() }) {
   const list = listConfigs || ((type) => require('../services/aiConfigService').listConfigsInternal(db, type));
   const out = {};
   for (const p of providers) out[p] = createQueueProvider(p, { storageDir, listConfigs: list, createProviders });
   return out;
 }
 
-module.exports = { KINDS, createQueueProvider, buildQueueProviders, pickConfig, pickSharedKeyConfig, modelFitsRequest, inlineLocalMedia, vendorParams, PROVIDER_ALIASES };
+module.exports = { KINDS, createQueueProvider, buildQueueProviders, pickConfig, pickSharedKeyConfig, modelFitsRequest, inlineLocalMedia, vendorParams, PROVIDER_ALIASES, providerAliases };

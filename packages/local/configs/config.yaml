@@ -62,6 +62,10 @@ ai_queue:
 providers:
   enabled:
     - bailian
+# 厂商插件（P3-P）：启动时扫描 dir 下每个含 manifest.json 的文件夹，校验签名后注册为服务商；未签名/签名无效的只在开发者模式下加载。
+# 相对路径相对于工作目录（桌面端为用户数据目录下的 local/）。见 docs/phase3-plugins.md。
+plugins:
+  dir: ./data/plugins
 # 生成：出图/出视频默认走持久队列（/episodes/:id/generate）。legacy_enabled=true 才在界面保留旧的同步按钮（仅用于排障对照）。
 generation:
   legacy_enabled: false

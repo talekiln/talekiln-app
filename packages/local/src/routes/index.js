@@ -463,6 +463,19 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
     r.post('/diagnostics/feedback', diag.sendFeedback);
   }
 
+  // P3-P
+  if (extras.pluginHost) {
+    const plugins = require('./plugins')(extras.pluginHost, log);
+    r.get('/plugins', plugins.list);
+    r.post('/plugins/install', plugins.install);
+    r.get('/plugins/:id', plugins.get);
+    r.post('/plugins/:id/enable', plugins.enable);
+    r.post('/plugins/:id/disable', plugins.disable);
+    r.delete('/plugins/:id', plugins.remove);
+    r.get('/settings/developer-mode', plugins.getDeveloperMode);
+    r.put('/settings/developer-mode', plugins.putDeveloperMode);
+  }
+
   return r;
 }
 

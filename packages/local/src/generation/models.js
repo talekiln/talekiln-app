@@ -1,6 +1,6 @@
 'use strict';
-// 生成用的服务商与模型选择：只看“已启用的服务商 + 已保存的配置 + 目录里的模型”，不联网。
-const { getEnabled } = require('../providers/enablement');
+// 生成用的服务商与模型选择：只看“已启用的服务商（含已加载的插件）+ 已保存的配置 + 目录里的模型”，不联网。
+const { availableProviders: getEnabled } = require('../providers/enablement');
 const { pickConfig, pickSharedKeyConfig, modelFitsRequest } = require('../queue/providerAdapter');
 
 /**
