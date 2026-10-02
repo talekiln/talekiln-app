@@ -385,6 +385,7 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
       exporter = extras.exporter || createExportService(db, {
         getCore: extras.getCore, storageRoot: extras.storageRoot,
         ffmpegPath: require('../utils/ffmpegPath').getFfmpegPath(), ffmpegDir: extras.ffmpegDir || null,
+        onFinished: extras.onExportFinished || null,
       });
     }
     const mediaExporter = extras.storageRoot
@@ -525,6 +526,19 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
     r.post('/shots/:id/edit-region', re.editRegion);
     r.get('/shots/:id/edit-regions', re.listRegions);
     r.post('/shots/:id/adopt-version', re.adoptVersion);
+  }
+  // P3-K 可选云备份（S3 兼容，MinIO 为参考目标）
+  if (extras.backup) {
+    const bk = require('./backup')(extras.backup, log);
+    r.get('/backup/settings', bk.getSettings);
+    r.put('/backup/settings', bk.putSettings);
+    r.post('/backup/test', bk.test);
+    r.post('/backup/dramas/:id', bk.backupDrama);
+    r.get('/backup/snapshots', bk.snapshots);
+    r.post('/backup/restore', bk.restore);
+    r.delete('/backup/snapshots', bk.deleteSnapshot);
+    r.get('/backup/status', bk.status);
+    r.get('/backup/runs', bk.runs);
   }
 
   return r;
