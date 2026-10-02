@@ -1,0 +1,62 @@
+{
+  "_comment": "随安装包内置的人脸模型（P3-C 人脸级一致性）：来自 OpenCV Zoo，CPU 推理、不联网。每条 url / sha256 / size 固定；scripts/fetch-face-models.mjs 校验哈希与大小后才写入 apps/desktop/resources/models/face（git 忽略）。换版本时更新条目并同步 docs/face-models.md。fixtures 只在测试时下载到临时目录（公有领域照片，不入库）；optional 列出可手动放进模型目录替换 int8 的 fp32 识别模型，脚本不下载它。",
+  "schema": 1,
+  "source": "https://github.com/opencv/opencv_zoo",
+  "models": {
+    "face_detection_yunet_2023mar.onnx": {
+      "role": "detector",
+      "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx",
+      "sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+      "size": 232589,
+      "license": "MIT",
+      "copyright": "Copyright (c) 2020 Shiqi Yu",
+      "license_file": "LICENSE-yunet.txt",
+      "license_url": "https://raw.githubusercontent.com/opencv/opencv_zoo/main/models/face_detection_yunet/LICENSE",
+      "license_sha256": "c83b8120c50ccbd4c4f96edf53141bdd566ebb8f8e9227e415326aa1b1aba958",
+      "source": "https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet"
+    },
+    "face_recognition_sface_2021dec_int8.onnx": {
+      "role": "recognizer",
+      "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_recognition_sface/face_recognition_sface_2021dec_int8.onnx",
+      "sha256": "2b0e941e6f16cc048c20aee0c8e31f569118f65d702914540f7bfdc14048d78a",
+      "size": 9896933,
+      "license": "Apache-2.0",
+      "copyright": "OpenCV Zoo contributors (SFace, Zhong et al. 2021)",
+      "license_file": "LICENSE-sface.txt",
+      "license_url": "https://raw.githubusercontent.com/opencv/opencv_zoo/main/models/face_recognition_sface/LICENSE",
+      "license_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "source": "https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface"
+    }
+  },
+  "optional": {
+    "face_recognition_sface_2021dec.onnx": {
+      "role": "recognizer",
+      "note": "fp32 版（约 37 MB），放进模型目录即优先于 int8 使用；脚本默认不下载",
+      "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx",
+      "sha256": "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79",
+      "size": 38696353,
+      "license": "Apache-2.0"
+    }
+  },
+  "fixtures": {
+    "_comment": "集成测试用的人像：美国白宫官方照片（美国政府作品，公有领域），经 face_recognition 示例目录分发。只在测试时下载到临时目录，不入库；下不到就跳过测试。",
+    "obama.jpg": {
+      "url": "https://raw.githubusercontent.com/ageitgey/face_recognition/master/examples/obama.jpg",
+      "sha256": "0930e3aa8cae5920329c0c8cbc6a2ab70f47b0e67b432875beaa95cbf7e741f6",
+      "size": 279922,
+      "person": "A"
+    },
+    "obama2.jpg": {
+      "url": "https://raw.githubusercontent.com/ageitgey/face_recognition/master/examples/obama2.jpg",
+      "sha256": "a7efcc907375274796f39646510704aa86672d59f6d5469d69af3c85590976a6",
+      "size": 184455,
+      "person": "A"
+    },
+    "biden.jpg": {
+      "url": "https://raw.githubusercontent.com/ageitgey/face_recognition/master/examples/biden.jpg",
+      "sha256": "3c17508bb91554c637a2eabddfae790e5bb1caba93130814fc2ac50be9760c4c",
+      "size": 353723,
+      "person": "B"
+    }
+  }
+}
