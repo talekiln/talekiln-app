@@ -57,6 +57,7 @@
 | 数据内核 K1 核心 | 已做 | packages/kernel：图、操作事务、撤销、失效、四种投影、意图层；设计见 docs/kernel-design.md |
 | 数据内核 K2 持久化与旧表适配 | 已做（Linux/SQLite 验证） | project_graphs + graph_ops，快照+日志重放，importLegacy / materialize，REST |
 | 数据内核 K3 一致性套件 | 已做 | 910 次场景×视图×故事执行 + 176 次等价比较，失败 0；报告 docs/kernel-conformance.md；抓到并修复 2 个内核缺陷 |
+| 任务 2：界面出图/出视频走 /ai-tasks | 已做（代码 + 单测；未真 Key 在界面点击验证） | 分镜级出图/出视频（FilmCreate、画布批量/工作流）改经 `apps/renderer/src/api/queuedGeneration.js`：先估价 -> 确认弹窗（批量只弹一次）-> `/episodes/:id/generate`；旧轮询经合成 id 读队列状态，取消走 `/ai-tasks/:id/cancel`；任务中心沿用 E04。旧 `POST /images`、`POST /videos` 保留但界面不再调用分镜级入口，并补了服务端花费上限检查（402 SPEND_LIMIT）。未迁移：角色/场景/道具等非分镜图、FreeCreate 视频，仍走旧同步路径（见 windows-test-results）。 |
 | 内核接线 I1 出图出视频走队列写回内核 | 已做（模拟数据） | /episodes/:id/generate，估价确认，幂等，缓存命中，崩溃恢复 |
 | 内核接线 I2 剧本入库/配音/词级字幕/真实片长 | 已做（模拟数据） | 配音未进队列和任务中心 |
 | 内核接线 I3 旧写接口改走内核 | 已做 | 镜头与时间线编辑全部经内核；剩余绕过清单见 kernel-design §12.5 |
