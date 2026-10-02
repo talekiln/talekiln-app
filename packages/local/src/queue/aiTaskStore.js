@@ -105,6 +105,8 @@ function createAiTaskStore(db, { now = () => Date.now(), onDurableCommit } = {})
     return transition(id, row.state, STATES.SUCCEEDED, {
       result: result === undefined ? null : JSON.stringify(result),
       completed_at: now(),
+      error_code: null, // a transient poll/download error on the way here is not an error of the result
+      error_message: null,
     });
   }
 

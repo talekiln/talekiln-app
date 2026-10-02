@@ -357,7 +357,8 @@ async function testConnection(opts) {
   const isVideoService = serviceType === 'video';
   const hasImageEndpoint = !!(endpoint && endpoint.includes('/images/'));
 
-  const isDashscope = provider === 'dashscope' || provider === 'qwen_image';
+  // 「AI 配置」页保存的百炼行 provider 是 'bailian'（也可能只是 base_url 指向 dashscope），都按 DashScope 处理
+  const isDashscope = provider === 'dashscope' || provider === 'qwen_image' || provider === 'bailian' || /dashscope\.aliyuncs\.com/i.test(base);
   const isVolcengine = provider === 'volces' || provider === 'volcengine' || provider === 'volc';
   const modelLower = model.toLowerCase();
 
@@ -462,7 +463,8 @@ async function testConnection(opts) {
   const path = endpoint.startsWith('/') ? endpoint : '/' + endpoint;
   const url = base + path;
   let body = {
-    model: model || 'gpt-3.5-turbo',
+    // 模型留空时探测用该服务商确实有的模型，百炼没有 gpt-3.5-turbo（会 404，看起来像 Key 有问题）
+    model: model || (isDashscope ? 'qwen-plus' : 'gpt-3.5-turbo'),
     messages: [{ role: 'user', content: 'Hello' }],
     max_tokens: 5,
   };
