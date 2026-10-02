@@ -39,7 +39,7 @@
             <div ref="playerWrap" class="player-wrap">
               <video
                 v-if="adoptedSrc" ref="playerEl" :key="adoptedSrc" :src="adoptedSrc" controls class="player"
-                @loadedmetadata="onMeta" @timeupdate="headMs = nowMs()"
+                @loadedmetadata="onMeta" @error="measure" @timeupdate="headMs = nowMs()"
               />
               <div v-else class="player empty">尚未采用视频</div>
               <!-- P3-R：框选区域层，贴在画面实际显示的区域上（黑边不算） -->
@@ -166,7 +166,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
@@ -400,6 +400,8 @@ const refusal = computed(() => refusalText(estimateState.value.data))
 const canSubmit = computed(() => canSubmitEdit({ total: totalMs.value, prompt: edit.value.prompt, range: edit.value.range, rect: edit.value.rect, mode: edit.value.mode, busy: submitting.value }) && !refusal.value)
 
 const nowMs = () => Math.round((playerEl.value?.currentTime || 0) * 1000)
+// 播放器元素一出现就量一次：元数据还没到（或视频解码失败）时 contentBox 退化为整个播放器区域，框选层不会是 0×0
+watch(playerEl, (el) => { if (el) nextTick(measure) })
 function measure() {
   const el = playerEl.value
   if (!el) return
