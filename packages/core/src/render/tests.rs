@@ -450,7 +450,8 @@ async fn fake_ffmpeg_all_encoders_fail_ends_libx264_last() {
     assert_eq!(s["error"]["code"], ERR_RENDER_FAILED);
     let log = std::fs::read_to_string(fd.join("calls.log")).unwrap();
     let order: Vec<&str> = log.lines().map(|l| l.split("-c:v ").nth(1).unwrap().split(' ').next().unwrap()).collect();
-    assert_eq!(order, vec!["h264_nvenc", "h264_nvenc", "h264_qsv", "h264_qsv", "libx264", "libx264"]);
+    // software fallbacks come last: libx264, then libopenh264 (what the pinned LGPL build ships)
+    assert_eq!(order, vec!["h264_nvenc", "h264_nvenc", "h264_qsv", "h264_qsv", "libx264", "libx264", "libopenh264", "libopenh264"]);
 }
 
 #[cfg(unix)]
