@@ -102,6 +102,7 @@ pub fn encoder_args(enc: &str, out: &OutSpec) -> Vec<String> {
         "h264_qsv" => &["-preset", "medium", "-global_quality", "21"],
         "h264_amf" => &["-quality", "balanced", "-rc", "cqp", "-qp_i", "21", "-qp_p", "21"],
         "h264_mf" => &["-b:v", "10M"],
+        "libopenh264" => &["-b:v", "8M"],
         _ => &[],
     };
     a.extend(extra.iter().map(|s| s.to_string()));
@@ -782,9 +783,20 @@ async fn attempt_inner(
     }))
 }
 
-/// Encoders to try after `first`: explicit `fallbackEncoders`, else encoder.detect's order, libx264 always last.
+/// Hardware encoders in the given order (minus `first`), then every software encoder (minus `first`) as the last resort.
+pub fn order_fallbacks(mut v: Vec<String>, first: &str) -> Vec<String> {
+    v.retain(|e| e != first && !crate::encoder::is_software(e));
+    for (name, _) in crate::encoder::CANDIDATES {
+        if crate::encoder::is_software(name) && *name != first {
+            v.push((*name).to_string());
+        }
+    }
+    v
+}
+
+/// Encoders to try after `first`: explicit `fallbackEncoders`, else encoder.detect's order, software encoders always last.
 async fn fallback_list(ctx: &Ctx, first: &str) -> Vec<String> {
-    let mut v: Vec<String> = match ctx.params.get("fallbackEncoders").and_then(|x| x.as_array()) {
+    let v: Vec<String> = match ctx.params.get("fallbackEncoders").and_then(|x| x.as_array()) {
         Some(a) => a.iter().filter_map(|x| x.as_str().map(String::from)).collect(),
         None => {
             let mut p = json!({});
@@ -797,11 +809,7 @@ async fn fallback_list(ctx: &Ctx, first: &str) -> Vec<String> {
             }
         }
     };
-    v.retain(|e| e != first && e != "libx264");
-    if first != "libx264" {
-        v.push("libx264".into());
-    }
-    v
+    order_fallbacks(v, first)
 }
 
 async fn run_job(ctx: Ctx) {

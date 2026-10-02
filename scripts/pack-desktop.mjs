@@ -18,6 +18,13 @@ const sh = (cmd, args, cwd = root, env = {}) => {
 fs.rmSync(stage, { recursive: true, force: true });
 sh('pnpm', ['--filter', '@talekiln/desktop', 'deploy', '--legacy', '--prod', stage]);
 
+// 副本里可能带着根目录 @electron/rebuild 留下的 .forge-meta（见 scripts/native-abi.mjs）：有它 electron-builder 会跳过原生模块重编，
+// 而二进制本身可能已被 prebuild-install 换成 Node 的 ABI。删掉它，让 electron-builder 每次都按 Electron 版本重编。
+for (const mod of fs.readdirSync(path.join(stage, 'node_modules'), { withFileTypes: true })) {
+  if (!mod.isDirectory()) continue;
+  const meta = path.join(stage, 'node_modules', mod.name, 'build', 'Release', '.forge-meta');
+  if (fs.existsSync(meta)) { fs.rmSync(meta); console.log(`removed stale ${path.relative(root, meta)}`); }
+}
 const pkgFile = path.join(stage, 'package.json');
 const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
 pkg.build.electronVersion = JSON.parse(fs.readFileSync(path.join(desktop, 'package.json'), 'utf8')).devDependencies.electron;

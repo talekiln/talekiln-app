@@ -31,6 +31,18 @@ fn encoder_args_per_encoder() {
     assert_eq!(arg_after(&encoder_args("h264_mf", &out()), "-b:v"), "10M");
     assert!(encoder_args("h264_amf", &out()).contains(&"-qp_i".to_string()));
     assert!(encoder_args("h264_qsv", &out()).contains(&"-global_quality".to_string()));
+    // libopenh264 (LGPL build): ffmpeg's default 200 kbit/s target is far too low, so a bitrate is set
+    assert_eq!(arg_after(&encoder_args("libopenh264", &out()), "-b:v"), "8M");
+}
+
+#[test]
+fn fallback_order_keeps_software_last() {
+    let v = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    // explicit list: hardware encoders in the given order, then every software encoder not already chosen
+    assert_eq!(order_fallbacks(v(&["h264_qsv", "libx264", "h264_mf"]), "h264_nvenc"), v(&["h264_qsv", "h264_mf", "libx264", "libopenh264"]));
+    // the first encoder is never retried; a software first encoder falls back to the other software one
+    assert_eq!(order_fallbacks(v(&["h264_nvenc", "libx264"]), "libx264"), v(&["h264_nvenc", "libopenh264"]));
+    assert_eq!(order_fallbacks(v(&[]), "libopenh264"), v(&["libx264"]));
 }
 
 #[test]

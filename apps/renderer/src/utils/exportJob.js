@@ -17,6 +17,7 @@ const ENCODER_TEXT = {
   h264_amf: 'AMD 显卡 (h264_amf)',
   h264_mf: 'Windows 媒体基础 (h264_mf)',
   libx264: '软件编码 (libx264)',
+  libopenh264: '软件编码 (libopenh264)',
 }
 
 /** 编码器下拉：自动 + 每个检测到的编码器；不可用的禁用并带原因 */
