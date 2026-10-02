@@ -1,6 +1,6 @@
 # 三期 P3-P：插件适配器（签名的服务商插件）
 
-状态：SDK 签名/验签、本地插件宿主与 `/plugins` 接口、云端插件注册表、插件页（P3-02）和测试已完成。**没有在真实桌面端里点过插件页**（只做了 `vite build` 通过和纯函数单测），云端 Prisma 仓储与迁移 SQL 只在内存仓储上验证（真实 PostgreSQL 由 CI 的 `cloud-pg` 任务跑）。本文不含任何密钥。
+状态：SDK 签名/验签、本地插件宿主与 `/plugins` 接口、云端插件注册表、插件页（P3-02）、独立的插件签名密钥（只在云端服务器上）与后台「插件审核」页和测试已完成。**没有在真实桌面端里点过插件页，也没有在真实浏览器里点过后台「插件审核」页**（只做了 `vite build` 通过和纯函数单测），云端 Prisma 仓储与迁移 SQL 只在内存仓储上验证（真实 PostgreSQL 由 CI 的 `cloud-pg` 任务跑）。本文不含任何密钥。
 
 涉及的包：`packages/plugin-sdk`（MIT，公开）、`packages/local`（AGPL，公开）、`packages/cloud`（私有）、`apps/renderer`。
 
@@ -16,11 +16,12 @@
 
 补充规则：
 
-- 官方公钥 = 云端 `GET /.well-known/licence-jwks.json`（与目录、许可证同一把 ES256 密钥）。本地用 `cloud/jwks.js` 的离线缓存验签：启动扫描是同步、纯离线的；缓存里没有该 `kid` 时先记为 `invalid（unknown kid）`，云端配置好后在后台拉一次 JWKS 复验（`refreshKeys`），变成 `official` 的立即加载。
+- 官方公钥 = 云端 `GET /.well-known/licence-jwks.json`。里面有多把 ES256 公钥（kid 互不相同、`use: sig`）：许可证密钥（`lic-1`，许可证/模型目录/模板用它签）、**独立的插件签名密钥**（`plg-1`，只给插件包签名；服务器没配时退回许可证密钥）和已退役的插件签名公钥（让轮换前签出去的包继续验得过）。本地用 `cloud/jwks.js` 的离线缓存验签：启动扫描是同步、纯离线的；缓存里没有该 `kid` 时先记为 `invalid（unknown kid）`，云端配置好后在后台拉一次 JWKS 复验（`refreshKeys`），变成 `official` 的立即加载。
 - 插件名就是服务商 id。与内置服务商同名的插件一律拒绝（`PLUGIN_NAME_CONFLICT`），所以插件不能冒充百炼/方舟。
 - 从文件夹安装时，未签名/签名无效的包在开发者模式关闭时直接拒绝（`PLUGIN_SIGNATURE`，403），不会复制进插件目录。手工拷进插件目录的包会被记录但不会加载，插件页上能看到原因。
 - 开发者模式是 `global_settings.developer_mode`，关掉的瞬间所有非官方插件卸载；打开前界面会弹一次确认。
-- 已签名的包改任何一个被覆盖的文件（含加文件）都会变成 `invalid`。签名**不能撤回**：云端驳回一个已签名的版本只是把它撤出目录，已经分发出去的包在客户端仍然验得过；要作废只能轮换密钥（换 `LICENCE_KEY_ID` + 私钥）。
+- 已签名的包改任何一个被覆盖的文件（含加文件）都会变成 `invalid`。签名**不能撤回**：云端驳回一个已签名的版本只是把它撤出目录，已经分发出去的包在客户端仍然验得过；要作废只能轮换插件签名密钥（新 `PLUGIN_SIGNING_KEY_ID` + 新私钥）并且**不**把旧公钥放进退役列表——这是全局动作，该钥签过的所有包都会失效。正常轮换时把旧公钥放进 `PLUGIN_SIGNING_RETIRED_PUBLIC_KEYS_PEM`，旧包不受影响（`docs/tencent-deploy.md` 第 7 节）。
+- **官方插件签名私钥只保管在云端服务器上**（腾讯云那台机器的 `.env`，`PLUGIN_SIGNING_PRIVATE_KEY_PEM`），签名只通过云端 `POST /admin/plugins/:id/sign` 发生；不分发给审核员、作者或 CI。开发者用自己的密钥跑 `sign-plugin.mjs` 得到的是非官方签名（`invalid / unknown kid`），只在开发者模式下加载。
 - 本地只信 JWKS 里的公钥，不信清单里的任何声明；插件代码运行前要先过 SDK 的 `validateManifest`、能力/权限/`sdkVersion` 检查，运行时只能通过受限 `fetch` 访问 `network:` 声明的主机（https，不跟重定向），`apiKey` 只在声明 `secret:apiKey` 时注入。
 
 ## 2. 签名
@@ -45,25 +46,26 @@ manifest.signature = { "alg": "ES256", "kid": "<官方 JWKS 里的 kid>", "value
 # 作者/审核员：看一眼包的文件、哈希与指纹（不需要密钥）
 node packages/plugin-sdk/scripts/sign-plugin.mjs ./my-plugin --inspect
 
-# 持有官方私钥的人：签名（写回 manifest.json；--out 写到别处；--dry-run 只算不写）
-TALEKILN_PLUGIN_SIGNING_KEY_FILE=/secure/plugin-signing.pem \
-node packages/plugin-sdk/scripts/sign-plugin.mjs ./my-plugin --kid lic-1
+# 开发者本地联调：用自己的密钥签（写回 manifest.json；--out 写到别处；--dry-run 只算不写）。
+# 这不是官方签名：kid 不在官方 JWKS 里，客户端判 invalid，只在开发者模式下加载。官方签名见 2.3。
+TALEKILN_PLUGIN_SIGNING_KEY_FILE=/secure/dev-signing.pem \
+node packages/plugin-sdk/scripts/sign-plugin.mjs ./my-plugin --kid dev-1
 ```
 
-`--inspect` 的 JSON 里 `manifest`（已含 `files`，不含 `signature`）和 `fileHashes` 正是云端登记接口要的提交体。CI 密钥库里只有一行时可用 `TALEKILN_PLUGIN_SIGNING_KEY_PEM`（`\n` 转义）；`kid` 也可从 `TALEKILN_PLUGIN_SIGNING_KID` 读。签完会自检（清单仍合法、签名结构正确），再用 `verifySignature` + JWKS 复验一次更稳妥。
+`--inspect` 的 JSON 里 `manifest`（已含 `files`，不含 `signature`）和 `fileHashes` 正是云端登记接口要的提交体（后台「插件审核」→「登记新版本」直接粘贴整段输出即可）。CI 密钥库里只有一行时可用 `TALEKILN_PLUGIN_SIGNING_KEY_PEM`（`\n` 转义）；`kid` 也可从 `TALEKILN_PLUGIN_SIGNING_KID` 读。签完会自检（清单仍合法、签名结构正确），再用 `verifySignature` + JWKS 复验一次更稳妥。
 
-### 2.3 官方流程（云端注册表签名，推荐）
+### 2.3 官方流程（云端注册表签名，唯一的官方签名途径）
 
-云端用许可证同一把私钥签名，不需要把私钥分发给任何人：
+官方插件签名私钥只在云端服务器上（`PLUGIN_SIGNING_PRIVATE_KEY_PEM`，kid `plg-1`；与许可证密钥分开，服务器没配时退回许可证密钥并告警），不分发给任何人。后台有「插件审核」页（`/plugins`）做下面每一步，接口也可以直接调：
 
-1. 作者在本地跑 `--inspect`，把 `manifest`、`fileHashes`、包的下载地址（https）与包文件 `sha256` 交给运营。
-2. 运营（OPERATOR 及以上）`POST /admin/plugins` 登记 → 版本进入 `pending`。
-3. 审核员按 `packageUrl` 下载包、核对 `sha256`，解包后跑 `--inspect`，比对指纹与登记记录里的 `hash` 一致，再看代码；`POST /admin/plugins/:id/approve`（或 `reject`，`notes` 写理由）。
-4. ADMIN `POST /admin/plugins/:id/sign`：云端签名，返回 `signedManifest`。
+1. 作者在本地跑 `--inspect`，把输出 JSON（含 `manifest`、`fileHashes`）、包的下载地址（https）与包文件 `sha256` 交给运营。
+2. 运营（OPERATOR 及以上）在「插件审核」→「登记新版本」粘贴 `--inspect` 输出（`POST /admin/plugins`）→ 版本进入 `pending`。
+3. 审核员按 `packageUrl` 下载包、核对 `sha256`，解包后跑 `--inspect`，比对指纹与详情抽屉里的 `hash` 一致，再看代码；「通过」/「驳回」并写备注（`POST /admin/plugins/:id/approve` / `reject`）。
+4. ADMIN 在详情抽屉点「官方签名（plg-1）」（`POST /admin/plugins/:id/sign`）：签名在服务器上完成，返回 `signedManifest` 与 `kid`；抽屉提供「复制已签名清单」/「下载 manifest.json」。页顶横幅（`GET /admin/plugins/signing-key`，仅 ADMIN）显示当前 kid、是否独立密钥、退役 kid。
 5. 作者把 `signedManifest` 原样写回包里的 `manifest.json`（签名不覆盖 `manifest.json`，所以这一步不会让签名失效），重新打包分发。
-6. 已通过的版本出现在公开的 `GET /plugins/catalog`，带 `signedManifest`、`hash`、`reviewedAt`。本地启动时会拉一次目录，把 `reviewedAt` 写到对应指纹的插件上（插件页"审核日期"）。
+6. 已通过的版本出现在公开的 `GET /plugins/catalog`（`kid` 为插件签名 kid），带 `signedManifest`、`hash`、`reviewedAt`。本地启动时会拉一次目录，把 `reviewedAt` 写到对应指纹的插件上（插件页"审核日期"）。
 
-云端**不下载也不执行**插件包；第 3 步的核对是人工动作，没有这一步签名就等于只认登记的人。
+云端**不下载也不执行**插件包；第 3 步的核对是人工动作，没有这一步签名就等于只认登记的人。密钥的生成、备份、轮换见 `docs/tencent-deploy.md` 第 7 节；轮换后旧 kid 签的版本在后台标成「旧密钥」，可用新钥重签。
 
 ## 3. 权限
 
@@ -104,7 +106,11 @@ node packages/plugin-sdk/scripts/sign-plugin.mjs ./my-plugin --kid lic-1
 | GET | `/admin/plugins/:id` | `read` | 版本 + 审核记录 |
 | POST | `/admin/plugins` | `ops:write` | 登记 `{ manifest, fileHashes, packageUrl(https), sha256, notes? }`；同插件同版本 409 |
 | POST | `/admin/plugins/:id/approve` / `reject` | `plugins:review`（OPERATOR 以上） | 状态机：pending/rejected → approved；pending/approved → rejected |
-| POST | `/admin/plugins/:id/sign` | `plugins:sign`（仅 ADMIN） | 只签 approved；同一 `kid` 不重复签；返回 `signedManifest` |
+| POST | `/admin/plugins/:id/sign` | `plugins:sign`（仅 ADMIN） | 用插件签名私钥（`PLUGIN_SIGNING_PRIVATE_KEY_PEM`）签 approved 的版本；同一 `kid` 不重复签（换钥后可重签）；返回 `signedManifest`、`signature`、`kid` |
+| GET | `/admin/plugins/signing-key` | `plugins:sign`（仅 ADMIN） | `{ kid, alg:'ES256', dedicated, licenceKid, retiredKids, jwksPath }`：当前插件签名 kid、是否配置了独立密钥、退役 kid。没有任何私钥材料 |
+| GET | `/.well-known/licence-jwks.json` | 公开 | 许可证公钥 + 插件签名公钥 + 退役的插件签名公钥（kid 互不相同，`use: sig`，`alg: ES256`，无 `d`） |
+
+服务器配置（`packages/cloud/.env.example`、`docker-compose.yml`）：`PLUGIN_SIGNING_PRIVATE_KEY_PEM`（PKCS8，P-256）、`PLUGIN_SIGNING_KEY_ID`（默认 `plg-1`，不能与 `LICENCE_KEY_ID` 相同）、`PLUGIN_SIGNING_RETIRED_PUBLIC_KEYS_PEM`（多把 SPKI 公钥用 `;` 分隔）+ `PLUGIN_SIGNING_RETIRED_KEY_IDS`（逗号分隔、顺序对应；只接受公钥，填私钥拒绝启动）。解析在 `services/config.ts`，JWKS 组装在 `services/signing-keys.ts`。
 
 所有写操作经 `AuditInterceptor` 自动审计（含越权尝试）。表：`Plugin(name 唯一)`、`PluginVersion(manifest, fileHashes, hash, packageUrl, sha256, signature, reviewStatus pending|approved|rejected, reviewedAt/By, signedAt/By)`、`PluginReview(action submit|approve|reject|sign, notes)`，迁移 `20261005000000_plugin_registry`（纯新增）。云端镜像不含 SDK，清单规则与签名载荷在 `services/plugin-registry.service.ts`、`services/plugin-signing.ts` 复刻，测试用相对路径加载 SDK 做交叉校验。
 
@@ -112,7 +118,11 @@ node packages/plugin-sdk/scripts/sign-plugin.mjs ./my-plugin --kid lic-1
 
 `manifest.files?`、`manifest.signature?`；`readPluginManifest(dir)`（只读清单不执行代码）；`signing.js`：`canonicalJson, listPluginFiles, hashFiles, signingPayload, payloadHash, signManifest, verifySignature, resolveKey`（只用 `node:crypto`；`keys` 可以是 JWKS、JWK 数组、单个 JWK、公钥对象/PEM 或 `(kid) => key` 函数）；`scripts/sign-plugin.mjs`；类型在 `index.d.ts`。
 
-### 4.4 插件页（`/settings/plugins`）
+### 4.4 后台「插件审核」页（`apps/admin`，`/plugins`）
+
+路由权限 `read`（只读角色能看、不能点）；按状态筛选（待审核/已通过/已驳回）；详情抽屉有 manifest（美化 JSON）、文件哈希表、指纹、包地址、sha256、签名 kid、审核记录；动作按钮按角色与状态机禁用并给出原因：通过/驳回（`plugins:review`，弹窗填备注）、官方签名（`plugins:sign`，按钮上带当前 kid）；签名后「复制已签名清单」/「下载 manifest.json」。「登记新版本」粘贴 `--inspect` 整段输出 + 包地址 + sha256。页顶横幅显示签名密钥状态（独立 / 暂用许可证密钥 / 退役 kid）。纯逻辑在 `src/plugins.js`（`test/plugins.test.js`），审计动作文案在 `src/ops.js`，菜单项在模板市场旁边。
+
+### 4.5 插件页（`/settings/plugins`）
 
 一张表：内置服务商（`GET /providers`，隐藏的一期服务商不会出现）+ 已安装插件；每行有版本、能力、访问主机、指纹、审核日期、签名标签（官方内置 / 官方签名 / 未签名 / 签名无效）、开关和状态文案；详情抽屉列能力、权限、签名密钥、包指纹、审核日期、安装目录；页头链接 SDK 文档（`VITE_PLUGIN_SDK_DOCS_URL`，缺省指向公开仓库里的 SDK 说明）和「从文件夹安装」（输入完整路径——桌面端目前没有给渲染进程暴露系统文件夹选择框）；页脚是社区插件维护责任说明；开发者模式开关在页顶。内置服务商的开关固定为开且不可动（开关由安装包的 `config.yaml` 决定）。命令面板：「插件与服务商」。纯逻辑在 `utils/pluginsView.js`。
 
@@ -121,17 +131,19 @@ node packages/plugin-sdk/scripts/sign-plugin.mjs ./my-plugin --kid lic-1
 - 真实桌面端上的插件页交互、`ElMessageBox.prompt` 的路径输入体验，以及 Windows 路径（带反斜杠、盘符）从输入框到 `fs.cpSync` 的全链路；测试只跑了 Linux 临时目录。
 - 云端 Prisma 仓储（`plugins` 那组）与迁移 SQL 没有在真实 PostgreSQL 上跑过；`prisma validate` 通过，CI 的 `cloud-pg` 任务会做 `migrate deploy` + `migrate diff` + 全量测试。
 - 真实厂商插件（可灵、Vidu、MiniMax）一个都没写；测试夹具是 SDK 示例的独立拷贝（虚构的 `api.acme.example`）。
-- 后台界面没有插件审核页，云端接口只能用 HTTP 工具调。
-- 官方签名私钥的保管、谁来审核、轮换流程是商务/运维决定（`docs/phase3-plan.md` 待决项）。
+- 后台「插件审核」页只过了 `vite build` 和纯函数单测，没有在真实浏览器里点过（抽屉、弹窗备注、复制/下载）。
+- 独立的插件签名密钥还没在真实服务器上生成和配置过；`docs/tencent-deploy.md` 第 7 节的命令只在本地 shell 里核对过语法。谁持有离线备份与口令、是否定期轮换、审核员名单仍待 Jay 决定。
 - 插件在进程内运行、没有沙箱，这一点没有变化。
 
 ## 6. 怎么测
 
 ```bash
 pnpm --filter ./packages/plugin-sdk test     # 签名/验签/CLI（密钥每次运行临时生成）
-pnpm --filter ./packages/local test          # test/plugins.test.js：扫描、信任规则、开发者模式、安装/删除、队列接入、目录同步
+pnpm --filter ./packages/local test          # test/plugins.test.js：扫描、信任规则、开发者模式、安装/删除、队列接入、目录同步、多把 JWKS 公钥（插件 kid / 退役 kid / 许可证 kid）
 pnpm --filter ./packages/cloud test          # test/plugin-registry.test.ts：校验、角色、状态机、审计、签名被 SDK 用 JWKS 验过
+                                             # test/plugin-signing-key.test.ts：独立密钥/回退/退役公钥配置、JWKS 三把公钥、signing-key 门禁、旧 kid 仍可验、换钥重签
 pnpm --filter ./apps/renderer test           # test/pluginsView.test.js
+pnpm --filter @talekiln/admin test           # test/plugins.test.js：后台「插件审核」页纯逻辑、api 路径、门禁、审计文案
 ```
 
 手工：把 `packages/local/test/fixtures/plugins/acme` 拷一份，用临时密钥 `--kid dev-1` 签名；本地服务 `global_settings.cloud.jwks` 里放对应公钥的 JWKS（或配置云端地址让它去拉）；在插件页「从文件夹安装」，应显示「官方签名」并可开关；改一个文件再重启，应变成「签名无效」且不加载；打开开发者模式后才能启用。所有测试都不联网，不写任何密钥文件到仓库。

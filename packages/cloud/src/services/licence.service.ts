@@ -3,6 +3,7 @@ import { jwtVerify, SignJWT, type JWK } from 'jose';
 import type { AppConfig } from './config';
 import { EntitlementService } from './entitlement.service';
 import { ServiceError } from './errors';
+import { buildJwks } from './signing-keys';
 import type { Repositories } from '../domain/repositories';
 
 /** 套餐 -> 功能权益。test 套餐拥有全部功能。 */
@@ -78,9 +79,9 @@ export class LicenceService {
     return { licence, expiresAt: new Date(exp * 1000).toISOString(), graceDays: this.cfg.graceDays };
   }
 
+  /** 许可证公钥 + 插件签名公钥 + 退役的插件签名公钥（见 signing-keys.ts）。 */
   jwks(): { keys: JWK[] } {
-    const jwk = this.publicKey.export({ format: 'jwk' }) as JWK;
-    return { keys: [{ ...jwk, kid: this.cfg.licenceKeyId, alg: 'ES256', use: 'sig' }] };
+    return buildJwks(this.cfg);
   }
 
   /** 服务端自检用；客户端用 JWKS 公钥做同样的校验（exp 过期后的 14 天宽限由客户端自行判断）。 */

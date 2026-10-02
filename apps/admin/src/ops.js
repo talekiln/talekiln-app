@@ -274,6 +274,10 @@ const AUDIT_ACTIONS = {
   'POST /admin/templates/:id/versions': '新增模板版本',
   'POST /admin/templates/:id/versions/:vid/publish': '发布模板版本',
   'POST /admin/templates/:id/versions/:vid/unpublish': '下架模板版本',
+  'POST /admin/plugins': '登记插件版本',
+  'POST /admin/plugins/:id/approve': '通过插件审核',
+  'POST /admin/plugins/:id/reject': '驳回插件版本',
+  'POST /admin/plugins/:id/sign': '官方签名插件版本',
 }
 export const auditActionLabel = (action) => AUDIT_ACTIONS[action] || action || '—'
 export const AUDIT_ACTION_OPTIONS = Object.entries(AUDIT_ACTIONS).map(([value, label]) => ({ value, label }))
