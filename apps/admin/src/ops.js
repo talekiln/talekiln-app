@@ -278,6 +278,15 @@ const AUDIT_ACTIONS = {
   'POST /admin/plugins/:id/approve': '通过插件审核',
   'POST /admin/plugins/:id/reject': '驳回插件版本',
   'POST /admin/plugins/:id/sign': '官方签名插件版本',
+  // P3-S 工作室：后台操作 + 用户侧写操作（也进审计）
+  'PUT /admin/studios/:id/seats': '调整工作室席位数',
+  'PUT /admin/studios/:id/status': '修改工作室状态',
+  'POST /studios': '创建工作室',
+  'POST /studios/:id/invites': '工作室邀请成员',
+  'DELETE /studios/:id/invites/:inviteId': '撤销工作室邀请',
+  'POST /studios/accept': '接受工作室邀请',
+  'DELETE /studios/:id/members/:accountId': '移除工作室成员 / 退出',
+  'PUT /studios/:id/members/:accountId/role': '调整工作室成员角色',
 }
 export const auditActionLabel = (action) => AUDIT_ACTIONS[action] || action || '—'
 export const AUDIT_ACTION_OPTIONS = Object.entries(AUDIT_ACTIONS).map(([value, label]) => ({ value, label }))

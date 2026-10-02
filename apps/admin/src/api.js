@@ -128,6 +128,12 @@ export function createApi({ base = '/api', fetchImpl, getToken = () => null, onU
     signPlugin: (id, notes) => json('POST', `/admin/plugins/${enc(id)}/sign`, { notes: notes || '' }),
     pluginSigningKey: () => json('GET', '/admin/plugins/signing-key'),
 
+    // 工作室（P3-S）：只读列表 + 调整席位数 / 状态（席位定价待定）
+    listStudios: () => json('GET', '/admin/studios'),
+    getStudio: (id) => json('GET', `/admin/studios/${enc(id)}`),
+    setStudioSeats: (id, body) => json('PUT', `/admin/studios/${enc(id)}/seats`, body),
+    setStudioStatus: (id, status) => json('PUT', `/admin/studios/${enc(id)}/status`, { status }),
+
     // 管理员与审计
     listAdmins: () => json('GET', '/admin/admins'),
     grantAdmin: (body) => json('POST', '/admin/admins', body),
