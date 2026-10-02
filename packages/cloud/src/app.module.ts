@@ -5,6 +5,8 @@ import { AdminAuthController, AdminController, AdminOpsController, PublicControl
 import { AdminBillingController, OrderController, PaymentNotifyController, PlanController, SubscriptionController } from './http/billing.controllers';
 import { AdminTemplateController, TemplateCatalogController } from './http/template.controllers';
 import { AdminPluginController, PluginCatalogController } from './http/plugin.controllers';
+import { AdminStudioController, StudioController } from './http/studio.controllers';
+import { StudioService } from './services/studio.service';
 import { PluginRegistryService } from './services/plugin-registry.service';
 import { AuditInterceptor } from './http/audit.interceptor';
 import { AccessGuard, AdminGuard } from './http/guard';
@@ -72,6 +74,7 @@ export function createAppModule(opts: ModuleOptions = {}) {
       PlanController, OrderController, SubscriptionController, PaymentNotifyController, AdminBillingController,
       TemplateCatalogController, AdminTemplateController,
       PluginCatalogController, AdminPluginController,
+      StudioController, AdminStudioController,
     ],
     providers: [
       ...infra,
@@ -101,6 +104,7 @@ export function createAppModule(opts: ModuleOptions = {}) {
       { provide: FunnelService, useFactory: (r: Repositories) => new FunnelService(r), inject: [REPOS] },
       { provide: TemplateService, useFactory: (r: Repositories, c: AppConfig) => new TemplateService(r, c), inject: [REPOS, CONFIG] },
       { provide: PluginRegistryService, useFactory: (r: Repositories, c: AppConfig) => new PluginRegistryService(r, c), inject: [REPOS, CONFIG] },
+      { provide: StudioService, useFactory: (r: Repositories, c: AppConfig, a: AuditService) => new StudioService(r, c, a), inject: [REPOS, CONFIG, AuditService] },
       AuditInterceptor,
       AccessGuard,
       AdminGuard,

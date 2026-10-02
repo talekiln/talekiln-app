@@ -15,6 +15,7 @@ const TABLES = [
   'Plan', 'PlanVersion', 'Subscription', 'Order', 'Payment', 'Refund', 'Invoice', 'PaymentNotification', 'LicenceUsage',
   'Announcement', 'Release', 'AdminRole', 'AdminAudit', 'TemplateVersion', 'Template',
   'PluginReview', 'PluginVersion', 'Plugin',
+  'StudioInvite', 'StudioMember', 'Studio',
 ];
 
 /** 每个测试调用一次，得到一份干净的仓储（PG 模式下先清空所有表）。 */
