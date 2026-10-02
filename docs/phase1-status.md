@@ -19,9 +19,9 @@
 | G01 媒体探测与编码器检测 | 已做（Windows 真机验证） | lycore media.probe / encoder.detect；任务 4 在本机检测到 h264_qsv / h264_mf 可用、nvenc / amf / libx264 不可用，推荐 qsv 并以之导出成功；第二轮把固定版 LGPL ffmpeg 自带的 libopenh264 加进候选表（软件编码，排 libx264 之后），没有硬件编码器时回退到它而不是只剩 h264_mf |
 | F03 时间线编辑器首版 | 部分 | 四轨、拖拽、吸附、切分、预览；缺波形、缩略图、旁白/音乐播放 |
 | D02 分镜模板 / F01 配音字幕 / C05 连通测试 | 已做（联网会话） | PR #2、#3 已合入 |
-| D01 新建项目 / D03 分镜表 | 已做（未在浏览器打开） | 同步生成，无进度流 |
+| D01 新建项目 / D03 分镜表 | 已做（Windows 打包版人眼打开过分镜页） | 同步生成，无进度流；2026-10-02 人眼测出分镜页删镜 / 排序 / 编辑的自动保存在浏览器里抛「Illegal invocation」（`createAutosaver` 默认 timers 把 `window.setTimeout` 塞进普通对象再调用），已修并加了模拟浏览器 this 检查的回归测试 |
 | E02 队列工作器 | 已做 | 限并发、429 退避、断点下载、sha256 入库；尚未接入真实适配器 |
-| E03 唤醒对账/托盘/通知 | 已做（Windows 打包版验证了代码路径） | 托盘图标为占位；任务 4：关闭按钮隐藏到托盘、任务失败触发 Notification.show、resume 事件触发对账都在打包版验证；托盘可见 / 通知气泡可见 / 退出确认对话框 / 真实睡眠待人眼确认（见 windows-test-results/2026-10-02.md） |
+| E03 唤醒对账/托盘/通知 | 已做（Windows 打包版验证了代码路径） | 托盘图标为占位；任务 4：关闭按钮隐藏到托盘、任务失败触发 Notification.show、resume 事件触发对账都在打包版验证；2026-10-02 人眼确认：托盘可见、通知横幅可见并点击回窗口（Windows「勿扰」开着时横幅不弹只进通知中心）、退出确认对话框两个分支都对；真实睡眠第一次跑（真 Key）暴露一个真 bug：唤醒后 DNS 未恢复，下载阶段直接判任务失败——已改成退避重试（local 454/454），待复测（见 windows-test-results/2026-10-02.md） |
 | E04 任务中心 | 已做（未在浏览器打开） | |
 | F04 快捷键/撤销 | 已做（未在浏览器测） | |
 | F06 自动保存与恢复 | 部分 | localStorage 草稿恢复，未用 IndexedDB |
@@ -61,7 +61,7 @@
 | 内核接线 I1 出图出视频走队列写回内核 | 已做（模拟数据） | /episodes/:id/generate，估价确认，幂等，缓存命中，崩溃恢复 |
 | 内核接线 I2 剧本入库/配音/词级字幕/真实片长 | 已做（模拟数据） | 配音已于任务 3 进队列/任务中心（`voiceover/queue.js`） |
 | 任务 3：配音进队列 / 真实花费回写 / 画布新增节点 | 已做（代码 + 单测；未真 Key 在界面点击验证） | 配音 `POST /episodes/:id/voiceover` 改为建 `/ai-tasks`（kind tts），估价/确认/402 不变，worker 完成后由 `voiceover/queue.js` 经内核 `recordGeneration` 写回旁白版本与词级字幕，新增 `GET .../voiceover/status`，配音抽屉轮询并显示排队/生成中/失败；任务结果 `usage` 写进 `spend_log.usage/actual`（视频计费时长 × 分辨率价、配音字符、图片张数），花费页显示预估/实际/用量；`prices.json` 换为百炼公开价目（2025-12-19）；画布工具栏新增节点（shot/script_line/image/video/narration，经 `canvas.addNodeAt`）、场景组改名（新意图 `canvas.renameGroup`），时间线页的本地撤销/重做按钮移除，Ctrl+Z/Y 改为先保存再走内核历史。见 windows-test-results/2026-10-02.md |
-| 任务 4：Windows 人工检查 | 已做（打包版自动化实测 + 人眼清单） | 按 test-matrix：20 个页面逐个打开无控制台异常（含剧本页、画布页、视图切换栏、花费页、登录页）；safeStorage 密文落盘 / 重启可用 / 日志脱敏；关闭隐藏到托盘；通知与唤醒对账的代码路径；中文 + 空格路径下的数据目录、ffmpeg 目录和导出输出；h264_qsv 导出 720p/1080p、取消、场景缓存；干净退出。托盘可见、通知气泡、退出确认对话框、真实睡眠、界面点导出按钮列为人眼清单。发现 5 个观察项（时间线页重复提示、开发态 better-sqlite3 ABI 不匹配、缓存 4/5 命中、数据目录不可自定义、ffmpeg 无 libx264），同日第二轮全部处理：时间线 404 静默、`scripts/native-abi.mjs` + `pnpm native:node/electron` 切 ABI（打包脚本顺带清掉会让 electron-builder 跳过重编的 `.forge-meta`）、plan.rs 并列排序去 id、`--user-data-dir=` / `TALEKILN_USER_DATA_DIR` 自定义数据目录、libopenh264 软件回退，各带测试。见 windows-test-results/2026-10-02.md |
+| 任务 4：Windows 人工检查 | 已做（打包版自动化实测 + 人眼清单） | 按 test-matrix：20 个页面逐个打开无控制台异常（含剧本页、画布页、视图切换栏、花费页、登录页）；safeStorage 密文落盘 / 重启可用 / 日志脱敏；关闭隐藏到托盘；通知与唤醒对账的代码路径；中文 + 空格路径下的数据目录、ffmpeg 目录和导出输出；h264_qsv 导出 720p/1080p、取消、场景缓存；干净退出。托盘可见、通知气泡、退出确认对话框、真实睡眠、界面点导出按钮列为人眼清单。发现 5 个观察项（时间线页重复提示、开发态 better-sqlite3 ABI 不匹配、缓存 4/5 命中、数据目录不可自定义、ffmpeg 无 libx264），同日第二轮全部处理：时间线 404 静默、`scripts/native-abi.mjs` + `pnpm native:node/electron` 切 ABI（打包脚本顺带清掉会让 electron-builder 跳过重编的 `.forge-meta`）、plan.rs 并列排序去 id、`--user-data-dir=` / `TALEKILN_USER_DATA_DIR` 自定义数据目录、libopenh264 软件回退，各带测试。见 windows-test-results/2026-10-02.md。人眼清单（同日）：托盘、E1 通知、E3 退出确认、G1 成片与页面导出已人眼确认通过；顺带修了分镜页自动保存的「Illegal invocation」、新镜头预填文字、空描述提示顶起输入框、表头不固定三处体验，记录了两个待产品决定项（空镜头导出报错不指名、「AI生成」片头标识突兀）；I1 真实睡眠与 B3 连通测试待真 Key |
 | 内核接线 I3 旧写接口改走内核 | 已做 | 镜头与时间线编辑全部经内核；剩余绕过清单见 kernel-design §12.5 |
 | 只接百炼 + 扩展文档 + 全流程覆盖审计 + 端到端脚本 | 已做（Windows 真 Key 端到端通过） | providers.enabled 默认只开百炼；docs/bailian-flow-coverage.md |
 | 云端真 Postgres 验证 | 已做 | 33 个测试在内存库与 Postgres 上同一套断言通过；CI 加 Postgres 任务 |

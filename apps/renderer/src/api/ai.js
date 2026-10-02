@@ -16,8 +16,9 @@ export const aiAPI = {
   delete(id) {
     return request.delete(`/ai-configs/${id}`)
   },
+  // 结果在「测试连接」对话框里展示，不再叠一个全局错误横幅
   testConnection(body) {
-    return request.post('/ai-configs/test', body)
+    return request.post('/ai-configs/test', body, { silentError: true })
   },
   /** 即梦2角色认证：GET /api/business/v1/assets（body: base_url, api_key, limit?, cursor?） */
   listJimeng2MaterialAssets(body) {
