@@ -79,3 +79,13 @@
 | P3-T2 官方模板文案 | 8 套新模板包（都市甜宠、逆袭打脸、悬疑反转、穿越重生、校园、家庭伦理、职场、治愈），付费示例为 `official-revenge-god-of-war`、`official-suspense-seventh-visitor`；`GENRE_LABEL` 扩充；文案规范写进 `docs/phase3-templates.md`（共 11 套） | 文案没有用真 Key 出过图，提示词效果未验；运营口径需 Jay 过目 |
 
 下一步：Jay 恢复 Actions 配额后重跑 CI；Windows 真机过一遍人脸评分、云备份设置页、插件审核页；服务器重装后按部署手册生成签名密钥并起 MinIO。
+
+## P3-S 基础（第三批，2026-10-02 下午）
+
+分支 `p3c-studio`，详见 `docs/phase3-studio.md`。按 Jay 的决定：共享存储用自建 MinIO（复用 P3-K 的 S3 客户端与设置，桶内 `shared/<studio_id>/` 前缀），**席位定价仍未定**，所以只有 `seatLimit` 配置位（`STUDIO_DEFAULT_SEAT_LIMIT`，后台可改），没有价格字段、不接支付、不做私有部署。
+
+做了什么：云端 Studio 模块（`Studio` / `StudioMember` / `StudioInvite`，迁移 `20261006000000_studio`；创建 / 邀请 / 接受 / 移除 / 改角色 / 我的工作室；席位占用 = 成员 + 待处理邀请，超限 403 `seat_limit`；后台 `/admin/studios` 列表、调席位、停用；用户侧写操作也进审计）；本机 `studio` 模块（云端身份缓存与离线回落、成员管理转发、共享角色的发布 / 拉取——主图、四视图、锁定参考图、`extra_images`，清单与每个文件都带 sha256，拉取时校验、更新覆盖同一本机角色；共享模板复用模板包格式与模板服务安装；迁移 36 `studio_shared_items`；`/api/v1/studio/*`）；渲染端「工作室」设置页（`/settings/studio`，命令面板入口）；后台「工作室」页（纯函数 + 测试）。测试：cloud 108、local 658（3 条按环境跳过）、renderer 281 并 `vite build`、admin 50 并 `vite build`，密钥扫描通过。
+
+未验证：真实云端 + 真实 MinIO 的两机端到端（云端只跑了内存仓储 + 本进程 HTTP，Prisma 实现只做了类型检查；本机只对假 S3 跑过）；两个页面没在浏览器里点过；大图批量的内存；旧文件不清理；并发发布的版本号没有条件写；成员在对象存储层面仍是读写权限（只在服务层限制发布）。
+
+需要 Jay 决定：席位定价与超限策略；企业证书形式（个人账号 + 席位，还是独立企业许可证）；每工作室独立 S3 凭据（云端签发 STS / 独立用户，`docs/tencent-deploy.md` §8.7 已给策略写法）；私有部署要不要做、怎么分发企业配置；拉取的角色要不要进「跨项目的本机角色库」。

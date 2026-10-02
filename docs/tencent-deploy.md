@@ -276,3 +276,28 @@ docker run --rm --volumes-from "$(docker compose -f docker-compose.yml -f docker
 | Cloudflare R2 | `https://<账号id>.r2.cloudflarestorage.com` | `auto` | 路径式 |
 
 以上地址格式按各家当前文档为准，这里没有在真实账号上验证过。第三方的 Key 同样只给单桶、单前缀的最小权限。
+
+### 8.7 工作室版共享库（P3-S）：同一个桶里的 `shared/` 前缀
+
+工作室版的共享角色库与模板放在同一个桶、同一个前缀下的 `talekiln/shared/<studio_id>/…`（`docs/phase3-studio.md` §2），**现在桌面端沿用 8.3 那把 Key**，它对 `talekiln/*` 整体读写，所以「成员只读、管理员可写」目前只由本机服务层强制。等 Jay 决定做每工作室独立凭据时，按前缀再建两份策略即可（把 `<studio_id>` 换成实际 id；成员只读、管理员读写）：
+
+```bash
+cat > /tmp/studio-ro.json <<'JSON'
+{ "Version": "2012-10-17", "Statement": [
+  { "Effect": "Allow", "Action": ["s3:ListBucket", "s3:GetBucketLocation"], "Resource": ["arn:aws:s3:::talekiln-backup"],
+    "Condition": { "StringLike": { "s3:prefix": ["talekiln/shared/<studio_id>/*", "talekiln/shared/<studio_id>"] } } },
+  { "Effect": "Allow", "Action": ["s3:GetObject"], "Resource": ["arn:aws:s3:::talekiln-backup/talekiln/shared/<studio_id>/*"] }
+] }
+JSON
+cat > /tmp/studio-rw.json <<'JSON'
+{ "Version": "2012-10-17", "Statement": [
+  { "Effect": "Allow", "Action": ["s3:ListBucket", "s3:GetBucketLocation"], "Resource": ["arn:aws:s3:::talekiln-backup"],
+    "Condition": { "StringLike": { "s3:prefix": ["talekiln/shared/<studio_id>/*", "talekiln/shared/<studio_id>"] } } },
+  { "Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], "Resource": ["arn:aws:s3:::talekiln-backup/talekiln/shared/<studio_id>/*"] }
+] }
+JSON
+mc admin policy create local studio-<studio_id>-ro /tmp/studio-ro.json
+mc admin policy create local studio-<studio_id>-rw /tmp/studio-rw.json
+```
+
+云端的 `STUDIO_DEFAULT_SEAT_LIMIT`（默认 3）是新建工作室的席位数，席位定价待定，后台「工作室」页可以逐个调整。这一节的策略没有在真实 MinIO 上验证过。
