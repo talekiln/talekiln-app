@@ -186,12 +186,25 @@ const childOf = (node, name) => (node ? node.children.find((c) => c.name === nam
 const childrenOf = (node, name) => (node ? node.children.filter((c) => c.name === name) : []);
 const textOf = (node, name) => { const c = childOf(node, name); return c ? c.text : ''; };
 
-/** 解析 ListObjectsV2 响应。 */
+/**
+ * 解码 encoding-type=url 的键：对象存储按查询串规则编码（空格是 +，字面 + 是 %2B，% 是 %25），
+ * 与 AWS SDK 一样先把 + 还原成空格再百分号解码。解码失败（非法序列）原样返回。
+ */
+function decodeListKey(s) {
+  try { return decodeURIComponent(String(s).replace(/\+/g, ' ')); } catch (_) { return s; }
+}
+
+/**
+ * 解析 ListObjectsV2 响应。响应声明 <EncodingType>url</EncodingType> 时，Key 与 CommonPrefixes/Prefix 是 URL 编码过的，这里解码。
+ * 只看响应里的声明而不看请求：AWS / MinIO 只在请求 encoding-type=url 时编码，gofakes3（rclone serve s3）则一律编码并声明。
+ */
 function parseListObjects(xml) {
   const root = parseXml(xml);
   if (!root || root.name !== 'ListBucketResult') throw new Error('xml: not a ListBucketResult');
+  const encodingType = textOf(root, 'EncodingType') || null;
+  const dec = encodingType === 'url' ? decodeListKey : (s) => s;
   const contents = childrenOf(root, 'Contents').map((c) => ({
-    key: textOf(c, 'Key'),
+    key: dec(textOf(c, 'Key')),
     size: Number(textOf(c, 'Size')) || 0,
     lastModified: textOf(c, 'LastModified') || null,
     etag: (textOf(c, 'ETag') || '').replace(/^"|"$/g, '') || null,
@@ -199,10 +212,11 @@ function parseListObjects(xml) {
   const token = textOf(root, 'NextContinuationToken');
   return {
     contents,
-    commonPrefixes: childrenOf(root, 'CommonPrefixes').map((p) => textOf(p, 'Prefix')),
+    commonPrefixes: childrenOf(root, 'CommonPrefixes').map((p) => dec(textOf(p, 'Prefix'))),
     isTruncated: textOf(root, 'IsTruncated') === 'true',
     nextContinuationToken: token || null,
     keyCount: Number(textOf(root, 'KeyCount')) || contents.length,
+    encodingType,
   };
 }
 
@@ -377,9 +391,12 @@ function createS3Client({
     return { ok: true, status: r.status };
   }
 
-  /** ListObjectsV2 一页：{ contents, commonPrefixes, isTruncated, nextContinuationToken }。 */
+  /**
+   * ListObjectsV2 一页：{ contents, commonPrefixes, isTruncated, nextContinuationToken }。
+   * 按 AWS 的建议请求 encoding-type=url（键里有 XML 不能表示的字符时才不会坏），响应里声明了编码就解码，所以键总是原文。
+   */
   async function listObjectsV2(prefix = '', { continuationToken, maxKeys = 1000, delimiter } = {}) {
-    const query = { 'list-type': '2', prefix: prefix || '', 'max-keys': String(maxKeys) };
+    const query = { 'list-type': '2', prefix: prefix || '', 'max-keys': String(maxKeys), 'encoding-type': 'url' };
     if (continuationToken) query['continuation-token'] = continuationToken;
     if (delimiter) query.delimiter = delimiter;
     const r = await request('GET', null, { query, op: 'ListObjectsV2' });
@@ -407,5 +424,5 @@ function createS3Client({
 
 module.exports = {
   createS3Client, S3Error, signV4, validateEndpoint, isLoopbackHost, isPrivateHost, uriEncode, canonicalQuery, canonicalPath,
-  parseXml, parseListObjects, parseErrorXml, sha256Hex, EMPTY_SHA256, UNSIGNED_PAYLOAD, DEFAULT_REGION, BUCKET_RE,
+  parseXml, parseListObjects, parseErrorXml, decodeListKey, sha256Hex, EMPTY_SHA256, UNSIGNED_PAYLOAD, DEFAULT_REGION, BUCKET_RE,
 };
