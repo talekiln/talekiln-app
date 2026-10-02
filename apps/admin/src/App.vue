@@ -18,6 +18,9 @@ const menu = [
   { path: '/invites', label: '邀请码', perm: 'read' },
   { path: '/users', label: '用户', perm: 'read' },
   { path: '/content', label: '模型目录', perm: 'read' },
+  { path: '/templates', label: '模板市场', perm: 'read' },
+  { path: '/plugins', label: '插件审核', perm: 'read' },
+  { path: '/studios', label: '工作室', perm: 'read' },
   { path: '/admins', label: '管理员与审计', perm: 'admins:manage' },
 ]
 const items = computed(() => visibleMenu(menu, me.value))

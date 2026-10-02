@@ -66,7 +66,8 @@ function checkResult(cap, r, assert) {
       assert.ok(r && Array.isArray(r.urls) && r.urls.length > 0 && r.urls.every((u) => typeof u === 'string' && u), 'image.generate must return {urls: string[]} (non-empty)');
       break;
     case 'video.submit':
-      assert.ok(r && typeof r.taskId === 'string' && r.taskId, 'video.submit must return {taskId}');
+    case 'video.edit':
+      assert.ok(r && typeof r.taskId === 'string' && r.taskId, `${cap} must return {taskId}`);
       break;
     case 'video.poll':
       assert.ok(r && VIDEO_STATUSES.includes(r.status), `video.poll status must be one of ${VIDEO_STATUSES.join('|')}`);

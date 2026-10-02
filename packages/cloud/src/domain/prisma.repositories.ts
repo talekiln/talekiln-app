@@ -1,11 +1,118 @@
-import type { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import type {
-  AdminAuditRecord, AdminRoleRecord, AnnouncementRecord, Entitlements, PlanVersion, ReleaseRecord, Repositories,
+  AdminAuditRecord, AdminRoleRecord, AnnouncementRecord, Entitlements, PlanVersion, PluginReviewRecord, PluginVersionRecord, ReleaseRecord, Repositories,
+  TemplateRecord, TemplateVersionRecord, SmsCodeRecord, WechatQrTicketRecord, StudioRecord, StudioMemberRecord, StudioInviteRecord,
 } from './repositories';
 
 // Prisma 实现（需要真实 PostgreSQL 才能验证）。
 export function createPrismaRepositories(db: PrismaClient): Repositories {
   return {
+    templates: {
+      async create(t, now) { return toTemplate(await db.template.create({ data: { ...t, createdAt: now, updatedAt: now } })); },
+      async update(id, patch, now) {
+        const r = await db.template.updateMany({ where: { id }, data: { ...patch, updatedAt: now } });
+        return r.count === 1 ? toTemplate(await db.template.findUniqueOrThrow({ where: { id } })) : null;
+      },
+      async findById(id) { const r = await db.template.findUnique({ where: { id } }); return r ? toTemplate(r) : null; },
+      async list() { return (await db.template.findMany({ orderBy: { id: 'asc' } })).map(toTemplate); },
+      async delete(id) { return (await db.template.deleteMany({ where: { id } })).count === 1; },
+      async addVersion(v, now) {
+        return toTemplateVersion(await db.templateVersion.create({
+          data: { ...v, manifest: v.manifest as Prisma.InputJsonValue, createdAt: now, published: false, publishedAt: null },
+        }));
+      },
+      async findVersion(id) { const r = await db.templateVersion.findUnique({ where: { id } }); return r ? toTemplateVersion(r) : null; },
+      async listVersions(templateId) {
+        return (await db.templateVersion.findMany({ where: { templateId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] })).map(toTemplateVersion);
+      },
+      async setPublished(id, published, now) {
+        const r = await db.templateVersion.updateMany({ where: { id }, data: { published, publishedAt: published ? now : null } });
+        return r.count === 1 ? toTemplateVersion(await db.templateVersion.findUniqueOrThrow({ where: { id } })) : null;
+      },
+      async listPublished() {
+        return (await db.templateVersion.findMany({ where: { published: true }, orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }] })).map(toTemplateVersion);
+      },
+    },
+    studios: {
+      async create(s, now) { return toStudio(await db.studio.create({ data: { ...s, createdAt: now, updatedAt: now } })); },
+      async update(id, patch, now) {
+        const r = await db.studio.updateMany({ where: { id }, data: { ...patch, updatedAt: now } });
+        return r.count === 1 ? toStudio(await db.studio.findUniqueOrThrow({ where: { id } })) : null;
+      },
+      async findById(id) { const r = await db.studio.findUnique({ where: { id } }); return r ? toStudio(r) : null; },
+      async list() { return (await db.studio.findMany({ orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] })).map(toStudio); },
+      async listByMember(accountId) {
+        return (await db.studio.findMany({ where: { members: { some: { accountId, status: 'active' } } }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] })).map(toStudio);
+      },
+      async addMember(m, now) { return toStudioMember(await db.studioMember.create({ data: { ...m, createdAt: now, updatedAt: now } })); },
+      async updateMember(id, patch, now) {
+        const r = await db.studioMember.updateMany({ where: { id }, data: { ...patch, updatedAt: now } });
+        return r.count === 1 ? toStudioMember(await db.studioMember.findUniqueOrThrow({ where: { id } })) : null;
+      },
+      async findMember(studioId, accountId) {
+        const r = await db.studioMember.findUnique({ where: { studioId_accountId: { studioId, accountId } } });
+        return r ? toStudioMember(r) : null;
+      },
+      async listMembers(studioId) {
+        return (await db.studioMember.findMany({ where: { studioId }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] })).map(toStudioMember);
+      },
+      async createInvite(i, now) {
+        return toStudioInvite(await db.studioInvite.create({ data: { ...i, createdAt: now, usedAt: null, usedById: null, revokedAt: null } }));
+      },
+      async findInviteByCode(code) { const r = await db.studioInvite.findUnique({ where: { code } }); return r ? toStudioInvite(r) : null; },
+      async findInvite(id) { const r = await db.studioInvite.findUnique({ where: { id } }); return r ? toStudioInvite(r) : null; },
+      async listInvites(studioId) {
+        return (await db.studioInvite.findMany({ where: { studioId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] })).map(toStudioInvite);
+      },
+      async updateInvite(id, patch) {
+        const r = await db.studioInvite.updateMany({ where: { id }, data: patch });
+        return r.count === 1 ? toStudioInvite(await db.studioInvite.findUniqueOrThrow({ where: { id } })) : null;
+      },
+    },
+    plugins: {
+      async upsertPlugin(p, now) {
+        return db.plugin.upsert({
+          where: { name: p.name },
+          create: { ...p, createdAt: now, updatedAt: now },
+          update: { label: p.label, homepage: p.homepage, updatedAt: now },
+        });
+      },
+      findPluginByName: (name) => db.plugin.findUnique({ where: { name } }),
+      listPlugins: () => db.plugin.findMany({ orderBy: { name: 'asc' } }),
+      async createVersion(v, now) {
+        return toPluginVersion(await db.pluginVersion.create({
+          data: {
+            ...v, manifest: v.manifest as Prisma.InputJsonValue, fileHashes: v.fileHashes as Prisma.InputJsonValue,
+            createdAt: now, updatedAt: now,
+          },
+          include: { plugin: { select: { name: true } } },
+        }));
+      },
+      async findVersion(id) {
+        const r = await db.pluginVersion.findUnique({ where: { id }, include: { plugin: { select: { name: true } } } });
+        return r ? toPluginVersion(r) : null;
+      },
+      async listVersions(f) {
+        return (await db.pluginVersion.findMany({
+          where: { pluginId: f.pluginId, reviewStatus: f.reviewStatus },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: f.limit,
+          include: { plugin: { select: { name: true } } },
+        })).map(toPluginVersion);
+      },
+      async setReview(id, r, now) {
+        const u = await db.pluginVersion.updateMany({ where: { id }, data: { ...r, updatedAt: now } });
+        return u.count === 1 ? toPluginVersion(await db.pluginVersion.findUniqueOrThrow({ where: { id }, include: { plugin: { select: { name: true } } } })) : null;
+      },
+      async setSignature(id, s, now) {
+        const u = await db.pluginVersion.updateMany({
+          where: { id },
+          data: { signature: s.signature === null ? Prisma.DbNull : (s.signature as unknown as Prisma.InputJsonValue), signedAt: s.signedAt, signedBy: s.signedBy, updatedAt: now },
+        });
+        return u.count === 1 ? toPluginVersion(await db.pluginVersion.findUniqueOrThrow({ where: { id }, include: { plugin: { select: { name: true } } } })) : null;
+      },
+      addReview: async (r) => toPluginReview(await db.pluginReview.create({ data: r })),
+      listReviews: async (versionId) => (await db.pluginReview.findMany({ where: { versionId }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] })).map(toPluginReview),
+    },
     announcements: {
       async create(a, now) {
         return toAnnouncement(await db.announcement.create({ data: { ...a, createdAt: now, updatedAt: now } }));
@@ -76,6 +183,8 @@ export function createPrismaRepositories(db: PrismaClient): Repositories {
       setDisabled: async (id, at) => { await db.account.update({ where: { id }, data: { disabledAt: at } }); },
       findById: (id) => db.account.findUnique({ where: { id } }),
       findByEmail: (email) => db.account.findUnique({ where: { email } }),
+      findByPhone: (phone) => db.account.findUnique({ where: { phone } }),
+      findByWechatOpenId: (wechatOpenId) => db.account.findUnique({ where: { wechatOpenId } }),
       delete: async (id) => { await db.account.delete({ where: { id } }); },
       setRole: async (id, role) => { await db.account.update({ where: { id }, data: { role } }); },
     },
@@ -378,6 +487,41 @@ export function createPrismaRepositories(db: PrismaClient): Repositories {
         });
       },
     },
+    // P2-C 登录：短信验证码与微信扫码票据
+    smsCodes: {
+      create: (c) => db.smsCode.create({ data: c }) as Promise<SmsCodeRecord>,
+      findActive: (phone, scene, now) => db.smsCode.findFirst({
+        where: { phone, scene, consumedAt: null, expiresAt: { gt: now } },
+        orderBy: { createdAt: 'desc' },
+      }) as Promise<SmsCodeRecord | null>,
+      async voidActive(phone, scene, now) {
+        await db.smsCode.updateMany({ where: { phone, scene, consumedAt: null }, data: { consumedAt: now } });
+      },
+      async incrementAttempts(id) {
+        const r = await db.smsCode.update({ where: { id }, data: { attempts: { increment: 1 } }, select: { attempts: true } });
+        return r.attempts;
+      },
+      async consume(id, now) {
+        // 条件更新：并发下只有一个请求能把 consumedAt 从 NULL 改掉
+        const r = await db.smsCode.updateMany({ where: { id, consumedAt: null }, data: { consumedAt: now } });
+        return r.count === 1;
+      },
+    },
+    wechatQr: {
+      create: (t) => db.wechatQrTicket.create({ data: t }) as Promise<WechatQrTicketRecord>,
+      findByTicket: (ticket) => db.wechatQrTicket.findUnique({ where: { ticket } }) as Promise<WechatQrTicketRecord | null>,
+      async transition(ticket, from, to, openId) {
+        const r = await db.wechatQrTicket.updateMany({
+          where: { ticket, status: { in: from } },
+          data: { status: to, ...(openId !== null ? { openId } : {}) },
+        });
+        return r.count === 1;
+      },
+      async consume(ticket, now) {
+        const r = await db.wechatQrTicket.updateMany({ where: { ticket, status: 'confirmed', consumedAt: null }, data: { consumedAt: now } });
+        return r.count === 1;
+      },
+    },
   };
 }
 
@@ -420,4 +564,45 @@ function toAdminRole(r: { accountId: string; role: string; grantedBy: string | n
 
 function toAudit(r: { id: string; at: Date; actorId: string | null; actorEmail: string | null; actorRole: string | null; action: string; targetType: string | null; targetId: string | null; ok: boolean; status: number; detail: Prisma.JsonValue | null; ip: string | null }): AdminAuditRecord {
   return { ...r, actorRole: r.actorRole as AdminAuditRecord['actorRole'], detail: r.detail };
+}
+
+function toTemplate(r: { id: string; name: string; genre: string; tier: string; description: string; createdAt: Date; updatedAt: Date }): TemplateRecord {
+  return { ...r, tier: r.tier as TemplateRecord['tier'] };
+}
+
+function toTemplateVersion(r: {
+  id: string; templateId: string; version: string; manifest: Prisma.JsonValue; packageUrl: string | null; sha256: string; signature: string;
+  kid: string; tier: string; published: boolean; publishedAt: Date | null; createdAt: Date;
+}): TemplateVersionRecord {
+  return { ...r, manifest: r.manifest as unknown, tier: r.tier as TemplateVersionRecord['tier'] };
+}
+function toPluginVersion(r: {
+  id: string; pluginId: string; version: string; manifest: Prisma.JsonValue; fileHashes: Prisma.JsonValue; hash: string;
+  packageUrl: string; sha256: string; signature: Prisma.JsonValue | null; signedAt: Date | null; signedBy: string | null;
+  reviewStatus: string; reviewedAt: Date | null; reviewedBy: string | null; submittedBy: string | null; createdAt: Date; updatedAt: Date;
+  plugin: { name: string };
+}): PluginVersionRecord {
+  const { plugin, ...rest } = r;
+  return {
+    ...rest, pluginName: plugin.name,
+    manifest: r.manifest as Record<string, unknown>, fileHashes: r.fileHashes as Record<string, string>,
+    signature: (r.signature ?? null) as PluginVersionRecord['signature'],
+    reviewStatus: r.reviewStatus as PluginVersionRecord['reviewStatus'],
+  };
+}
+
+function toPluginReview(r: { id: string; versionId: string; action: string; notes: string; actorId: string | null; actorEmail: string | null; createdAt: Date }): PluginReviewRecord {
+  return { ...r, action: r.action as PluginReviewRecord['action'] };
+}
+
+function toStudio(r: { id: string; name: string; ownerId: string; seatLimit: number; status: string; createdAt: Date; updatedAt: Date }): StudioRecord {
+  return { ...r, status: r.status as StudioRecord['status'] };
+}
+
+function toStudioMember(r: { id: string; studioId: string; accountId: string; role: string; status: string; joinedAt: Date | null; removedAt: Date | null; createdAt: Date; updatedAt: Date }): StudioMemberRecord {
+  return { ...r, role: r.role as StudioMemberRecord['role'], status: r.status as StudioMemberRecord['status'] };
+}
+
+function toStudioInvite(r: { id: string; studioId: string; code: string; email: string | null; role: string; createdBy: string | null; expiresAt: Date; usedAt: Date | null; usedById: string | null; revokedAt: Date | null; createdAt: Date }): StudioInviteRecord {
+  return { ...r, role: r.role as StudioInviteRecord['role'] };
 }

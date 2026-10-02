@@ -25,7 +25,10 @@ if (process.env.TALEKILN_DEV_SECRET_KEY) {
     filePath: require('path').join(process.cwd(), 'data', 'secrets.enc.json'),
   });
 }
-const { app, config, aiQueue } = createApp({ secretStore });
+// 假厂商模式（仅开发 / 浏览器 e2e）：TALEKILN_FAKE_VENDOR=1 时不联网、不花钱，见 providers/fakeVendor.js
+const fakeOpts = process.env.TALEKILN_FAKE_VENDOR === '1' ? require('./providers/fakeVendor').fakeAppOptions(preConfig) : {};
+if (process.env.TALEKILN_FAKE_VENDOR === '1') console.warn('[fake-vendor] 已启用假厂商：所有生成 / 评分 / 导演模式都是本机合成结果，仅用于测试');
+const { app, config, aiQueue } = createApp({ secretStore, ...fakeOpts });
 const port = Number(process.env.PORT) || config.server?.port || 5679;
 const host = '127.0.0.1';
 

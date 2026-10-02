@@ -9,6 +9,10 @@ export interface Account {
   plan: string;
   disabledAt: Date | null;
   createdAt: Date;
+  /** 手机号（P2-C 短信登录），11 位大陆号码，唯一；邮箱密码账号为空。 */
+  phone: string | null;
+  /** 微信 openid（P2-C 扫码登录），唯一。 */
+  wechatOpenId: string | null;
 }
 
 export interface InviteCode {
@@ -46,7 +50,9 @@ export interface RefreshTokenRecord {
 }
 
 export interface AccountRepository {
-  create(a: Omit<Account, 'id' | 'createdAt' | 'disabledAt'> & { disabledAt?: Date | null }): Promise<Account>;
+  create(a: Omit<Account, 'id' | 'createdAt' | 'disabledAt' | 'phone' | 'wechatOpenId'> & { disabledAt?: Date | null; phone?: string | null; wechatOpenId?: string | null }): Promise<Account>;
+  findByPhone(phone: string): Promise<Account | null>;
+  findByWechatOpenId(openId: string): Promise<Account | null>;
   list(): Promise<Account[]>;
   setDisabled(id: string, at: Date | null): Promise<void>;
   findById(id: string): Promise<Account | null>;
@@ -442,6 +448,264 @@ export interface AdminAuditRepository {
   list(f: AdminAuditFilter): Promise<AdminAuditRecord[]>;
 }
 
+// ---------------------------------------------------------------------------
+// 模板市场（P3-T）：模板 + 版本（清单 JSON、内容摘要、官方签名）。
+// ---------------------------------------------------------------------------
+export type TemplateTier = 'free' | 'pro';
+
+export interface TemplateRecord {
+  /** 即清单里的 id（slug）。 */
+  id: string;
+  name: string;
+  genre: string;
+  tier: TemplateTier;
+  description: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+export type TemplateInput = Omit<TemplateRecord, 'createdAt' | 'updatedAt'>;
+
+export interface TemplateVersionRecord {
+  id: string;
+  templateId: string;
+  version: string;
+  /** 已校验的清单（不含 signature）。 */
+  manifest: unknown;
+  packageUrl: string | null;
+  /** 清单摘要（canonicalJson 的 sha256，十六进制）。 */
+  sha256: string;
+  /** 对 'tpl-' + sha256 的 ES256 紧凑 JWS。 */
+  signature: string;
+  kid: string;
+  tier: TemplateTier;
+  published: boolean;
+  publishedAt: Date | null;
+  createdAt: Date;
+}
+export type TemplateVersionInput = Omit<TemplateVersionRecord, 'id' | 'published' | 'publishedAt' | 'createdAt'>;
+
+export interface TemplateRepository {
+  /** id 重复抛唯一键错误。 */
+  create(t: TemplateInput, now: Date): Promise<TemplateRecord>;
+  update(id: string, patch: Partial<Omit<TemplateInput, 'id'>>, now: Date): Promise<TemplateRecord | null>;
+  findById(id: string): Promise<TemplateRecord | null>;
+  /** 按 id 升序。 */
+  list(): Promise<TemplateRecord[]>;
+  /** 级联删除版本。 */
+  delete(id: string): Promise<boolean>;
+  /** (templateId, version) 重复抛唯一键错误；模板不存在抛错。 */
+  addVersion(v: TemplateVersionInput, now: Date): Promise<TemplateVersionRecord>;
+  findVersion(id: string): Promise<TemplateVersionRecord | null>;
+  /** 某模板的全部版本，新建的在前。 */
+  listVersions(templateId: string): Promise<TemplateVersionRecord[]>;
+  /** 发布 / 下架；发布时写 publishedAt。 */
+  setPublished(id: string, published: boolean, now: Date): Promise<TemplateVersionRecord | null>;
+  /** 全部已发布版本，publishedAt 新的在前。 */
+  listPublished(): Promise<TemplateVersionRecord[]>;
+}
+// 插件注册表（P3-P）：登记、版本、审核、官方签名。云端不存插件包，只存 manifest 与哈希。
+// ---------------------------------------------------------------------------
+export type PluginReviewStatus = 'pending' | 'approved' | 'rejected';
+export type PluginReviewAction = 'submit' | 'approve' | 'reject' | 'sign';
+
+export interface PluginSignature { alg: 'ES256'; kid: string; value: string }
+
+export interface PluginRecord {
+  id: string;
+  name: string;
+  label: string;
+  homepage: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PluginVersionRecord {
+  id: string;
+  pluginId: string;
+  pluginName: string;
+  version: string;
+  /** 提交时的 manifest（含 files，不含 signature）。 */
+  manifest: Record<string, unknown>;
+  /** { "<相对路径>": "<sha256 hex>" } */
+  fileHashes: Record<string, string>;
+  /** sha256(签名载荷)：本地插件页展示的指纹，用于把已安装插件对到审核记录。 */
+  hash: string;
+  packageUrl: string;
+  sha256: string;
+  signature: PluginSignature | null;
+  signedAt: Date | null;
+  signedBy: string | null;
+  reviewStatus: PluginReviewStatus;
+  reviewedAt: Date | null;
+  reviewedBy: string | null;
+  submittedBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PluginReviewRecord {
+  id: string;
+  versionId: string;
+  action: PluginReviewAction;
+  notes: string;
+  actorId: string | null;
+  actorEmail: string | null;
+  createdAt: Date;
+}
+
+export interface PluginVersionInput {
+  pluginId: string;
+  version: string;
+  manifest: Record<string, unknown>;
+  fileHashes: Record<string, string>;
+  hash: string;
+  packageUrl: string;
+  sha256: string;
+  submittedBy: string | null;
+}
+
+export interface PluginRepository {
+  /** 按 name 新建或更新 label/homepage（每个插件名一条）。 */
+  upsertPlugin(p: { name: string; label: string; homepage: string | null }, now: Date): Promise<PluginRecord>;
+  findPluginByName(name: string): Promise<PluginRecord | null>;
+  listPlugins(): Promise<PluginRecord[]>;
+  /** (pluginId, version) 重复抛唯一键错误。 */
+  createVersion(v: PluginVersionInput, now: Date): Promise<PluginVersionRecord>;
+  findVersion(id: string): Promise<PluginVersionRecord | null>;
+  /** 新的在前。 */
+  listVersions(f: { pluginId?: string; reviewStatus?: PluginReviewStatus; limit: number }): Promise<PluginVersionRecord[]>;
+  setReview(id: string, r: { reviewStatus: PluginReviewStatus; reviewedAt: Date | null; reviewedBy: string | null }, now: Date): Promise<PluginVersionRecord | null>;
+  setSignature(id: string, s: { signature: PluginSignature | null; signedAt: Date | null; signedBy: string | null }, now: Date): Promise<PluginVersionRecord | null>;
+  addReview(r: Omit<PluginReviewRecord, 'id'>): Promise<PluginReviewRecord>;
+  /** 按时间升序。 */
+  listReviews(versionId: string): Promise<PluginReviewRecord[]>;
+}
+
+// ---------------------------------------------------------------------------
+// 登录（P2-C）：短信验证码与微信扫码票据。验证码只存 HMAC，票据带过期。
+// ---------------------------------------------------------------------------
+export type SmsScene = 'login';
+
+export interface SmsCodeRecord {
+  id: string;
+  phone: string;
+  scene: SmsScene;
+  /** HMAC(accessSecret, phone:code)，不存明文。 */
+  codeHash: string;
+  attempts: number;
+  createdAt: Date;
+  expiresAt: Date;
+  /** 用掉（登录成功）或作废（错 5 次 / 被新码顶掉）的时间。 */
+  consumedAt: Date | null;
+}
+
+export interface SmsCodeRepository {
+  create(c: { phone: string; scene: SmsScene; codeHash: string; createdAt: Date; expiresAt: Date }): Promise<SmsCodeRecord>;
+  /** 该手机号 + 场景下最新一条未消费、未过期的验证码。 */
+  findActive(phone: string, scene: SmsScene, now: Date): Promise<SmsCodeRecord | null>;
+  /** 作废该手机号 + 场景下所有未消费的验证码（发新码时调用）。 */
+  voidActive(phone: string, scene: SmsScene, now: Date): Promise<void>;
+  /** 错误次数 +1，返回新的次数。 */
+  incrementAttempts(id: string): Promise<number>;
+  /** 原子地标记消费：仅当 consumedAt 为空时成功。 */
+  consume(id: string, now: Date): Promise<boolean>;
+}
+
+export type WechatQrStatus = 'pending' | 'scanned' | 'confirmed' | 'expired';
+
+export interface WechatQrTicketRecord {
+  /** 票据即主键（随机、不可猜测）。 */
+  ticket: string;
+  status: WechatQrStatus;
+  /** 确认后由适配器给出的 openid。 */
+  openId: string | null;
+  createdAt: Date;
+  expiresAt: Date;
+  /** 用票据换到令牌的时间（一票一用）。 */
+  consumedAt: Date | null;
+}
+
+export interface WechatQrRepository {
+  create(t: { ticket: string; createdAt: Date; expiresAt: Date }): Promise<WechatQrTicketRecord>;
+  findByTicket(ticket: string): Promise<WechatQrTicketRecord | null>;
+  /** 状态机推进：仅当当前状态在 from 之内时改为 to，返回是否成功。 */
+  transition(ticket: string, from: WechatQrStatus[], to: WechatQrStatus, openId: string | null): Promise<boolean>;
+  /** 原子地标记消费：仅当 status=confirmed 且 consumedAt 为空时成功。 */
+  consume(ticket: string, now: Date): Promise<boolean>;
+}
+
+// ---------------------------------------------------------------------------
+// 工作室版（P3-S）：工作室、成员、席位、邀请。云端只记「谁在哪个工作室」，共享素材在对象存储里。
+// ---------------------------------------------------------------------------
+export type StudioStatus = 'active' | 'suspended';
+export type StudioRole = 'owner' | 'admin' | 'member';
+export type StudioMemberStatus = 'invited' | 'active' | 'removed';
+export type StudioInviteRole = 'admin' | 'member';
+
+export interface StudioRecord {
+  id: string;
+  name: string;
+  ownerId: string;
+  /** 席位上限（由后台设置，将来由订阅驱动；定价待定）。 */
+  seatLimit: number;
+  status: StudioStatus;
+  createdAt: Date;
+  updatedAt: Date;
+}
+export type StudioInput = Omit<StudioRecord, 'id' | 'createdAt' | 'updatedAt'>;
+
+export interface StudioMemberRecord {
+  id: string;
+  studioId: string;
+  accountId: string;
+  role: StudioRole;
+  status: StudioMemberStatus;
+  joinedAt: Date | null;
+  removedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+export type StudioMemberInput = Omit<StudioMemberRecord, 'id' | 'createdAt' | 'updatedAt'>;
+
+export interface StudioInviteRecord {
+  id: string;
+  studioId: string;
+  code: string;
+  /** 指定邮箱时只有该邮箱的账号能接受；为空则凭邀请码任何人可接受。 */
+  email: string | null;
+  role: StudioInviteRole;
+  createdBy: string | null;
+  expiresAt: Date;
+  usedAt: Date | null;
+  usedById: string | null;
+  revokedAt: Date | null;
+  createdAt: Date;
+}
+export type StudioInviteInput = Omit<StudioInviteRecord, 'id' | 'usedAt' | 'usedById' | 'revokedAt' | 'createdAt'>;
+
+export interface StudioRepository {
+  create(s: StudioInput, now: Date): Promise<StudioRecord>;
+  update(id: string, patch: Partial<Omit<StudioInput, 'ownerId'>>, now: Date): Promise<StudioRecord | null>;
+  findById(id: string): Promise<StudioRecord | null>;
+  /** 全部工作室，按创建时间升序。 */
+  list(): Promise<StudioRecord[]>;
+  /** 某账号为 active 成员的工作室。 */
+  listByMember(accountId: string): Promise<StudioRecord[]>;
+  /** (studioId, accountId) 重复抛唯一键错误。 */
+  addMember(m: StudioMemberInput, now: Date): Promise<StudioMemberRecord>;
+  updateMember(id: string, patch: Partial<Pick<StudioMemberRecord, 'role' | 'status' | 'joinedAt' | 'removedAt'>>, now: Date): Promise<StudioMemberRecord | null>;
+  findMember(studioId: string, accountId: string): Promise<StudioMemberRecord | null>;
+  /** 某工作室全部成员（含 removed），按创建时间升序。 */
+  listMembers(studioId: string): Promise<StudioMemberRecord[]>;
+  /** code 重复抛唯一键错误。 */
+  createInvite(i: StudioInviteInput, now: Date): Promise<StudioInviteRecord>;
+  findInviteByCode(code: string): Promise<StudioInviteRecord | null>;
+  findInvite(id: string): Promise<StudioInviteRecord | null>;
+  /** 某工作室全部邀请，新的在前。 */
+  listInvites(studioId: string): Promise<StudioInviteRecord[]>;
+  updateInvite(id: string, patch: Partial<Pick<StudioInviteRecord, 'usedAt' | 'usedById' | 'revokedAt'>>): Promise<StudioInviteRecord | null>;
+}
+
 export const REPOS = Symbol('REPOS');
 export interface Repositories {
   accounts: AccountRepository;
@@ -463,4 +727,9 @@ export interface Repositories {
   releases: ReleaseRepository;
   adminRoles: AdminRoleRepository;
   adminAudit: AdminAuditRepository;
+  templates: TemplateRepository;
+  plugins: PluginRepository;
+  smsCodes: SmsCodeRepository;
+  wechatQr: WechatQrRepository;
+  studios: StudioRepository;
 }

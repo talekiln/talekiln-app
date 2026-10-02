@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import type {
   AdminAuditRecord, AdminRoleRecord, AnnouncementRecord, ReleaseRecord,
   Account, Device, FeedbackRecord, InvoiceRecord, InviteCode, LicenceUsageRecord, OrderRecord, PaymentRecord,
-  Plan, PlanVersion, RefreshTokenRecord, RefundRecord, Repositories, Subscription, TelemetryRow,
+  Plan, PlanVersion, PluginRecord, PluginReviewRecord, PluginVersionRecord, RefreshTokenRecord, RefundRecord, Repositories, Subscription, TelemetryRow,
+  TemplateRecord, TemplateVersionRecord, SmsCodeRecord, WechatQrTicketRecord, StudioRecord, StudioMemberRecord, StudioInviteRecord,
 } from './repositories';
 
 // 内存实现：仅用于测试（单线程 JS 下每个方法体天然原子）。
@@ -27,11 +28,176 @@ export function createMemoryRepositories(): Repositories {
   const announcements = new Map<string, AnnouncementRecord>();
   const releases = new Map<string, ReleaseRecord>();
   const adminRoles = new Map<string, AdminRoleRecord>(); // key: accountId
+  const smsCodes = new Map<string, SmsCodeRecord>();
+  const qrTickets = new Map<string, WechatQrTicketRecord>(); // key: ticket
   const audits: AdminAuditRecord[] = [];
+  const templates = new Map<string, TemplateRecord>();
+  const templateVersions = new Map<string, TemplateVersionRecord>();
+  const plugins = new Map<string, PluginRecord>();
+  const pluginVersions = new Map<string, PluginVersionRecord>();
+  const pluginReviews: PluginReviewRecord[] = [];
+  const studios = new Map<string, StudioRecord>();
+  const studioMembers = new Map<string, StudioMemberRecord>();
+  const studioInvites = new Map<string, StudioInviteRecord>();
   const clone = <T extends object>(x: T): T => structuredClone(x);
   const cloneOrNull = <T extends object>(x: T | undefined | null): T | null => (x ? structuredClone(x) : null);
+  const byNewest = (a: { createdAt: Date; id: string }, b: { createdAt: Date; id: string }) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id);
 
   return {
+    templates: {
+      async create(t, now) {
+        if (templates.has(t.id)) throw new Error('unique:id');
+        const rec: TemplateRecord = { ...t, createdAt: now, updatedAt: now };
+        templates.set(rec.id, rec);
+        return clone(rec);
+      },
+      async update(id, patch, now) {
+        const r = templates.get(id);
+        if (!r) return null;
+        Object.assign(r, patch, { updatedAt: now });
+        return clone(r);
+      },
+      async findById(id) { return cloneOrNull(templates.get(id)); },
+      async list() { return [...templates.values()].sort((a, b) => a.id.localeCompare(b.id)).map(clone); },
+      async delete(id) {
+        if (!templates.delete(id)) return false;
+        for (const [vid, v] of templateVersions) if (v.templateId === id) templateVersions.delete(vid);
+        return true;
+      },
+      async addVersion(v, now) {
+        if (!templates.has(v.templateId)) throw new Error('fk:templateId');
+        for (const x of templateVersions.values()) if (x.templateId === v.templateId && x.version === v.version) throw new Error('unique:version');
+        const rec: TemplateVersionRecord = { ...v, manifest: structuredClone(v.manifest), id: randomUUID(), published: false, publishedAt: null, createdAt: now };
+        templateVersions.set(rec.id, rec);
+        return clone(rec);
+      },
+      async findVersion(id) { return cloneOrNull(templateVersions.get(id)); },
+      async listVersions(templateId) {
+        return [...templateVersions.values()].filter((v) => v.templateId === templateId).sort(byNewest).map(clone);
+      },
+      async setPublished(id, published, now) {
+        const v = templateVersions.get(id);
+        if (!v) return null;
+        v.published = published;
+        v.publishedAt = published ? now : null;
+        return clone(v);
+      },
+      async listPublished() {
+        return [...templateVersions.values()].filter((v) => v.published)
+          .sort((a, b) => (b.publishedAt!.getTime() - a.publishedAt!.getTime()) || byNewest(a, b)).map(clone);
+      },
+    },
+    studios: {
+      async create(s, now) {
+        const rec: StudioRecord = { ...s, id: randomUUID(), createdAt: now, updatedAt: now };
+        studios.set(rec.id, rec);
+        return clone(rec);
+      },
+      async update(id, patch, now) {
+        const r = studios.get(id);
+        if (!r) return null;
+        Object.assign(r, patch, { updatedAt: now });
+        return clone(r);
+      },
+      async findById(id) { return cloneOrNull(studios.get(id)); },
+      async list() { return [...studios.values()].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id)).map(clone); },
+      async listByMember(accountId) {
+        const ids = new Set([...studioMembers.values()].filter((m) => m.accountId === accountId && m.status === 'active').map((m) => m.studioId));
+        return [...studios.values()].filter((s) => ids.has(s.id)).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).map(clone);
+      },
+      async addMember(m, now) {
+        if (!studios.has(m.studioId)) throw new Error('fk:studioId');
+        for (const x of studioMembers.values()) if (x.studioId === m.studioId && x.accountId === m.accountId) throw new Error('unique:member');
+        const rec: StudioMemberRecord = { ...m, id: randomUUID(), createdAt: now, updatedAt: now };
+        studioMembers.set(rec.id, rec);
+        return clone(rec);
+      },
+      async updateMember(id, patch, now) {
+        const r = studioMembers.get(id);
+        if (!r) return null;
+        Object.assign(r, patch, { updatedAt: now });
+        return clone(r);
+      },
+      async findMember(studioId, accountId) {
+        return cloneOrNull([...studioMembers.values()].find((m) => m.studioId === studioId && m.accountId === accountId));
+      },
+      async listMembers(studioId) {
+        return [...studioMembers.values()].filter((m) => m.studioId === studioId).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id)).map(clone);
+      },
+      async createInvite(i, now) {
+        if (!studios.has(i.studioId)) throw new Error('fk:studioId');
+        for (const x of studioInvites.values()) if (x.code === i.code) throw new Error('unique:code');
+        const rec: StudioInviteRecord = { ...i, id: randomUUID(), usedAt: null, usedById: null, revokedAt: null, createdAt: now };
+        studioInvites.set(rec.id, rec);
+        return clone(rec);
+      },
+      async findInviteByCode(code) { return cloneOrNull([...studioInvites.values()].find((i) => i.code === code)); },
+      async findInvite(id) { return cloneOrNull(studioInvites.get(id)); },
+      async listInvites(studioId) { return [...studioInvites.values()].filter((i) => i.studioId === studioId).sort(byNewest).map(clone); },
+      async updateInvite(id, patch) {
+        const r = studioInvites.get(id);
+        if (!r) return null;
+        Object.assign(r, patch);
+        return clone(r);
+      },
+    },
+    plugins: {
+      async upsertPlugin(p, now) {
+        for (const x of plugins.values()) {
+          if (x.name === p.name) {
+            Object.assign(x, { label: p.label, homepage: p.homepage, updatedAt: now });
+            return clone(x);
+          }
+        }
+        const rec: PluginRecord = { ...p, id: randomUUID(), createdAt: now, updatedAt: now };
+        plugins.set(rec.id, rec);
+        return clone(rec);
+      },
+      async findPluginByName(name) {
+        for (const x of plugins.values()) if (x.name === name) return clone(x);
+        return null;
+      },
+      async listPlugins() { return [...plugins.values()].sort((a, b) => a.name.localeCompare(b.name)).map(clone); },
+      async createVersion(v, now) {
+        const plugin = plugins.get(v.pluginId);
+        if (!plugin) throw new Error('fk:pluginId');
+        for (const x of pluginVersions.values()) if (x.pluginId === v.pluginId && x.version === v.version) throw new Error('unique:version');
+        const rec: PluginVersionRecord = {
+          ...clone(v), id: randomUUID(), pluginName: plugin.name, signature: null, signedAt: null, signedBy: null,
+          reviewStatus: 'pending', reviewedAt: null, reviewedBy: null, createdAt: now, updatedAt: now,
+        };
+        pluginVersions.set(rec.id, rec);
+        return clone(rec);
+      },
+      async findVersion(id) { return cloneOrNull(pluginVersions.get(id)); },
+      async listVersions(f) {
+        return [...pluginVersions.values()]
+          .filter((x) => (!f.pluginId || x.pluginId === f.pluginId) && (!f.reviewStatus || x.reviewStatus === f.reviewStatus))
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id))
+          .slice(0, f.limit).map(clone);
+      },
+      async setReview(id, r, now) {
+        const x = pluginVersions.get(id);
+        if (!x) return null;
+        Object.assign(x, r, { updatedAt: now });
+        return clone(x);
+      },
+      async setSignature(id, s, now) {
+        const x = pluginVersions.get(id);
+        if (!x) return null;
+        Object.assign(x, clone(s), { updatedAt: now });
+        return clone(x);
+      },
+      async addReview(r) {
+        const rec: PluginReviewRecord = { ...r, id: randomUUID() };
+        pluginReviews.push(rec);
+        return clone(rec);
+      },
+      async listReviews(versionId) {
+        return pluginReviews.filter((x) => x.versionId === versionId)
+          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).map(clone);
+      },
+    },
     announcements: {
       async create(a, now) {
         const rec: AnnouncementRecord = { ...a, id: randomUUID(), createdAt: now, updatedAt: now };
@@ -100,14 +266,29 @@ export function createMemoryRepositories(): Repositories {
     },
     accounts: {
       async create(a) {
-        for (const x of accounts.values()) if (x.email === a.email) throw new Error('unique:email');
-        const rec: Account = { ...a, disabledAt: a.disabledAt ?? null, id: randomUUID(), createdAt: new Date() };
+        for (const x of accounts.values()) {
+          if (x.email === a.email) throw new Error('unique:email');
+          if (a.phone && x.phone === a.phone) throw new Error('unique:phone');
+          if (a.wechatOpenId && x.wechatOpenId === a.wechatOpenId) throw new Error('unique:wechatOpenId');
+        }
+        const rec: Account = {
+          ...a, disabledAt: a.disabledAt ?? null, phone: a.phone ?? null, wechatOpenId: a.wechatOpenId ?? null,
+          id: randomUUID(), createdAt: new Date(),
+        };
         accounts.set(rec.id, rec);
         return { ...rec };
       },
       async findById(id) { const r = accounts.get(id); return r ? { ...r } : null; },
       async findByEmail(email) {
         for (const x of accounts.values()) if (x.email === email) return { ...x };
+        return null;
+      },
+      async findByPhone(phone) {
+        for (const x of accounts.values()) if (x.phone === phone) return { ...x };
+        return null;
+      },
+      async findByWechatOpenId(openId) {
+        for (const x of accounts.values()) if (x.wechatOpenId === openId) return { ...x };
         return null;
       },
       async list() { return [...accounts.values()].map((x) => ({ ...x })); },
@@ -441,6 +622,59 @@ export function createMemoryRepositories(): Repositories {
         refund.finishedAt = i.now;
         const order = orders.get(refund.orderId);
         if (order && order.status === 'REFUNDING') order.status = 'PAID';
+        return true;
+      },
+    },
+    // P2-C 登录：短信验证码与微信扫码票据
+    smsCodes: {
+      async create(c) {
+        const rec: SmsCodeRecord = { ...c, id: randomUUID(), attempts: 0, consumedAt: null };
+        smsCodes.set(rec.id, rec);
+        return { ...rec };
+      },
+      async findActive(phone, scene, now) {
+        let best: SmsCodeRecord | null = null;
+        for (const x of smsCodes.values()) {
+          if (x.phone !== phone || x.scene !== scene || x.consumedAt || x.expiresAt <= now) continue;
+          if (!best || x.createdAt > best.createdAt) best = x;
+        }
+        return best ? { ...best } : null;
+      },
+      async voidActive(phone, scene, now) {
+        for (const x of smsCodes.values()) if (x.phone === phone && x.scene === scene && !x.consumedAt) x.consumedAt = now;
+      },
+      async incrementAttempts(id) {
+        const x = smsCodes.get(id);
+        if (!x) return 0;
+        x.attempts += 1;
+        return x.attempts;
+      },
+      async consume(id, now) {
+        const x = smsCodes.get(id);
+        if (!x || x.consumedAt) return false;
+        x.consumedAt = now;
+        return true;
+      },
+    },
+    wechatQr: {
+      async create(t) {
+        if (qrTickets.has(t.ticket)) throw new Error('unique:ticket');
+        const rec: WechatQrTicketRecord = { ...t, status: 'pending', openId: null, consumedAt: null };
+        qrTickets.set(rec.ticket, rec);
+        return { ...rec };
+      },
+      async findByTicket(ticket) { const r = qrTickets.get(ticket); return r ? { ...r } : null; },
+      async transition(ticket, from, to, openId) {
+        const x = qrTickets.get(ticket);
+        if (!x || !from.includes(x.status)) return false;
+        x.status = to;
+        if (openId !== null) x.openId = openId;
+        return true;
+      },
+      async consume(ticket, now) {
+        const x = qrTickets.get(ticket);
+        if (!x || x.status !== 'confirmed' || x.consumedAt) return false;
+        x.consumedAt = now;
         return true;
       },
     },

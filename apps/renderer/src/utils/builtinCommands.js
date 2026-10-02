@@ -5,6 +5,7 @@
  *   go(location)            跳转（vue-router 的 push）
  *   undo() / redo()         内核历史
  *   openHistory()           打开版本历史抽屉
+ *   openDirector(episodeId) 打开导演模式抽屉（P3-D）
  *   select(sel)             设置四视图共享选择 { kind, id }
  *   getViews()              { script, shots }（内核视图投影，可能为 null）
  * ctx（每次搜索现取）: { episodeId, dramaId, canUndo, canRedo, busy }
@@ -32,6 +33,18 @@ export function createBuiltinCommands(deps) {
     { id: 'edit.redo', title: '重做', group: '编辑', keywords: ['redo'], hint: 'Ctrl+Shift+Z', when: hasEpisode, enabled: (c) => c.canRedo && !c.busy, run: () => deps.redo() },
     { id: 'history.open', title: '打开版本历史', group: '编辑', keywords: ['历史', '版本', 'history', 'versions', '操作记录'], when: hasEpisode, run: () => deps.openHistory() },
     { id: 'project.export', title: '导出视频', group: '项目', keywords: ['导出', 'export', '渲染', '成片'], when: hasEpisode, run: (ctx) => deps.go({ path: `/episodes/${ctx.episodeId}/export`, query: ctx.dramaId ? { drama: String(ctx.dramaId) } : {} }) },
+    // P3-B
+    { id: 'project.batch', title: '批量生成', group: '项目', keywords: ['批量', '多集', '批次', 'batch', '并发', '预算'], when: (ctx) => !!ctx.dramaId, run: (ctx) => deps.go(`/project/${ctx.dramaId}/batch`) },
+    // P3-T
+    page('nav.templates', '模板市场', '/templates', ['模板', '套用', '市场', 'template', 'templates']),
+    // P3-D
+    { id: 'director.open', title: '导演模式', group: '编辑', keywords: ['导演', '自然语言', '改片', '一句话', 'director', 'ai'], when: hasEpisode, run: (ctx) => deps.openDirector(ctx.episodeId) },
+    // P3-P
+    page('nav.plugins', '插件与服务商', '/settings/plugins', ['插件', '服务商', '扩展', 'plugins', 'providers', '开发者模式']),
+    // P3-K
+    page('nav.backup', '云备份', '/settings/backup', ['备份', '云备份', '快照', '恢复', 'MinIO', 'S3', 'backup', 'restore', '对象存储']),
+    // P3-S
+    page('nav.studio', '工作室', '/settings/studio', ['工作室', '成员', '席位', '邀请', '共享角色', '共享模板', '共享库', 'studio', 'team', 'seat']),
   ]
 }
 

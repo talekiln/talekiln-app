@@ -1,0 +1,81 @@
+{
+  "id": "official-product-seeding",
+  "name": "产品种草 · 30 秒",
+  "version": "1.0.0",
+  "genre": "ecommerce",
+  "tier": "free",
+  "description": "一条 30 秒的竖屏种草短片：痛点开场、产品亮相、三个卖点、真人口播收尾。一个主播槽位，产品名在场景提示里替换。",
+  "cover": null,
+  "music_hint": "轻快的流行节拍，120 BPM，卖点处加鼓点",
+  "style": {
+    "name": "明亮商业",
+    "preset": "realistic",
+    "prompt": "高清商业广告画面，明亮柔和的棚拍布光，干净背景，色彩饱满，产品细节清晰",
+    "aspect_ratio": "9:16"
+  },
+  "character_slots": [
+    { "id": "host", "name": "小鹿", "role": "主播", "description": "亲切自然的带货主播", "appearance": "二十五岁女性，齐肩短发，米色针织衫，笑容自然" }
+  ],
+  "shots": [
+    {
+      "title": "痛点开场",
+      "group": "开场",
+      "duration_ms": 4000,
+      "prompt_template": "{{scene}}，{{host}}对着镜头皱眉，手里拿着用旧了的同类产品，表情无奈",
+      "character_slots": ["host"],
+      "scene_slot": "明亮的客厅沙发，白天",
+      "camera": "近景正面",
+      "lines": [{ "kind": "dialogue", "speaker": "host", "text": "每次用它都要等半天，你是不是也一样？" }]
+    },
+    {
+      "title": "产品亮相",
+      "group": "亮相",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，产品置于桌面中央缓缓旋转，柔光勾勒轮廓，背景虚化",
+      "character_slots": [],
+      "scene_slot": "纯色摄影台，顶光加轮廓光",
+      "camera": "特写环绕",
+      "lines": [{ "kind": "narration", "text": "直到我换了它。" }]
+    },
+    {
+      "title": "卖点一",
+      "group": "卖点",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{host}}单手演示产品的核心功能，动作干脆，画面干净",
+      "character_slots": ["host"],
+      "scene_slot": "厨房台面，自然光",
+      "camera": "中景手部跟拍",
+      "lines": [{ "kind": "dialogue", "speaker": "host", "text": "第一，三秒上手，老人小孩都会用。" }]
+    },
+    {
+      "title": "卖点二",
+      "group": "卖点",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，产品细节大特写，材质纹理与做工清晰可见，{{host}}的手指轻轻点在按键上",
+      "character_slots": ["host"],
+      "scene_slot": "摄影台微距，侧光",
+      "camera": "微距特写",
+      "lines": [{ "kind": "dialogue", "speaker": "host", "text": "第二，这个做工，摸过就回不去了。" }]
+    },
+    {
+      "title": "卖点三",
+      "group": "卖点",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{host}}把产品放进包里拎起来出门，轻松自在",
+      "character_slots": ["host"],
+      "scene_slot": "玄关，门口有阳光",
+      "camera": "全景跟拍",
+      "lines": [{ "kind": "dialogue", "speaker": "host", "text": "第三，这么小，出门随手带。" }]
+    },
+    {
+      "title": "口播收尾",
+      "group": "收尾",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{host}}举着产品面向镜头微笑，画面左下留出字幕位置",
+      "character_slots": ["host"],
+      "scene_slot": "明亮的客厅沙发，白天",
+      "camera": "近景正面",
+      "lines": [{ "kind": "dialogue", "speaker": "host", "text": "链接放在下面了，今天下单还有赠品。" }]
+    }
+  ]
+}

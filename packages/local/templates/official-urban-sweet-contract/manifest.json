@@ -1,0 +1,147 @@
+{
+  "id": "official-urban-sweet-contract",
+  "name": "都市甜宠 · 契约婚姻",
+  "version": "1.0.0",
+  "genre": "urban-sweet",
+  "tier": "free",
+  "description": "一集霸总甜宠短剧的第一集：雨夜契约、同居日常、宴会误会、匿名照片。十个镜头约 54 秒，四个槽位（女主、男主、女配、特助），适合竖屏连载的开篇，台词走先冷后甜的「契约梗」。",
+  "cover": null,
+  "music_hint": "钢琴与弦乐的都市浪漫曲，前段克制，阳台一场转暖，结尾用一声低音钢琴收住",
+  "style": {
+    "name": "都市电影感",
+    "preset": "cinematic",
+    "prompt": "现代都市剧电影感画面，35mm 镜头浅景深，夜景以城市霓虹与暖色室内光对比，高级灰加琥珀色调，人物肤色通透，服装质感清晰",
+    "aspect_ratio": "9:16"
+  },
+  "character_slots": [
+    { "id": "heroine", "name": "苏晚", "role": "女主", "description": "画廊助理，为替父亲还债签下三年契约婚姻，嘴硬心软", "appearance": "二十四岁女性，鹅蛋脸，杏眼，黑色长发微卷披肩，米白色风衣配牛仔裤，左手腕系一条褪色的红绳" },
+    { "id": "hero", "name": "陆承屿", "role": "男主", "description": "集团继承人，冷面寡言，需要一位「妻子」拿回董事会席位", "appearance": "二十九岁男性，眉骨高挺，薄唇，黑色短发一丝不苟，深灰三件套西装，袖口银质袖扣，左腕一块黑色机械表" },
+    { "id": "rival", "name": "宋曼妮", "role": "女配", "description": "陆家世交之女，自认是正牌未婚妻，笑里藏针", "appearance": "二十六岁女性，妆容精致，栗色大波浪卷发，酒红色吊带长裙，珍珠耳坠，手拿细链小包" },
+    { "id": "assistant", "name": "周秘书", "role": "男配", "description": "陆承屿的特助，面冷心热，全剧「嘴替」", "appearance": "三十二岁男性，金丝边眼镜，深蓝色西装打领带，怀里永远抱着一台平板电脑" }
+  ],
+  "shots": [
+    {
+      "title": "雨夜车门",
+      "group": "开场",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{hero}}撑着黑伞推开车门，{{heroine}}浑身湿透攥着一叠催债单站在路边，两人隔着雨幕四目相对",
+      "character_slots": ["hero", "heroine"],
+      "scene_slot": "深夜雨中的街边，黑色轿车车灯打亮雨丝",
+      "camera": "中景过肩缓推",
+      "lines": [
+        { "kind": "dialogue", "speaker": "hero", "text": "嫁给我，你的债今晚清零。" },
+        { "kind": "dialogue", "speaker": "heroine", "text": "……你要什么？" }
+      ]
+    },
+    {
+      "title": "契约签字",
+      "group": "契约",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{heroine}}握着钢笔停在契约最后一页，{{hero}}背对落地窗双手插兜，{{assistant}}抱着平板站在一旁念条款",
+      "character_slots": ["heroine", "hero", "assistant"],
+      "scene_slot": "顶层公寓客厅，深夜，落地窗外是城市灯火",
+      "camera": "特写笔尖拉开到中景",
+      "lines": [
+        { "kind": "dialogue", "speaker": "assistant", "text": "第七条，婚内不得动情。" },
+        { "kind": "dialogue", "speaker": "heroine", "text": "放心，我对冰块没兴趣。" },
+        { "kind": "action", "text": "陆承屿的嘴角几不可察地动了一下。" }
+      ]
+    },
+    {
+      "title": "烧糊的早餐",
+      "group": "契约",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{heroine}}手忙脚乱端着一盘焦黑的煎蛋，{{hero}}穿着衬衫倚在厨房门口，皱眉看着冒烟的平底锅",
+      "character_slots": ["heroine", "hero"],
+      "scene_slot": "开放式厨房，清晨，阳光从百叶窗斜射进来",
+      "camera": "中景正反打",
+      "lines": [
+        { "kind": "dialogue", "speaker": "heroine", "text": "契约没写我要做饭。" },
+        { "kind": "dialogue", "speaker": "hero", "text": "也没写你可以烧厨房。" }
+      ]
+    },
+    {
+      "title": "红本本",
+      "group": "契约",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{heroine}}举着两本红色结婚证对着镜头傻笑，{{hero}}站在她身侧半步，目光停在她脸上，神色复杂",
+      "character_slots": ["heroine", "hero"],
+      "scene_slot": "民政局门口台阶，上午，阳光明亮",
+      "camera": "近景正面定格",
+      "lines": [{ "kind": "narration", "text": "她以为，这只是一场谁也不吃亏的交易。" }]
+    },
+    {
+      "title": "宴会入场",
+      "group": "误会",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{hero}}挽着{{heroine}}走进宴会厅，{{rival}}端着香槟迎上来，笑容停在半空",
+      "character_slots": ["hero", "heroine", "rival"],
+      "scene_slot": "酒店宴会厅，水晶吊灯，宾客衣香鬓影",
+      "camera": "跟拍侧移",
+      "lines": [
+        { "kind": "dialogue", "speaker": "rival", "text": "承屿，这位是？" },
+        { "kind": "dialogue", "speaker": "hero", "text": "我太太。" }
+      ]
+    },
+    {
+      "title": "洗手间对峙",
+      "group": "误会",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{rival}}靠着洗手台补口红，透过镜子盯着身后的{{heroine}}，两人在镜中对视",
+      "character_slots": ["rival", "heroine"],
+      "scene_slot": "酒店洗手间，大理石台面，冷白灯光",
+      "camera": "镜面反打特写",
+      "lines": [
+        { "kind": "dialogue", "speaker": "rival", "text": "三年合约，我全知道。你拿了多少钱？" },
+        { "kind": "dialogue", "speaker": "heroine", "text": "不多，刚好够买你闭嘴。" }
+      ]
+    },
+    {
+      "title": "阳台的风",
+      "group": "误会",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{heroine}}独自倚着阳台栏杆吹风，{{hero}}从身后走来，把西装外套披在她肩上",
+      "character_slots": ["heroine", "hero"],
+      "scene_slot": "酒店露台，夜风，远处城市灯火",
+      "camera": "远景缓推至中景",
+      "lines": [{ "kind": "narration", "text": "说好不许动情的人，先犯规的，却是他自己。" }]
+    },
+    {
+      "title": "匿名照片",
+      "group": "钩子",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{assistant}}把平板递到{{hero}}面前，屏幕上是{{heroine}}与一个陌生男人在咖啡馆的偷拍照，{{hero}}握着平板的手指收紧",
+      "character_slots": ["assistant", "hero", "heroine"],
+      "scene_slot": "集团顶层办公室，傍晚，落地窗逆光",
+      "camera": "特写屏幕拉到近景",
+      "lines": [{ "kind": "dialogue", "speaker": "assistant", "text": "陆总，有人把这个发给了董事会。" }]
+    },
+    {
+      "title": "门口质问",
+      "group": "钩子",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{hero}}堵在门口不让开，{{heroine}}抱着手臂抬头看他，两人之间只隔着半步",
+      "character_slots": ["hero", "heroine"],
+      "scene_slot": "公寓玄关，深夜，只开了一盏壁灯",
+      "camera": "近景正反打，手持微晃",
+      "lines": [
+        { "kind": "dialogue", "speaker": "hero", "text": "照片上的人，是谁。" },
+        { "kind": "dialogue", "speaker": "heroine", "text": "契约第九条，互不过问私事。" },
+        { "kind": "dialogue", "speaker": "hero", "text": "现在，我过问了。" }
+      ]
+    },
+    {
+      "title": "一条短信",
+      "group": "钩子",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{heroine}}背过身去，手机屏幕在黑暗里亮起，一条陌生号码的短信占满画面",
+      "character_slots": ["heroine"],
+      "scene_slot": "公寓卧室，深夜，只有手机屏幕的冷光",
+      "camera": "特写屏幕定格",
+      "lines": [
+        { "kind": "action", "text": "短信：你以为他娶你，真的只是为了董事会？" },
+        { "kind": "narration", "text": "契约还有两年零九个月。可有些事，今晚就变了。" }
+      ]
+    }
+  ]
+}

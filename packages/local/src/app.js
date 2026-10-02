@@ -7,10 +7,13 @@ const { getDb } = require('./db/index.js');
 const { loadConfig } = require('./config/index.js');
 const logger = require('./logger.js');
 const { setupRouter } = require('./routes/index.js');
-const { createAiTaskStore, createAiTaskQueue, createWorker, createDownloader, withDownloads, queueOptionsFromConfig, buildQueueProviders } = require('./queue');
+const { createAiTaskStore, createAiTaskQueue, createWorker, createDownloader, withDownloads, queueOptionsFromConfig, buildQueueProviders, resolveOptions, createQueueProvider } = require('./queue');
 const { createSpendService, createEstimator } = require('./spend');
 const { createCloud } = require('./cloud');
+const { createJwksProvider } = require('./cloud/jwks');
+const { createPluginHost } = require('./plugins');
 const { createGenerationService } = require('./generation');
+const { createBatchService, createBatchScheduler, attachToWorker } = require('./batch');
 const { createVoiceoverService } = require('./voiceover/queue');
 const { localTokenGuard } = require('./utils/localToken');
 
@@ -19,9 +22,10 @@ function createAiQueue({ config, db, log, storageRoot, providers, onTaskFinished
   // 价格表：已验证的云端目录优先，否则内置 prices.json（刷新后下次启动生效）
   const spend = createSpendService(db, { estimator: createEstimator(cloud.catalog.effectivePrices()) });
   const downloader = createDownloader({ storageDir: storageRoot });
+  const live = withDownloads(providers, downloader); // the queue reads this map lazily, so plugins installed later can be added
   const queue = createAiTaskQueue({
     store,
-    providers: withDownloads(providers, downloader),
+    providers: live,
     ...queueOptionsFromConfig(config),
     spendGuard: (t) => spend.guardTask(t),
     hooks: { onRateLimit: (e) => log.warn && log.warn('ai queue rate limited', e) },
@@ -34,7 +38,9 @@ function createAiQueue({ config, db, log, storageRoot, providers, onTaskFinished
     },
     onError: (e) => log.error && log.error('ai queue worker', { error: e && e.message }),
   });
-  return { store, queue, worker, downloader, spend };
+  const hasProvider = (name) => Object.prototype.hasOwnProperty.call(live, name);
+  const addProvider = (name, p) => { live[name] = withDownloads({ [name]: p }, downloader)[name]; };
+  return { store, queue, worker, downloader, spend, hasProvider, addProvider };
 }
 
 function createApp(opts = {}) {
@@ -105,30 +111,80 @@ function createApp(opts = {}) {
 
   // 持久化 AI 任务队列 + worker（由 server.js / 桌面主进程调用 aiQueue.worker.start()）
   const cloud = opts.cloud || createCloud({ config, db, log: logger });
+  // P3-P 插件：启动时扫描插件目录、用离线缓存的官方公钥验签并注册为服务商；缺公钥的在后台联网补验
+  let ensureQueueProviders = () => {};
+  const pluginHost = opts.pluginHost || createPluginHost({
+    db, config, log, jwks: createJwksProvider({ db, http: cloud.http }), cloudHttp: cloud.http, onChange: () => ensureQueueProviders(),
+  });
+  pluginHost.scan();
   let generation = null; // I1：任务成功后写回数据内核（在 aiQueue 之后创建，所以这里用闭包取）
+  let batch = null; // P3-B：批次调度（任务结束时唤醒）
+  let regionEdit = null; // P3-R：改片任务结束后拼接并记成新版本（同样闭包取）
   let voiceover = null; // 配音任务成功后写回 narration 版本（同上）
   const aiQueue = createAiQueue({
     cloud, config, db, log, storageRoot,
     providers: opts.queueProviders || buildQueueProviders({ db, storageDir: storageRoot, listConfigs: opts.listConfigs }),
     onTaskFinished: (t) => {
       if (generation) { try { generation.onTaskFinished(t); } catch (e) { log.error && log.error('generation finish', { error: e && e.message }); } }
+      if (batch) { try { batch.onTaskFinished(t); } catch (e) { log.error && log.error('batch finish', { error: e && e.message }); } }
+      if (regionEdit) { try { regionEdit.onTaskFinished(t); } catch (e) { log.error && log.error('region edit finish', { error: e && e.message }); } }
       if (voiceover) { try { voiceover.onTaskFinished(t); } catch (e) { log.error && log.error('voiceover finish', { error: e && e.message }); } }
       if (opts.onTaskFinished) opts.onTaskFinished(t);
     },
   });
+  // 运行中安装的插件也要有队列适配器（缺的任务会以 PROVIDER_NOT_AVAILABLE 失败，不会崩）
+  ensureQueueProviders = () => {
+    for (const id of pluginHost.installedIds()) {
+      if (!aiQueue.hasProvider(id)) aiQueue.addProvider(id, createQueueProvider(id, { storageDir: storageRoot, listConfigs: opts.listConfigs || ((type) => require('./services/aiConfigService').listConfigsInternal(db, type)) }));
+    }
+  };
+  ensureQueueProviders();
 
   const coreProvider = opts.getCore ? null : require('./export/coreProvider').createCoreProvider({ endpoint: process.env.LYCORE_ENDPOINT });
   const getCore = opts.getCore || (coreProvider && coreProvider.getCore);
+  // P3-C 角色一致性：生成结果写回内核后对锁定参考图评分（默认经 lycore；测试可注入 opts.consistencyScorer）。
+  // 人脸部分（本地小模型）按配置自建；测试可注入 opts.faceEngine（null = 不用）；桌面端经 opts.faceModelsDir 传随包模型目录
+  const consistency = opts.consistency || require('./consistency').createConsistencyService({
+    db, storageRoot, config, getCore, scorer: opts.consistencyScorer, face: opts.faceEngine, faceModelsDir: opts.faceModelsDir, generation: () => generation, log,
+  });
   generation = opts.generation || createGenerationService({
     db, store: aiQueue.store, worker: aiQueue.worker, spend: aiQueue.spend, storageRoot, getCore, listConfigs: opts.listConfigs, log,
     catalogModels: () => { try { return cloud.catalog.getCatalog().models || []; } catch (_) { return []; } },
+    onAdopted: (info) => consistency.onAdopted(info),
   });
   generation.recoverFinished().catch((e) => log.error && log.error('generation recover', { error: e && e.message }));
+  // P3-B：批量生成服务 + 调度器。调度器与队列 worker 同生命周期（worker.start/stop 由 server.js / 桌面主进程调用）
+  batch = opts.batch || createBatchService({ db, store: aiQueue.store, generation, spend: aiQueue.spend, worker: aiQueue.worker, limits: resolveOptions(config).limits, log });
+  const batchScheduler = createBatchScheduler({ service: batch, onError: (e) => log.error && log.error('batch scheduler', { error: e && e.message }) });
+  attachToWorker(aiQueue.worker, batchScheduler);
+  aiQueue.batch = batch;
+  aiQueue.batchScheduler = batchScheduler;
+  // P3-T 模板市场：内置模板在这里同步进表
+  const templates = opts.templates || require('./templates').createTemplateService({
+    db, spend: aiQueue.spend, log, cloud, listConfigs: opts.listConfigs,
+    catalogModels: () => { try { return cloud.catalog.getCatalog().models || []; } catch (_) { return []; } },
+  });
+  // P3-R 选镜改片：与生成服务共用队列、花费与存储；任务结束后在 onTaskFinished 里拼接写回
+  regionEdit = opts.regionEdit || require('./regionEdit').createRegionEditService({
+    db, store: aiQueue.store, worker: aiQueue.worker, spend: aiQueue.spend, storageRoot, listConfigs: opts.listConfigs, log,
+    catalogModels: () => { try { return cloud.catalog.getCatalog().models || []; } catch (_) { return []; } },
+  });
+  regionEdit.recoverFinished().catch((e) => log.error && log.error('region edit recover', { error: e && e.message }));
   voiceover = opts.voiceover || createVoiceoverService({
     db, store: aiQueue.store, worker: aiQueue.worker, spend: aiQueue.spend, storageRoot, listConfigs: opts.listConfigs, resolve: opts.voiceoverResolve, log,
   });
   voiceover.recoverFinished().catch((e) => log.error && log.error('voiceover recover', { error: e && e.message }));
-  app.use('/api/v1', setupRouter(config, db, log, aiQueue, cloud, { storageRoot, exporter: opts.exporter, getCore, generation, voiceover }));
+  // P3-K 可选云备份：设置在 global_settings、Secret Key 在密钥存储；每日调度器与队列 worker 同生命周期，成片导出完成后可自动备份
+  const backup = opts.backup || require('./backup').createBackupService({ db, config, log, appVersion: require('../package.json').version });
+  if (opts.backupScheduler !== false) {
+    const backupScheduler = require('./backup').createBackupScheduler({ service: backup, onError: (e) => log.error && log.error('backup scheduler', { error: e && e.message }) });
+    attachToWorker(aiQueue.worker, backupScheduler);
+    aiQueue.backupScheduler = backupScheduler;
+  }
+  // P3-S 工作室：复用云备份的 S3 设置与密钥，身份走 cloud.account
+  const studio = opts.studio || require('./studio').createStudioService({ db, storageRoot, cloud, backup, templates, log });
+  const onExportFinished = (evt) => { try { backup.onExportFinished(evt); } catch (e) { log.error && log.error('backup after export', { error: e && e.message }); } };
+  app.use('/api/v1', setupRouter(config, db, log, aiQueue, cloud, { storageRoot, exporter: opts.exporter, getCore, generation, batch, templates, consistency, pluginHost, regionEdit, voiceover, backup, onExportFinished, studio, listConfigs: opts.listConfigs, directorDeps: opts.directorDeps }));
 
   // 前端静态资源（sxy：web/dist）；Electron 打包时可设 WEB_DIST_PATH
   const webDist = process.env.WEB_DIST_PATH || path.join(process.cwd(), '..', 'frontweb', 'dist');
@@ -176,10 +232,13 @@ function createApp(opts = {}) {
     }
   });
 
-  // 启动时尽力刷新一次目录（云端未配置/离线都静默跳过）
-  if (cloud.isConfigured() && opts.cloudAutoSync !== false) cloud.catalog.refresh().catch(() => {});
+  // 启动时尽力刷新一次目录（云端未配置/离线都静默跳过）；签名插件缺公钥时顺带拉取 JWKS 复验，再对一次插件目录取审核日期
+  if (cloud.isConfigured() && opts.cloudAutoSync !== false) {
+    cloud.catalog.refresh().catch(() => {});
+    pluginHost.refreshKeys().catch(() => {}).then(() => pluginHost.refreshCatalog()).catch(() => {});
+  }
 
-  return { app, config, db, aiQueue, cloud };
+  return { app, config, db, aiQueue, cloud, pluginHost };
 }
 
 module.exports = { createApp };

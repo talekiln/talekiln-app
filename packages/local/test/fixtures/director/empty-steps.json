@@ -1,0 +1,9 @@
+{
+  "id": "empty-steps",
+  "note": "模型按规则在信息不足时给空 steps 并在 summary 里说明；本地记为拒绝，把 summary 原样带给用户。",
+  "message": "那个镜头改一下",
+  "replies": [
+    "{\"summary\": \"信息不足：没有说明要改哪一镜、改成什么样\", \"steps\": [], \"untouched\": []}",
+    "{\"summary\": \"信息不足：没有说明要改哪一镜、改成什么样\", \"steps\": [], \"untouched\": []}"
+  ]
+}

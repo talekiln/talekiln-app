@@ -38,6 +38,17 @@ if (tool === 'ffprobe') {
 } else if (a.includes('-progress')) {
   console.log('out_time_us=100000');
   fs.writeFileSync(a[a.length - 1], 'fake');
+} else if (a.includes('rawvideo')) {
+  // consistency.*: one rgb24 frame of the requested size; "noise" inputs get pseudo-random pixels, others a fixed texture
+  const input = a[a.indexOf('-i') + 1];
+  const n = Number(/scale=(\\d+):/.exec(a[a.indexOf('-vf') + 1])[1]);
+  const buf = Buffer.alloc(n * n * 3);
+  let s = 12345;
+  for (let i = 0; i < buf.length; i++) {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    buf[i] = input.includes('noise') ? (s >> 8) & 255 : ((i * 37) + (i % 7) * 11) & 255;
+  }
+  process.stdout.write(buf);
 } else {
   const enc = a[a.indexOf('-c:v') + 1];
   if (enc === 'libx264' || enc === 'h264_mf') process.exit(0);
@@ -117,9 +128,32 @@ const child = spawn(bin, ['--pipe', endpoint, '--log-dir', logDir], {
   assert.strictEqual(d.encoders.find((x) => x.name === 'libx264').available, true);
 
   // missing toolchain -> recoverable error
-  for (const m of ['media.probe', 'encoder.detect']) {
-    await assert.rejects(c.call(m, { path: 'clip.mp4', ffmpegDir: emptyDir }), (e) =>
+  for (const m of ['media.probe', 'encoder.detect', 'consistency.score', 'consistency.pick_reference']) {
+    await assert.rejects(c.call(m, { path: 'clip.mp4', reference: 'r.png', target: 'clip.mp4', candidates: ['a.png'], ffmpegDir: emptyDir }), (e) =>
       e.code === -32020 && e.data.recoverable === true && e.data.action === 'reinstall' && /reinstall/.test(e.message));
+  }
+  // consistency.score / pick_reference via the fake ffmpeg (every target probes as the 63.52s fixture video)
+  {
+    const same = await c.consistencyScore({ reference: 'ref.png', target: 'clip.mp4', sample_frames: 3 });
+    assert.strictEqual(same.score, 100);
+    assert.strictEqual(same.kind, 'video');
+    assert.strictEqual(same.suggestion, 'ok');
+    assert.strictEqual(same.frames.length, 3);
+    assert.ok(same.frames[0].t_ms < same.frames[1].t_ms && same.frames[2].t_ms < 63520);
+    assert.deepStrictEqual(Object.keys(same.parts).sort(), ['histogram', 'palette', 'phash']);
+    const diff = await c.consistencyScore({ reference: 'ref.png', target: 'noise.mp4', sample_frames: 1, min_score: 60 });
+    assert.ok(diff.score < same.score, `noise ${diff.score}`);
+    assert.ok(['check', 'retry'].includes(diff.suggestion));
+    await assert.rejects(c.consistencyScore({ reference: 'ref.png' }), (e) => e.code === -32602);
+    const pick = await c.pickReference({ candidates: ['a.png', 'noise.png', 'a.png'], anchor: 'ref.png' });
+    assert.strictEqual(pick.anchor, 'ref.png');
+    assert.strictEqual(pick.ranked.length, 2, 'duplicates collapse');
+    assert.strictEqual(pick.ranked[0].path, 'a.png');
+    assert.strictEqual(pick.ranked[0].similarity, 100);
+    assert.strictEqual(pick.ranked[0].width, 1920);
+    assert.ok(pick.ranked[0].score > pick.ranked[1].score);
+    assert.deepStrictEqual(pick.skipped, []);
+    await assert.rejects(c.pickReference({ candidates: [] }), (e) => e.code === -32602);
   }
   // render.plan: scenes, keys, cache hits
   {

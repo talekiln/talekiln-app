@@ -1,0 +1,8 @@
+{
+  "id": "valid-multistep",
+  "note": "录制的模型回复（内容经整理）：带闲聊与 Markdown 代码块；三步分别落在 shot / script / timeline 三个视图。{{seg:shot_2}} 由测试换成镜头 2 的片段 id（片段 id 来自旧时间线，不是确定的）。",
+  "message": "第二镜改成夜景特写，第三镜的旁白改短一点，第二镜前面加一个淡入转场",
+  "replies": [
+    "好的，这是执行计划：\n```json\n{\n  \"summary\": \"第二镜改为夜景特写并重写画面描述，缩短第三镜旁白，第二镜前加淡入转场\",\n  \"steps\": [\n    {\"view\": \"shot\", \"name\": \"setShotField\", \"args\": {\"shot_id\": \"shot_2\", \"patch\": {\"shot_type\": \"特写\", \"description\": \"深夜的公交车内，车窗外雨幕模糊，暖黄灯光下阿宁的脸部特写。\"}}, \"reason\": \"用户要求第二镜改成夜景特写，景别与画面描述一起改，首帧图需要重新生成\"},\n    {\"view\": \"script\", \"name\": \"rewriteLine\", \"args\": {\"line_id\": \"line_4\", \"patch\": {\"text\": \"她终于放松下来。\"}}, \"reason\": \"第三镜的旁白缩短为一句，只影响配音\"},\n    {\"view\": \"timeline\", \"name\": \"setTransition\", \"args\": {\"segment_id\": \"{{seg:shot_2}}\", \"transition\": \"fade\"}, \"reason\": \"第二镜片段设置淡入转场，不用重新生成\"}\n  ],\n  \"untouched\": [\"其余镜头的画面与台词不变\", \"镜头顺序与总时长不变\"]\n}\n```\n如需调整请告诉我。"
+  ]
+}

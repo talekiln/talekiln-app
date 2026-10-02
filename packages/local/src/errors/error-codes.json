@@ -375,6 +375,56 @@
       "message": "写入导出文件失败",
       "action": "检查目标磁盘空间和写入权限，或换一个文件夹"
     },
+    "CONSISTENCY_UNAVAILABLE": {
+      "scope": "local",
+      "message": "一致性评分不可用：渲染核心未启动或连不上",
+      "action": "重启应用后重试；社区版没有渲染核心，无法评分"
+    },
+    "CONSISTENCY_FAILED": {
+      "scope": "local",
+      "message": "一致性评分失败",
+      "action": "确认参考图与生成结果文件都在本机存储目录里，然后在工作台点「重评」"
+    },
+    "NO_REFERENCE_CANDIDATES": {
+      "scope": "local",
+      "message": "该角色没有可用的本机候选图",
+      "action": "先为角色生成或上传图片，再自动挑选参考图"
+    },
+    "PLUGIN_INVALID": {
+      "scope": "local",
+      "message": "插件包不合法：缺少 manifest.json 或清单不符合 SDK 规范",
+      "action": "检查插件文件夹里的 manifest.json（名称、版本、sdkVersion、能力、权限、入口），或联系插件作者"
+    },
+    "PLUGIN_SIGNATURE": {
+      "scope": "local",
+      "message": "插件未经官方签名或签名无效，默认不会加载",
+      "action": "只安装来自官方插件目录的插件；若是自己开发的插件，可在插件页打开开发者模式"
+    },
+    "PLUGIN_LOAD_FAILED": {
+      "scope": "local",
+      "message": "插件代码加载失败",
+      "action": "查看插件页里的错误信息，或联系插件作者；加载失败的插件不会参与生成"
+    },
+    "PLUGIN_NAME_CONFLICT": {
+      "scope": "local",
+      "message": "插件名称与内置服务商或已安装插件冲突",
+      "action": "先删除同名插件再安装，或让插件作者改名"
+    },
+    "REGION_EDIT_NO_VIDEO": {
+      "scope": "local",
+      "message": "该镜头还没有已采用的视频，无法选镜改片",
+      "action": "先生成并采用一版视频，再框选时间段和区域修改"
+    },
+    "REGION_EDIT_BASE_MISSING": {
+      "scope": "local",
+      "message": "找不到当前视频的本地文件，无法截取入点和出点的画面",
+      "action": "重新生成一次视频（结果会下载到本地）后再试"
+    },
+    "REGION_EDIT_FFMPEG": {
+      "scope": "local",
+      "message": "截帧或拼接视频失败（FFmpeg）",
+      "action": "确认 FFmpeg 可用（设置里的检测），再重试；反复失败请导出日志反馈"
+    },
     "device_limit": {
       "scope": "cloud",
       "message": "设备数已达套餐上限",
@@ -394,6 +444,216 @@
       "scope": "cloud",
       "message": "支付回调签名无效",
       "action": "无需处理；如反复出现请联系管理员"
+    },
+    "seat_limit": {
+      "scope": "cloud",
+      "message": "工作室席位已满",
+      "action": "请工作室所有者在后台申请调整席位数，或撤销多余的待处理邀请后再试"
+    },
+    "studio_suspended": {
+      "scope": "cloud",
+      "message": "工作室已被停用",
+      "action": "停用期间只能查看；请联系管理员恢复"
+    },
+    "BATCH_BUDGET_EXCEEDED": {
+      "scope": "local",
+      "message": "批次预算上限低于预计费用，批次未创建",
+      "action": "提高预算上限、减少选中的集数，或改为只生成首帧图"
+    },
+    "BATCH_NOTHING_TO_DO": {
+      "scope": "local",
+      "message": "所选分集没有需要生成的镜头",
+      "action": "所选分集已全部是最新，或缺少分镜与提示词；先在分镜表里补齐再排批次"
+    },
+    "BATCH_STATE": {
+      "scope": "local",
+      "message": "批次当前状态不允许该操作",
+      "action": "刷新批次页查看最新状态后再操作"
+    },
+    "CLOUD_UNREACHABLE": {
+      "scope": "local",
+      "message": "无法连接云端，请检查网络后重试",
+      "action": "确认网络畅通后重试；离线时仍可使用已安装的模板"
+    },
+    "CLOUD_NOT_CONFIGURED": {
+      "scope": "local",
+      "message": "尚未配置云端地址",
+      "action": "在 config.yaml 的 cloud.base_url 填写云端地址后重启"
+    },
+    "TEMPLATE_INVALID": {
+      "scope": "local",
+      "message": "模板清单不合法",
+      "action": "按错误详情修正 manifest.json 后重新安装"
+    },
+    "TEMPLATE_PACKAGE_INVALID": {
+      "scope": "local",
+      "message": "模板包无法读取",
+      "action": "确认路径是含 manifest.json 的目录或 .lytpl 压缩包"
+    },
+    "TEMPLATE_SIGNATURE_INVALID": {
+      "scope": "local",
+      "message": "模板签名无效，已拒绝安装",
+      "action": "从官方渠道重新下载模板；自制模板请去掉 signature 字段"
+    },
+    "TEMPLATE_PRO_REQUIRED": {
+      "scope": "local",
+      "message": "这是付费模板，当前账号不可用",
+      "action": "登录并升级套餐后再套用，或选择免费模板"
+    },
+    "TEMPLATE_BUILTIN_READONLY": {
+      "scope": "local",
+      "message": "内置模板不能覆盖或删除",
+      "action": "换一个模板 id 再安装"
+    },
+    "NO_TEXT_PROVIDER": {
+      "scope": "local",
+      "message": "没有可用的文本模型配置",
+      "action": "到 AI 配置里添加百炼 Key（文本配置），再试一次"
+    },
+    "DIRECTOR_MODEL_FAILED": {
+      "scope": "local",
+      "message": "导演模式调用大模型失败",
+      "action": "检查文本模型的 Key 与网络后重试；反复出现请在反馈中附上日志"
+    },
+    "DIRECTOR_PLAN_REJECTED": {
+      "scope": "local",
+      "message": "模型给出的执行计划没有通过校验，未改动任何数据",
+      "action": "换一种说法再试，或把指令拆成更小的步骤；校验失败的原因见该轮记录"
+    },
+    "DIRECTOR_TURN_STATE": {
+      "scope": "local",
+      "message": "这轮计划的当前状态不允许该操作",
+      "action": "已拒绝的计划不能执行；已执行的计划请用撤销；撤销后要再执行请重新生成计划"
+    },
+    "DIRECTOR_STALE_PLAN": {
+      "scope": "local",
+      "message": "生成计划之后项目已被修改，计划不再适用",
+      "action": "重新生成计划后再执行"
+    },
+    "DIRECTOR_NOT_ON_TOP": {
+      "scope": "local",
+      "message": "这轮计划之后还有别的修改，不能单独撤销",
+      "action": "先在顶栏撤销后面的修改，或在版本历史里回到这一步"
+    },
+    "BACKUP_NOT_CONFIGURED": {
+      "scope": "local",
+      "message": "尚未配置云备份",
+      "action": "到「云备份」页填写对象存储地址、存储桶、Access Key 与 Secret Key 后再试"
+    },
+    "BACKUP_ENDPOINT_INVALID": {
+      "scope": "local",
+      "message": "对象存储地址不合法",
+      "action": "地址必须是 https://，或指向本机 / 局域网（10.x、172.16–31.x、192.168.x）的 http://"
+    },
+    "BACKUP_UNREACHABLE": {
+      "scope": "local",
+      "message": "连不上对象存储",
+      "action": "检查网络、地址与端口；家庭 NAS 上的 MinIO 需要在同一局域网内"
+    },
+    "BACKUP_AUTH": {
+      "scope": "local",
+      "message": "对象存储拒绝了访问凭据",
+      "action": "核对 Access Key / Secret Key、区域（region）以及该账号对存储桶的权限"
+    },
+    "BACKUP_FAILED": {
+      "scope": "local",
+      "message": "备份操作失败",
+      "action": "查看错误详情后重试；反复出现请在反馈中附上日志"
+    },
+    "BACKUP_CHECKSUM": {
+      "scope": "local",
+      "message": "快照校验失败，已拒绝恢复",
+      "action": "下载的文件与清单里的 sha256 不一致，可能被改动或损坏；换一个快照恢复"
+    },
+    "invalid_code": {
+      "scope": "cloud",
+      "message": "验证码错误",
+      "action": "核对短信里的验证码后重新输入；错 5 次需重新获取"
+    },
+    "code_expired": {
+      "scope": "cloud",
+      "message": "验证码已过期或尚未发送",
+      "action": "点「获取验证码」重新发送"
+    },
+    "invite_required": {
+      "scope": "cloud",
+      "message": "首次登录需要邀请码",
+      "action": "填写邀请码后再登录；没有邀请码请向邀请人索取"
+    },
+    "qr_expired": {
+      "scope": "cloud",
+      "message": "二维码已过期或已使用",
+      "action": "点「刷新二维码」重新扫码"
+    },
+    "sms_unavailable": {
+      "scope": "cloud",
+      "message": "短信登录暂不可用",
+      "action": "改用邮箱密码登录，或稍后再试"
+    },
+    "wechat_unavailable": {
+      "scope": "cloud",
+      "message": "微信登录暂不可用",
+      "action": "改用邮箱密码登录，或稍后再试"
+    },
+    "INVALID_CODE": {
+      "scope": "local",
+      "message": "验证码错误",
+      "action": "核对短信里的验证码后重新输入；错 5 次需重新获取"
+    },
+    "CODE_EXPIRED": {
+      "scope": "local",
+      "message": "验证码已过期或尚未发送",
+      "action": "点「获取验证码」重新发送"
+    },
+    "INVITE_REQUIRED": {
+      "scope": "local",
+      "message": "首次登录需要邀请码",
+      "action": "填写邀请码后再登录；没有邀请码请向邀请人索取"
+    },
+    "QR_EXPIRED": {
+      "scope": "local",
+      "message": "二维码已过期或已使用",
+      "action": "点「刷新二维码」重新扫码"
+    },
+    "LOGIN_METHOD_UNAVAILABLE": {
+      "scope": "local",
+      "message": "该登录方式暂不可用",
+      "action": "改用邮箱密码登录，或稍后再试"
+    },
+    "CLOUD_RATE_LIMITED": {
+      "scope": "local",
+      "message": "操作过于频繁",
+      "action": "稍等一分钟再试"
+    },
+    "ACCOUNT_DISABLED": {
+      "scope": "local",
+      "message": "账号已停用",
+      "action": "联系管理员恢复账号"
+    },
+    "STUDIO_NOT_LOGGED_IN": {
+      "scope": "local",
+      "message": "工作室功能需要先登录账号",
+      "action": "到「账号」页登录后再打开「工作室」"
+    },
+    "STUDIO_NOT_MEMBER": {
+      "scope": "local",
+      "message": "你不是该工作室的成员",
+      "action": "请工作室所有者或管理员发邀请码给你，在「工作室」页接受邀请"
+    },
+    "STUDIO_FORBIDDEN": {
+      "scope": "local",
+      "message": "当前角色没有权限做这个操作",
+      "action": "发布与更新共享素材需要工作室所有者或管理员；普通成员只能拉取"
+    },
+    "STUDIO_INVALID_MANIFEST": {
+      "scope": "local",
+      "message": "共享库里的清单不合法",
+      "action": "该条目可能由更新版本的应用发布，或在对象存储里被改动；升级应用或让发布者重新发布"
+    },
+    "STUDIO_CHECKSUM": {
+      "scope": "local",
+      "message": "共享素材校验失败，已拒绝写入本机",
+      "action": "下载的文件与清单里的 sha256 不一致，可能被改动或损坏；让发布者重新发布后再拉取"
     }
   }
 }

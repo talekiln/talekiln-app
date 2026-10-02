@@ -52,6 +52,7 @@ import { useProjectViewsStore } from '@/stores/projectViews'
 import { useKeymap } from '@/composables/useKeymap'
 import { registry, paletteOpen, closePalette, togglePalette } from '@/composables/useCommandPalette'
 import { openHistory } from '@/composables/useHistoryDrawer'
+import { openDirector } from '@/composables/useDirectorPanel'
 import { createBuiltinCommands, createContentProvider } from '@/utils/builtinCommands'
 import { episodeOfRoute } from '@/utils/episodeContext'
 import { resolveAction, formatCombo } from '@/utils/keymap'
@@ -157,6 +158,7 @@ onMounted(() => {
     undo: () => views.undo(),
     redo: () => views.redo(),
     openHistory,
+    openDirector,
     select: (sel) => views.select(sel),
     getViews: () => (views.episodeId === getCtx().episodeId ? views.views : null),
   }

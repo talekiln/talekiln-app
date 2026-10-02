@@ -55,7 +55,7 @@ export class AuditService {
 
   async record(actor: AuditActor, ctx: AuditContext, ok: boolean, status: number, createdId?: string | null): Promise<void> {
     try {
-      const m = /^\/admin\/([a-z-]+)/.exec(ctx.routePath);
+      const m = /^\/(?:admin\/)?([a-z-]+)/.exec(ctx.routePath); // /admin/<对象> 或用户侧 /<对象>（P3-S 工作室操作也进审计）
       const p = ctx.params;
       const fromParams = [p.id, p.code, p.accountId].find((x) => typeof x === 'string') as string | undefined;
       await this.repos.adminAudit.add({
