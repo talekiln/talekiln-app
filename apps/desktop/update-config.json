@@ -1,8 +1,9 @@
 {
-  "_comment": "自动更新配置（占位）。feedUrl 为 .invalid 占位地址时更新功能保持关闭。可用环境变量 TALEKILN_UPDATE_URL / TALEKILN_UPDATE_CHANNEL 覆盖。publisherName 填证书主体 CN（与签名证书一致），不是密码。",
+  "_comment": "自动更新配置（占位）。feedUrl 为 .invalid 占位地址时更新功能保持关闭。可用环境变量 TALEKILN_UPDATE_URL / TALEKILN_UPDATE_CHANNEL 覆盖。publisherName 填证书主体 CN（与签名证书一致），不是密码。 downloadPageUrl 是「关于」页「去下载」在更新未启用时打开的下载页（https，占位或留空则按钮提示无法下载）。",
   "feedUrl": "https://updates.example.invalid/talekiln",
   "channel": "latest",
   "publisherName": "",
   "checkOnStartDelayMs": 15000,
-  "checkIntervalHours": 6
+  "checkIntervalHours": 6,
+  "downloadPageUrl": ""
 }
