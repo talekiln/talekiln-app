@@ -1,0 +1,152 @@
+{
+  "id": "official-family-bowl-of-soup",
+  "name": "家庭伦理 · 一碗热汤",
+  "version": "1.0.0",
+  "genre": "family",
+  "tier": "free",
+  "description": "一集婆媳与亲情向的家庭短剧：深夜送汤、餐桌夹菜、冰箱里的过期菜、孩子的一句话、婆婆的账本、清晨同熬一锅汤。十个镜头约 53 秒，四个槽位（儿媳、婆婆、丈夫、女儿），从摩擦到和解，结尾用一张被藏起的体检报告留钩。",
+  "cover": null,
+  "music_hint": "温暖的钢琴独奏与少量弦乐，冲突段落只保留厨房环境音，和解处加入轻柔的口琴",
+  "style": {
+    "name": "生活写实",
+    "preset": "realistic",
+    "prompt": "现实题材家庭剧画面，自然光与暖黄室内灯，老小区居家陈设真实有生活痕迹，柔和的中性暖色调，中焦镜头，人物肤色自然",
+    "aspect_ratio": "9:16"
+  },
+  "character_slots": [
+    { "id": "wife", "name": "周雨桐", "role": "儿媳", "description": "三十二岁的职场妈妈，忙到没时间吃饭，母亲早逝", "appearance": "三十二岁女性，低马尾，眼下略带疲惫，浅灰色通勤衬衫，肩上挎着一个鼓鼓的电脑包" },
+    { "id": "mother", "name": "王桂兰", "role": "婆婆", "description": "退休小学教师，节俭、嘴硬、爱操心，不会用手机叫车", "appearance": "六十二岁女性，花白短发，深紫色开衫，围着蓝格子围裙，老花镜用绳子挂在胸前" },
+    { "id": "husband", "name": "陈阳", "role": "丈夫", "description": "夹在母亲和妻子之间的和事佬", "appearance": "三十四岁男性，微胖，格子衬衫，下巴上有没刮干净的胡茬" },
+    { "id": "child", "name": "糖糖", "role": "女儿", "description": "六岁，家里的「小翻译」，谁的话都听得懂", "appearance": "六岁女孩，两个羊角辫，粉色卡通卫衣，怀里抱着一只缺了一只耳朵的布兔子" }
+  ],
+  "shots": [
+    {
+      "title": "保温桶",
+      "group": "开场",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{mother}}抱着一个旧保温桶坐在花坛边，{{wife}}拖着疲惫的步子从旋转门出来，看见她愣住",
+      "character_slots": ["mother", "wife"],
+      "scene_slot": "写字楼楼下花坛，深夜，路灯昏黄",
+      "camera": "中景切保温桶特写",
+      "lines": [
+        { "kind": "dialogue", "speaker": "mother", "text": "汤凉了三回了。" },
+        { "kind": "dialogue", "speaker": "wife", "text": "妈，我说了别送。" }
+      ]
+    },
+    {
+      "title": "餐桌",
+      "group": "开场",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{mother}}把一块鱼肉夹进{{child}}碗里，{{child}}皱着脸推碗，{{wife}}伸手把鱼夹了出来",
+      "character_slots": ["mother", "child", "wife"],
+      "scene_slot": "家里餐厅，晚饭时间，吊灯暖光",
+      "camera": "过肩中景",
+      "lines": [
+        { "kind": "dialogue", "speaker": "mother", "text": "小孩子不吃鱼怎么长个？" },
+        { "kind": "dialogue", "speaker": "wife", "text": "妈，她对鱼过敏，说过八遍了。" }
+      ]
+    },
+    {
+      "title": "冰箱",
+      "group": "冲突",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{wife}}从冰箱里拿出几盒过期的剩菜往垃圾桶扔，{{mother}}一把抢回来抱在怀里",
+      "character_slots": ["wife", "mother"],
+      "scene_slot": "厨房，夜，冰箱灯与顶灯",
+      "camera": "手持跟拍",
+      "lines": [
+        { "kind": "dialogue", "speaker": "mother", "text": "过期一天怎么了？我吃了六十年都没事！" },
+        { "kind": "dialogue", "speaker": "wife", "text": "你没事，糖糖呢？" }
+      ]
+    },
+    {
+      "title": "夹在中间",
+      "group": "冲突",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{husband}}坐在床边揉着太阳穴，{{wife}}背对他站在窗前，两人之间隔着半张床",
+      "character_slots": ["husband", "wife"],
+      "scene_slot": "主卧，深夜，只开了一盏床头灯",
+      "camera": "近景正反打",
+      "lines": [
+        { "kind": "dialogue", "speaker": "husband", "text": "妈就是那个脾气……" },
+        { "kind": "dialogue", "speaker": "wife", "text": "所以每一次，都该我让？" }
+      ]
+    },
+    {
+      "title": "孩子的话",
+      "group": "冲突",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{child}}抱着布兔子躺在小床上，{{wife}}坐在床边替她掖被角，听到她的话手停住了",
+      "character_slots": ["child", "wife"],
+      "scene_slot": "儿童房，夜，星星夜灯",
+      "camera": "特写缓推",
+      "lines": [
+        { "kind": "dialogue", "speaker": "child", "text": "妈妈，奶奶说她不会用手机叫车，所以才等到那么晚。" },
+        { "kind": "action", "text": "周雨桐没有说话，灯光在她眼里晃了一下。" }
+      ]
+    },
+    {
+      "title": "账本",
+      "group": "和解",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{wife}}在茶几抽屉里翻出一本旧账本，一页页都是铅笔写的小字，她坐在地毯上一行一行读",
+      "character_slots": ["wife"],
+      "scene_slot": "客厅，深夜，落地灯",
+      "camera": "俯拍账本特写",
+      "lines": [
+        { "kind": "action", "text": "账本上一行行写着：周三，雨桐加班，送汤，没喝。周五，雨桐加班，送汤，没喝。" },
+        { "kind": "narration", "text": "原来她每一次拒绝，都被人一笔一笔记了下来。" }
+      ]
+    },
+    {
+      "title": "清晨厨房",
+      "group": "和解",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{wife}}系着婆婆的蓝格子围裙站在灶前，{{mother}}穿着睡衣站在厨房门口，一脸意外",
+      "character_slots": ["wife", "mother"],
+      "scene_slot": "厨房，清晨，窗外天刚亮",
+      "camera": "中景侧光",
+      "lines": [
+        { "kind": "dialogue", "speaker": "wife", "text": "妈，教我熬你那个汤。" },
+        { "kind": "dialogue", "speaker": "mother", "text": "……火太大了。" }
+      ]
+    },
+    {
+      "title": "两双手",
+      "group": "和解",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{mother}}和{{wife}}的两双手在一个盆里择菜，一双布满皱纹，一双指甲修得整齐",
+      "character_slots": ["mother", "wife"],
+      "scene_slot": "厨房流理台，清晨，侧窗自然光",
+      "camera": "俯拍手部特写",
+      "lines": [{ "kind": "dialogue", "speaker": "mother", "text": "你妈要是还在，也该六十了。" }]
+    },
+    {
+      "title": "一家人",
+      "group": "和解",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{husband}}给大家盛汤，{{child}}举着勺子，{{mother}}和{{wife}}并排坐着，一家四口的笑脸在热气里",
+      "character_slots": ["husband", "child", "mother", "wife"],
+      "scene_slot": "餐厅，清晨，暖光，汤锅冒着热气",
+      "camera": "全景暖光",
+      "lines": [
+        { "kind": "dialogue", "speaker": "child", "text": "今天的汤没凉！" },
+        { "kind": "dialogue", "speaker": "husband", "text": "那是，两个大厨呢。" }
+      ]
+    },
+    {
+      "title": "体检报告",
+      "group": "钩子",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{mother}}独自坐在洗手间马桶盖上看一张体检报告，门外传来敲门声，她迅速把报告折起塞进围裙口袋",
+      "character_slots": ["mother"],
+      "scene_slot": "洗手间，白天，门缝透进一线光",
+      "camera": "特写报告切门缝",
+      "lines": [
+        { "kind": "action", "text": "体检报告上，有一行字被红笔圈了出来。" },
+        { "kind": "dialogue", "speaker": "mother", "text": "来了来了，汤要凉了。" },
+        { "kind": "narration", "text": "有些事，她打算一个人扛到底。" }
+      ]
+    }
+  ]
+}

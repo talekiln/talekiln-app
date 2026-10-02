@@ -1,0 +1,128 @@
+{
+  "id": "official-healing-corgi-days",
+  "name": "萌宠治愈 · 包子的一天",
+  "version": "1.0.0",
+  "genre": "healing",
+  "tier": "free",
+  "description": "一集萌宠治愈生活流短片：柯基叫早、楼下阿婆的红薯、当脚垫的狗、改稿崩溃时递来的玩具、阿婆留下的纸条、一张不卖的画。九个镜头约 46 秒，三个槽位（插画师、柯基、阿婆），旁白温柔，适合宠物与生活类账号日更。",
+  "cover": null,
+  "music_hint": "尤克里里与口哨的轻快小曲，改稿一场换成安静的钢琴，结尾回到小曲并加一声猫叫",
+  "style": {
+    "name": "暖调生活",
+    "preset": "retro film",
+    "prompt": "生活流治愈短片画面，暖黄胶片质感，柔和的晨光与窗边自然光，低对比奶油色调，中焦镜头贴近宠物视角，毛发细节清晰",
+    "aspect_ratio": "9:16"
+  },
+  "character_slots": [
+    { "id": "owner", "name": "阿澄", "role": "主人", "description": "二十六岁独居插画师，接稿到凌晨，被一只狗拯救的社恐", "appearance": "二十六岁女性，微卷的短发，圆框眼镜，米色宽松毛衣，手指上常沾着颜料" },
+    { "id": "dog", "name": "包子", "role": "柯基", "description": "三岁，馋、黏人，屁股会说话", "appearance": "一只三岁的三色柯基，短腿圆臀，一只耳朵竖着一只耷拉着，脖子上系着一条黄色格子方巾" },
+    { "id": "granny", "name": "楼下阿婆", "role": "邻居", "description": "每天坐在楼下晒太阳，给包子留一块红薯", "appearance": "七十岁女性，银发盘成髻，藏青色棉袄，坐在竹椅上，脚边放着一个竹篮" }
+  ],
+  "shots": [
+    {
+      "title": "叫醒",
+      "group": "清晨",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{dog}}跳上床把早餐碗叼到枕头边，一个劲儿舔{{owner}}的脸，{{owner}}拉着被子往里缩",
+      "character_slots": ["dog", "owner"],
+      "scene_slot": "卧室，清晨，窗帘缝透进一道阳光",
+      "camera": "特写切俯拍中景",
+      "lines": [
+        { "kind": "dialogue", "speaker": "owner", "text": "包子……再五分钟。" },
+        { "kind": "action", "text": "柯基把碗又往枕头上推了推。" }
+      ]
+    },
+    {
+      "title": "遛狗",
+      "group": "清晨",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{dog}}拽着牵引绳一路小跑，{{granny}}坐在竹椅上朝它扬了扬手里的红薯，{{owner}}被拖得踉跄",
+      "character_slots": ["dog", "granny", "owner"],
+      "scene_slot": "老小区的梧桐路，清晨，树影斑驳",
+      "camera": "低机位跟拍",
+      "lines": [
+        { "kind": "dialogue", "speaker": "granny", "text": "包子今天又瘦了。" },
+        { "kind": "dialogue", "speaker": "owner", "text": "阿婆，它昨天偷吃了半个月饼。" }
+      ]
+    },
+    {
+      "title": "脚垫",
+      "group": "日常",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{owner}}趴在数位板前画画，{{dog}}整个身子压在她的脚背上打盹",
+      "character_slots": ["owner", "dog"],
+      "scene_slot": "工作台，白天，侧窗自然光",
+      "camera": "中景侧光",
+      "lines": [{ "kind": "narration", "text": "它不懂什么叫甲方，但知道她什么时候需要一个脚垫。" }]
+    },
+    {
+      "title": "午睡",
+      "group": "日常",
+      "duration_ms": 4000,
+      "prompt_template": "{{scene}}，{{dog}}四脚朝天躺在沙发上，肚皮随着呼吸起伏，一只耳朵耷在眼睛上",
+      "character_slots": ["dog"],
+      "scene_slot": "客厅沙发，午后，阳光刚好落在沙发上",
+      "camera": "俯拍特写慢推",
+      "lines": [{ "kind": "narration", "text": "柯基的屁股，是人类最后一道心理防线。" }]
+    },
+    {
+      "title": "改稿到崩溃",
+      "group": "低谷",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{owner}}趴在桌上肩膀发抖，{{dog}}叼着一只咬烂的黄色小鸭玩具，轻轻放在她的手边",
+      "character_slots": ["owner", "dog"],
+      "scene_slot": "工作台，深夜，电脑屏幕的蓝光",
+      "camera": "近景手持",
+      "lines": [
+        { "kind": "dialogue", "speaker": "owner", "text": "第七版了……他说颜色还是不够高级。" },
+        { "kind": "action", "text": "包子把小鸭又往她手边推了推。" }
+      ]
+    },
+    {
+      "title": "下雨天",
+      "group": "低谷",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{owner}}和{{dog}}并排坐在阳台地板上看雨，一个人一只狗的背影",
+      "character_slots": ["owner", "dog"],
+      "scene_slot": "阳台，雨天，灰蓝色的天光",
+      "camera": "全景背影定格",
+      "lines": [{ "kind": "narration", "text": "日子有时候就像这样，什么都不做，也就过去了。" }]
+    },
+    {
+      "title": "阿婆的篮子",
+      "group": "低谷",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，竹椅空着，竹篮里放着一块红薯和一张纸条，{{dog}}趴在椅子旁边不肯走",
+      "character_slots": ["dog"],
+      "scene_slot": "楼下梧桐树下，清晨，没有人",
+      "camera": "俯拍特写拉开",
+      "lines": [
+        { "kind": "action", "text": "纸条上写着：去闺女家住几天，红薯给包子。" },
+        { "kind": "narration", "text": "它不识字，但它看懂了。" }
+      ]
+    },
+    {
+      "title": "不卖的画",
+      "group": "治愈",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{owner}}举起刚画完的画，画上是{{dog}}趴在一把空竹椅旁，{{dog}}歪着头看",
+      "character_slots": ["owner", "dog"],
+      "scene_slot": "工作台，清晨，暖光",
+      "camera": "中景暖光",
+      "lines": [{ "kind": "dialogue", "speaker": "owner", "text": "这张不卖。" }]
+    },
+    {
+      "title": "新室友",
+      "group": "治愈",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，门口放着一个纸箱，{{dog}}竖起耳朵警惕地绕着箱子转圈，{{owner}}蹲下掀开箱盖",
+      "character_slots": ["dog", "owner"],
+      "scene_slot": "家门口，上午，楼道透进的光",
+      "camera": "特写切柯基表情定格",
+      "lines": [
+        { "kind": "action", "text": "纸箱里探出一颗奶猫的小脑袋。" },
+        { "kind": "dialogue", "speaker": "owner", "text": "包子，我们好像……有新室友了。" }
+      ]
+    }
+  ]
+}

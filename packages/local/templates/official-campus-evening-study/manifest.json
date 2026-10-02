@@ -1,0 +1,132 @@
+{
+  "id": "official-campus-evening-study",
+  "name": "校园青春 · 第三十八张画",
+  "version": "1.0.0",
+  "genre": "campus",
+  "tier": "free",
+  "description": "一集校园青春短剧：篮球砸中画本、被迫同桌、晚自习传纸条、雨天共撑外套、画室里的三十七张速写、突如其来的转学。九个镜头约 48 秒，三个槽位（转学生、篮球少年、话痨死党），清新向，适合校园与青春类账号。",
+  "cover": null,
+  "music_hint": "木吉他与钢琴的清新小调，晚自习一场只留翻书声，结尾加一段渐强的弦乐",
+  "style": {
+    "name": "青春唯美",
+    "preset": "dreamy",
+    "prompt": "校园青春片画面，柔和逆光与夕阳暖金色，轻微柔焦与光晕，白色校服与深蓝百褶裙的干净配色，浅景深，清透的空气感",
+    "aspect_ratio": "9:16"
+  },
+  "character_slots": [
+    { "id": "girl", "name": "林夏至", "role": "女主", "description": "高二转学生，画画很好，不爱说话，用速写本记录一切", "appearance": "十七岁女生，齐刘海黑色直发，白衬衫校服配深蓝百褶裙，书包上挂着一枚手绘的小徽章" },
+    { "id": "boy", "name": "程野", "role": "男主", "description": "篮球队主力，成绩垫底，嘴硬心软", "appearance": "十七岁男生，短寸头，笑起来有酒窝，校服外套敞开，脖子上挂着一副耳机" },
+    { "id": "friend", "name": "大柱", "role": "死党", "description": "程野的死党，话痨，全剧笑点担当", "appearance": "十七岁男生，微胖，圆框眼镜，校服拉链拉到顶，手里永远拿着一包零食" }
+  ],
+  "shots": [
+    {
+      "title": "篮球砸中画本",
+      "group": "开场",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，一个篮球砸翻了长椅上的速写本，{{boy}}跑过来捡起飞散的一页，纸上画的正是他自己，{{girl}}一把抢了回去",
+      "character_slots": ["boy", "girl"],
+      "scene_slot": "操场边的长椅，傍晚，橙红色夕阳",
+      "camera": "中景切特写画纸",
+      "lines": [
+        { "kind": "dialogue", "speaker": "boy", "text": "这画的……是我？" },
+        { "kind": "dialogue", "speaker": "girl", "text": "是隔壁班的。" }
+      ]
+    },
+    {
+      "title": "同桌",
+      "group": "开场",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{boy}}拎着书包一屁股坐到{{girl}}旁边的空位，{{friend}}从后排探过头来压低声音说话",
+      "character_slots": ["boy", "girl", "friend"],
+      "scene_slot": "高二教室，上午，粉笔灰在阳光里飘",
+      "camera": "过肩中景",
+      "lines": [
+        { "kind": "dialogue", "speaker": "friend", "text": "野哥，你完了，她上学期把前同桌画成了猪。" },
+        { "kind": "dialogue", "speaker": "boy", "text": "那她得先会画帅哥。" }
+      ]
+    },
+    {
+      "title": "晚自习",
+      "group": "靠近",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{boy}}趴在桌上装睡，{{girl}}把一张画着函数图像的纸条推到他手肘边，手指飞快缩回",
+      "character_slots": ["boy", "girl"],
+      "scene_slot": "教室晚自习，夜，惨白的日光灯",
+      "camera": "俯拍桌面特写",
+      "lines": [
+        { "kind": "dialogue", "speaker": "boy", "text": "你画的函数图，比老师的好看。" },
+        { "kind": "dialogue", "speaker": "girl", "text": "闭嘴，写。" }
+      ]
+    },
+    {
+      "title": "雨天",
+      "group": "靠近",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{boy}}把校服外套撑在两人头顶，{{girl}}抱着速写本缩在他身侧，两人在雨里小跑",
+      "character_slots": ["boy", "girl"],
+      "scene_slot": "校门口到公交站的林荫路，放学时的大雨",
+      "camera": "跟拍侧移",
+      "lines": [{ "kind": "narration", "text": "那年的雨，好像总挑放学的时候下。" }]
+    },
+    {
+      "title": "球赛",
+      "group": "靠近",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{boy}}投进一球后转身朝看台比了个手势，{{girl}}坐在看台角落假装低头画画，{{friend}}在她旁边激动地拍大腿",
+      "character_slots": ["boy", "girl", "friend"],
+      "scene_slot": "学校体育馆，下午，顶灯明亮，看台稀疏",
+      "camera": "全景切近景看台",
+      "lines": [
+        { "kind": "dialogue", "speaker": "friend", "text": "看见没，那个手势是冲你的！" },
+        { "kind": "dialogue", "speaker": "girl", "text": "……冲你的吧。" }
+      ]
+    },
+    {
+      "title": "三十七张",
+      "group": "波澜",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{boy}}站在画架前翻一本速写本，每一页都是他，{{girl}}推门进来愣在原地",
+      "character_slots": ["boy", "girl"],
+      "scene_slot": "美术教室，夕阳从西窗照进来，石膏像投下长影",
+      "camera": "中景过肩",
+      "lines": [
+        { "kind": "dialogue", "speaker": "boy", "text": "一共多少张？" },
+        { "kind": "dialogue", "speaker": "girl", "text": "……三十七张。" },
+        { "kind": "dialogue", "speaker": "boy", "text": "我转来，刚好三十七天。" }
+      ]
+    },
+    {
+      "title": "转学通知",
+      "group": "波澜",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{girl}}站在办公室门口低着头，手里攥着一张转学通知单，{{friend}}抱着作业本从走廊经过，脚步停住",
+      "character_slots": ["girl", "friend"],
+      "scene_slot": "教学楼走廊，课间，窗外阴天",
+      "camera": "手持跟拍",
+      "lines": [{ "kind": "narration", "text": "她的转学通知，比告白先到了一步。" }]
+    },
+    {
+      "title": "空座位",
+      "group": "波澜",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{boy}}盯着身旁空荡荡的座位，抽屉里露出一张速写：两个人撑着一件校服外套在雨里跑",
+      "character_slots": ["boy"],
+      "scene_slot": "教室，清晨，阳光照在空座位上",
+      "camera": "特写画纸缓推",
+      "lines": [{ "kind": "action", "text": "画的右下角写着：第三十八张，没画完。" }]
+    },
+    {
+      "title": "追车",
+      "group": "钩子",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{boy}}拼命朝校门口跑，一辆白色轿车缓缓驶出，{{girl}}在后座回头，隔着车窗与他对视",
+      "character_slots": ["boy", "girl"],
+      "scene_slot": "校门口到马路，傍晚，夕阳把一切染成橙色",
+      "camera": "跟拍切车窗近景",
+      "lines": [
+        { "kind": "dialogue", "speaker": "boy", "text": "林夏至！第三十八张，我来画！" },
+        { "kind": "narration", "text": "车没有停。可她手里那张画，从车窗飘了出来。" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,153 @@
+{
+  "id": "official-workplace-second-day",
+  "name": "职场逆袭 · 被开除的第二天",
+  "version": "1.0.0",
+  "genre": "workplace",
+  "tier": "free",
+  "description": "一集职场逆袭短剧：抱着纸箱离开、背锅闪回、出租屋泡面、电梯偶遇新总裁、以客户顾问身份回到比稿桌、当众翻出署名被换的方案。十个镜头约 54 秒，四个槽位（策划、总监、总裁、实习生），结尾总监的一通电话留钩。",
+  "cover": null,
+  "music_hint": "干净的电子节拍加钢琴，低谷段落抽掉节拍只留钢琴，提案一场节拍逐渐加强，钩子处换成低频嗡鸣",
+  "style": {
+    "name": "商业写实",
+    "preset": "realistic",
+    "prompt": "现代职场剧写实画面，玻璃幕墙与冷白办公灯，低饱和蓝灰调配少量暖色点缀，35mm 镜头，构图干净利落，人物神态清晰",
+    "aspect_ratio": "9:16"
+  },
+  "character_slots": [
+    { "id": "lead", "name": "方可", "role": "女主", "description": "被背锅开除的广告策划，手里攥着一份没人信的方案", "appearance": "二十九岁女性，利落的及肩直发，黑色西装外套配白色T恤，帆布鞋，手里抱着一个装私人物品的纸箱" },
+    { "id": "boss", "name": "高明远", "role": "反派", "description": "原部门总监，抢功甩锅的老手", "appearance": "四十二岁男性，发际线后移，定制西装不系扣，油亮的黑色皮鞋，手腕一块金表" },
+    { "id": "ceo", "name": "江屿", "role": "总裁", "description": "新上任的集团总裁，务实、不讲情面，只认结果", "appearance": "三十六岁男性，寸头，黑框眼镜，深灰色高领毛衣，袖子挽到小臂" },
+    { "id": "intern", "name": "小北", "role": "实习生", "description": "全部门唯一替她说话的人，技术好，胆子大", "appearance": "二十三岁男性，卷发，左耳一枚耳钉，宽松的卫衣，脖子上挂着工牌" }
+  ],
+  "shots": [
+    {
+      "title": "纸箱",
+      "group": "开场",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{lead}}抱着纸箱穿过大堂，{{boss}}站在上行的扶梯上居高临下地看着她，两人隔着人流对视",
+      "character_slots": ["lead", "boss"],
+      "scene_slot": "写字楼大堂，上午，玻璃幕墙透进刺眼的阳光",
+      "camera": "全景切中景仰拍",
+      "lines": [
+        { "kind": "dialogue", "speaker": "boss", "text": "方可，方案是公司的，人可以走。" },
+        { "kind": "dialogue", "speaker": "lead", "text": "方案是我的。公司，您留着。" }
+      ]
+    },
+    {
+      "title": "甩锅",
+      "group": "开场",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{boss}}站在投影前摊开双手，满桌同事低头不语，{{lead}}坐在桌尾，手里的笔被捏得发白",
+      "character_slots": ["boss", "lead"],
+      "scene_slot": "一周前的会议室，投影屏幕上写着「比稿失败复盘」",
+      "camera": "过肩中景",
+      "lines": [
+        { "kind": "dialogue", "speaker": "boss", "text": "这次比稿失败，责任在执行。方可，你解释一下。" },
+        { "kind": "action", "text": "方可没有解释。她知道解释没用。" }
+      ]
+    },
+    {
+      "title": "出租屋",
+      "group": "低谷",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{lead}}盘腿坐在床上吃泡面，笔记本电脑屏幕上是一份标题为「未命名」的方案，手机亮起一条消息",
+      "character_slots": ["lead"],
+      "scene_slot": "老小区出租屋，夜，台灯与电脑屏幕光",
+      "camera": "近景侧光",
+      "lines": [
+        { "kind": "action", "text": "消息：姐，提案的原始文件和邮件记录我都备份了。" },
+        { "kind": "narration", "text": "被开除的第一天，她没哭。她在改方案。" }
+      ]
+    },
+    {
+      "title": "招聘会",
+      "group": "低谷",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{lead}}站在人头攒动的招聘会摊位前递简历，对面的招聘人员皱着眉翻看",
+      "character_slots": ["lead"],
+      "scene_slot": "招聘会展馆，白天，嘈杂拥挤",
+      "camera": "手持跟拍",
+      "lines": [
+        { "kind": "action", "text": "招聘人员：「上一家，是被开除的？」" },
+        { "kind": "dialogue", "speaker": "lead", "text": "是被背锅的。" }
+      ]
+    },
+    {
+      "title": "电梯偶遇",
+      "group": "反击",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{lead}}抱着文件夹和{{intern}}挤进电梯，{{ceo}}站在角落低头看她露出来的方案首页",
+      "character_slots": ["lead", "intern", "ceo"],
+      "scene_slot": "另一栋写字楼的电梯间，镜面墙，冷白灯",
+      "camera": "近景电梯镜面反打",
+      "lines": [
+        { "kind": "dialogue", "speaker": "ceo", "text": "这方案逻辑有问题。" },
+        { "kind": "dialogue", "speaker": "lead", "text": "哪里？" },
+        { "kind": "dialogue", "speaker": "ceo", "text": "第三页。你低估了自己。" }
+      ]
+    },
+    {
+      "title": "比稿桌",
+      "group": "反击",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，长桌一侧坐着{{ceo}}和{{lead}}，另一侧的{{boss}}看清她的脸，笑容僵在脸上",
+      "character_slots": ["ceo", "lead", "boss"],
+      "scene_slot": "集团会议室，白天，长桌与落地窗",
+      "camera": "中景环绕",
+      "lines": [
+        { "kind": "dialogue", "speaker": "boss", "text": "她已经不是我们公司的人。" },
+        { "kind": "dialogue", "speaker": "ceo", "text": "所以她坐在客户这边。" }
+      ]
+    },
+    {
+      "title": "提案",
+      "group": "反击",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{lead}}站在大屏幕前讲方案，{{intern}}在一旁操作电脑，屏幕上是两份方案的逐页对比",
+      "character_slots": ["lead", "intern"],
+      "scene_slot": "集团会议室，大屏幕亮起",
+      "camera": "全景切屏幕特写",
+      "lines": [
+        { "kind": "action", "text": "大屏幕上，去年比稿失败的真正原因被一页页摊开。" },
+        { "kind": "dialogue", "speaker": "lead", "text": "这版方案，去年就在高总监邮箱里。只是署名换了。" }
+      ]
+    },
+    {
+      "title": "证据",
+      "group": "反击",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{intern}}调出邮件记录投到屏幕上，{{boss}}拍桌站起，{{ceo}}抬手示意他坐下",
+      "character_slots": ["intern", "boss", "ceo"],
+      "scene_slot": "集团会议室，长桌",
+      "camera": "俯拍会议桌",
+      "lines": [
+        { "kind": "dialogue", "speaker": "boss", "text": "这是伪造的！" },
+        { "kind": "dialogue", "speaker": "ceo", "text": "坐下。发件时间，伪造不了。" }
+      ]
+    },
+    {
+      "title": "甲方",
+      "group": "反击",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{lead}}和{{intern}}并肩走出电梯，{{lead}}手里拿着刚签好的顾问合同，两人相视一笑",
+      "character_slots": ["lead", "intern"],
+      "scene_slot": "集团大堂，傍晚，夕阳穿过玻璃幕墙",
+      "camera": "跟拍侧移",
+      "lines": [{ "kind": "narration", "text": "被开除的第二天，她成了甲方。" }]
+    },
+    {
+      "title": "一通电话",
+      "group": "钩子",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{boss}}坐在车里打电话，脸被仪表盘的光照得发青，手机屏幕上的联系人备注清晰可见",
+      "character_slots": ["boss"],
+      "scene_slot": "地下停车场，深夜，车内昏暗",
+      "camera": "特写屏幕切车灯熄灭",
+      "lines": [
+        { "kind": "dialogue", "speaker": "boss", "text": "江屿请她当顾问？……好，那就让她知道，这行是谁说了算。" },
+        { "kind": "action", "text": "手机屏幕上的备注：江董。" },
+        { "kind": "narration", "text": "游戏，才刚刚开始。" }
+      ]
+    }
+  ]
+}
