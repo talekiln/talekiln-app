@@ -9,8 +9,6 @@
       <span class="te-save" :class="'is-' + store.saveState">{{ saveText }}</span>
       <div class="te-spacer" />
       <template v-if="store.timeline">
-        <el-button size="small" :disabled="!store.canUndo" @click="store.undo()">撤销</el-button>
-        <el-button size="small" :disabled="!store.canRedo" @click="store.redo()">重做</el-button>
         <el-button size="small" :disabled="!selectedClip" @click="onSplit">切分 (S)</el-button>
         <el-button size="small" :disabled="!selectedClip" @click="onDelete">删除 (Del)</el-button>
         <el-button size="small" :loading="store.loading" @click="onReassemble">重新组装</el-button>
@@ -211,6 +209,13 @@ watch(() => store.saveState, (st, old) => { if (st === 'idle' && old && old !== 
 watch(() => views.revision, () => { store.load(episodeId.value).then(applySharedFocus).catch(() => {}) })
 
 // 配音写进了项目图（旁白音频 + 词级字幕）；重新读取时间线即可看到新的旁白轨和字幕轨
+// 撤销 / 重做只有一份：内核历史（顶栏按钮 + 这里的 Ctrl+Z）。时间线编辑先经 PUT /timelines 进内核，
+// 所以先把还没保存的编辑冲出去，再让内核回退；轨道音量 / 静音 / 混音不在图里，内核撤销不会动它们。
+async function kernelUndo(which) {
+  try { await store.flushPending() } catch (_) { /* 保存失败已提示并回读 */ }
+  return which === 'redo' ? views.redo() : views.undo()
+}
+
 async function onVoiceoverDone() {
   try { await store.load(episodeId.value) } catch (e) { ElMessage.error(e.message || '重新加载时间线失败') }
 }
@@ -357,8 +362,8 @@ const onKeydown = createKeyHandler({
   'play.toggle': () => togglePlay(),
   'clip.split': () => onSplit(),
   'clip.delete': () => onDelete(),
-  'edit.undo': () => store.undo(),
-  'edit.redo': () => store.redo(),
+  'edit.undo': () => kernelUndo('undo'),
+  'edit.redo': () => kernelUndo('redo'),
   'playhead.prevFrame': () => seek(playhead.value - FRAME_MS),
   'playhead.nextFrame': () => seek(playhead.value + FRAME_MS),
   'playhead.prevSecond': () => seek(playhead.value - 1000),
