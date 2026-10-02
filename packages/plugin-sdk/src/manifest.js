@@ -7,8 +7,19 @@ const SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?
 const HOST_RE = /^(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
 const PERMISSIONS = Object.freeze(['secret:apiKey']);
 const ENTRY_RE = /^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]*\/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*\.(?:js|cjs)$/;
+const KID_RE = /^[A-Za-z0-9._-]{1,64}$/;
+const B64URL_RE = /^[A-Za-z0-9_-]{20,}$/;
 
 const parse = (v) => String(v).split(/[-+]/)[0].split('.').map(Number);
+
+/**
+ * A path that stays inside the plugin folder: relative, forward slashes, no empty / `.` / `..` segments,
+ * no drive letter, no control characters. Used for `files` (signed set) and by the signing helpers.
+ */
+function safeRelativePath(p) {
+  if (typeof p !== 'string' || !p || p.length > 512 || /[\0-\x1f\\]/.test(p) || p.startsWith('/') || /^[A-Za-z]:/.test(p)) return false;
+  return p.split('/').every((seg) => seg !== '' && seg !== '.' && seg !== '..');
+}
 
 /** @returns {{ok: boolean, errors: string[], manifest: object|null}} */
 function validateManifest(input) {
@@ -17,7 +28,7 @@ function validateManifest(input) {
   if (!m || typeof m !== 'object' || Array.isArray(m)) {
     return { ok: false, errors: ['manifest must be an object'], manifest: null };
   }
-  const known = ['name', 'version', 'sdkVersion', 'capabilities', 'permissions', 'entry', 'label', 'description', 'homepage'];
+  const known = ['name', 'version', 'sdkVersion', 'capabilities', 'permissions', 'entry', 'label', 'description', 'homepage', 'files', 'signature'];
   for (const k of Object.keys(m)) if (!known.includes(k)) errors.push(`unknown field: ${k}`);
 
   if (typeof m.name !== 'string' || !NAME_RE.test(m.name)) errors.push('name must match ^[a-z][a-z0-9-]{1,39}$');
@@ -64,6 +75,29 @@ function validateManifest(input) {
   for (const k of ['label', 'description', 'homepage']) {
     if (m[k] !== undefined && typeof m[k] !== 'string') errors.push(`${k} must be a string`);
   }
+  // Signing (optional): `files` = relative paths covered by the signature; `signature` = ES256 over manifest + file hashes.
+  if (m.files !== undefined) {
+    if (!Array.isArray(m.files)) errors.push('files must be an array of relative paths');
+    else {
+      const seen = new Set();
+      for (const f of m.files) {
+        if (!safeRelativePath(f)) errors.push(`invalid file path: ${String(f)} (relative, inside the plugin folder)`);
+        else if (seen.has(f)) errors.push(`duplicate file: ${f}`);
+        seen.add(f);
+      }
+    }
+  }
+  if (m.signature !== undefined) {
+    const s = m.signature;
+    if (!s || typeof s !== 'object' || Array.isArray(s)) errors.push('signature must be an object {alg, kid, value}');
+    else {
+      if (s.alg !== 'ES256') errors.push('signature.alg must be ES256');
+      if (typeof s.kid !== 'string' || !KID_RE.test(s.kid)) errors.push('signature.kid must be a short key id');
+      if (typeof s.value !== 'string' || !B64URL_RE.test(s.value)) errors.push('signature.value must be base64url');
+      for (const k of Object.keys(s)) if (!['alg', 'kid', 'value'].includes(k)) errors.push(`unknown signature field: ${k}`);
+      if (!Array.isArray(m.files)) errors.push('a signed manifest must list its files');
+    }
+  }
   return { ok: errors.length === 0, errors, manifest: errors.length ? null : Object.freeze({ ...m }) };
 }
 
@@ -77,4 +111,4 @@ function hostAllowed(hostname, patterns) {
   return patterns.some((p) => (p.startsWith('*.') ? h.endsWith(p.slice(1)) : h === p));
 }
 
-module.exports = { validateManifest, allowedHosts, hostAllowed };
+module.exports = { validateManifest, allowedHosts, hostAllowed, safeRelativePath };

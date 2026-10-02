@@ -9,12 +9,15 @@
   "exports": {
     ".": { "types": "./src/index.d.ts", "default": "./src/index.js" },
     "./contract": "./src/contract.js",
-    "./bridge": "./src/bridge.js"
+    "./bridge": "./src/bridge.js",
+    "./signing": "./src/signing.js"
   },
-  "files": ["src", "examples", "LICENSE", "README.md"],
+  "bin": { "talekiln-sign-plugin": "scripts/sign-plugin.mjs" },
+  "files": ["src", "scripts", "examples", "LICENSE", "README.md"],
   "scripts": {
     "test": "node --test test/*.test.js",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "sign": "node scripts/sign-plugin.mjs"
   },
   "engines": {
     "node": ">=18"
