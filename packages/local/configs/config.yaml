@@ -41,11 +41,11 @@ vendor_lock:
   config_file: ai-configs-qudao.json
 image_proxy:
   expire_hours: 2   # 按图床实际 TTL 调整
-  use_for_video: true
+  use_for_video: false   # 默认不把参考图传到任何第三方图床；要用须同时配置 upload_url
   # 图床上传超时（秒），避免网络不通时长时间卡住
   upload_timeout_seconds: 180
   upload_max_attempts: 2
-  # upload_url: https://imageproxy.zhongzhuan.chat/api/upload
+  # upload_url: https://你自己的图床/api/upload   # 未配置则不会上传
 # 持久化 AI 任务队列（worker）：按服务商并发上限、轮询/空闲间隔（毫秒）
 ai_queue:
   limits:

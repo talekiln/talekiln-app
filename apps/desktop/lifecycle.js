@@ -58,7 +58,9 @@ function createNotificationBatcher({ show, windowMs = 1500, setTimer = setTimeou
   };
 }
 
-function createLifecycle({ app, dialog, Notification, Tray, Menu, nativeImage, powerMonitor, getWorker, readableError, getExtraTrayItems = () => [], log = () => {}, setTimer }) {
+const plat = require('./platform');
+
+function createLifecycle({ app, dialog, Notification, Tray, Menu, nativeImage, powerMonitor, getWorker, readableError, getExtraTrayItems = () => [], log = () => {}, setTimer, platform = process.platform }) {
   let tray = null;
   let win = null;
   let quitConfirmed = false;
@@ -94,6 +96,8 @@ function createLifecycle({ app, dialog, Notification, Tray, Menu, nativeImage, p
     try {
       if (tray || !Tray || !nativeImage) return false;
       const icon = nativeImage.createFromDataURL(`data:image/png;base64,${TRAY_ICON_PNG_BASE64}`);
+      // macOS 菜单栏要求模板图（黑色 + 透明），系统才会按深浅色主题着色
+      if (plat.trayOptions(platform).templateImage && icon && icon.setTemplateImage) icon.setTemplateImage(true);
       tray = new Tray(icon);
       tray.setToolTip('Talekiln');
       refreshTrayMenu();
@@ -114,7 +118,8 @@ function createLifecycle({ app, dialog, Notification, Tray, Menu, nativeImage, p
       e.preventDefault();
       w.hide();
     });
-    w.on('closed', () => { win = null; if (!tray) app.quit(); });
+    // macOS：关掉最后一个窗口应用继续运行（Dock 重开，见 reopen）；其他平台无托盘时退出
+    w.on('closed', () => { win = null; if (!tray && plat.quitOnAllWindowsClosed(platform)) app.quit(); });
   }
 
   /** Wire to app.on('before-quit'). Returns true when the quit goes ahead. */
@@ -160,7 +165,14 @@ function createLifecycle({ app, dialog, Notification, Tray, Menu, nativeImage, p
     } catch (e) { log(`powerMonitor unavailable: ${e && e.message}`); return false; }
   }
 
-  return { setupTray, refreshTrayMenu, attachWindow, onBeforeQuit, onTaskFinished, bindPower, showWindow, isQuitting: () => quitting };
+  /** macOS Dock 图标被点击（app 'activate'）：窗口还在就显示，已销毁则交给 create 重建。返回是否重建。 */
+  function reopen(create) {
+    if (win && !win.isDestroyed()) { showWindow(); return false; }
+    if (create) { create(); return true; }
+    return false;
+  }
+
+  return { setupTray, refreshTrayMenu, attachWindow, onBeforeQuit, onTaskFinished, bindPower, showWindow, reopen, isQuitting: () => quitting };
 }
 
 module.exports = { createLifecycle, quitPrompt, notificationFor, createNotificationBatcher, TRAY_ICON_PNG_BASE64 };

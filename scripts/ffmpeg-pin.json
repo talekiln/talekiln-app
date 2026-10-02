@@ -1,7 +1,30 @@
 {
-  "_comment": "随安装包内置的 ffmpeg（LGPL 构建，独立进程调用，不链接）。BtbN 的 autobuild 版本会被定期清理；换版本时更新 url/version/sha256，并同步 docs/ffmpeg-lgpl.md 的声明与 sourceUrl。",
-  "version": "n8.1.3-9-g29e619e767",
-  "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n8.1.3-9-g29e619e767-win64-lgpl-8.1.zip",
-  "sha256": "4a7642b2264c03e8a0ce8a3825b933ee5580656f45695a086fe7e294045ffc0a",
-  "source": "https://github.com/BtbN/FFmpeg-Builds (build scripts); upstream https://ffmpeg.org/releases/"
+  "_comment": "随安装包内置的 ffmpeg（LGPL 构建，独立进程调用，不链接）。schema 2：按 `${platform}-${arch}` 分条目，字段 version/url/sha256/source/archive(zip)/layout(btbn|flat)。BtbN 的 autobuild 版本会被定期清理；换版本时更新条目，并同步 docs/ffmpeg-lgpl.md 的声明与 sourceUrl。含 TODO 的条目会被 scripts/fetch-ffmpeg.mjs 直接拒绝（不下载、不编造哈希）。",
+  "schema": 2,
+  "platforms": {
+    "win32-x64": {
+      "version": "n8.1.3-9-g29e619e767",
+      "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n8.1.3-9-g29e619e767-win64-lgpl-8.1.zip",
+      "sha256": "4a7642b2264c03e8a0ce8a3825b933ee5580656f45695a086fe7e294045ffc0a",
+      "source": "https://github.com/BtbN/FFmpeg-Builds (build scripts); upstream https://ffmpeg.org/releases/",
+      "archive": "zip",
+      "layout": "btbn"
+    },
+    "darwin-arm64": {
+      "version": "TODO",
+      "url": "TODO",
+      "sha256": "TODO",
+      "source": "TODO: macOS 没有像 BtbN 那样公认的 LGPL 预编译源；多数常见 mac 静态包带 libx264 等 GPL 组件，不可直接用。方案见 docs/phase2-macos.md 第 4 节（自编译或经核实的 LGPL 来源）。",
+      "archive": "zip",
+      "layout": "flat"
+    },
+    "darwin-x64": {
+      "version": "TODO",
+      "url": "TODO",
+      "sha256": "TODO",
+      "source": "TODO: 同 darwin-arm64",
+      "archive": "zip",
+      "layout": "flat"
+    }
+  }
 }

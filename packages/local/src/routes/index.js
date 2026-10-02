@@ -354,6 +354,8 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
   const kernelRoutes = require('./kernel')(db, log);
   r.get('/episodes/:id/graph', kernelRoutes.getGraph);
   r.get('/episodes/:id/views/:view', kernelRoutes.getView);
+  r.get('/episodes/:id/history', kernelRoutes.getHistory);
+  r.get('/episodes/:id/versions', kernelRoutes.getVersions);
   r.post('/episodes/:id/tx', kernelRoutes.postTx);
   r.post('/episodes/:id/intent', kernelRoutes.postIntent);
   r.post('/episodes/:id/undo', kernelRoutes.postUndo);
@@ -385,11 +387,15 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
         ffmpegPath: require('../utils/ffmpegPath').getFfmpegPath(), ffmpegDir: extras.ffmpegDir || null,
       });
     }
-    const exp = require('./export')(db, exporter, log);
+    const mediaExporter = extras.storageRoot
+      ? (extras.mediaExporter || require('../export/mediaExport').createMediaExporter(db, { storageRoot: extras.storageRoot })) : null;
+    const exp = require('./export')(db, exporter, log, mediaExporter);
     r.get('/settings/aigc', exp.getAigc);
     r.put('/settings/aigc', exp.putAigc);
     r.get('/export/options', exp.options);
     r.post('/export/start', exp.start);
+    r.post('/export/jianying', exp.jianying);
+    r.post('/export/fcpxml', exp.fcpxml);
     r.get('/export/:id/status', exp.status);
     r.post('/export/:id/cancel', exp.cancel);
     r.post('/export/:id/open-folder', exp.openFolder);

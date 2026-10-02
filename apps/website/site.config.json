@@ -1,0 +1,23 @@
+{
+  "siteName": "故事窑 Talekiln",
+  "version": "0.0.0",
+  "releaseDate": "（发布日期占位）",
+  "downloads": {
+    "windows": {
+      "url": "#download-windows-placeholder",
+      "sha256": "（发布时填写 64 位 SHA-256）",
+      "size": "（大小占位）"
+    },
+    "macos": {
+      "url": "",
+      "sha256": "",
+      "size": ""
+    }
+  },
+  "repoUrl": "#repo-placeholder",
+  "privacyUrl": "privacy.html",
+  "termsUrl": "terms.html",
+  "reportUrl": "report.html",
+  "icpNumber": "（ICP 备案号占位）",
+  "contact": "（联系方式占位）"
+}

@@ -66,7 +66,7 @@ test('推广配置：REFERRAL_LINKS 覆盖需在白名单内，否则启动失�
 
 test('推广：点击记录失败不阻断跳转', async () => {
   const svc = new ReferralService(loadReferralConfig(env()), {
-    create: async () => { throw new Error('db down'); }, countByCode: async () => 0,
+    create: async () => { throw new Error('db down'); }, countByCode: async () => 0, between: async () => [],
   });
   const orig = console.error;
   console.error = () => {};

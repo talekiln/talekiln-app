@@ -1,4 +1,4 @@
-import { json } from 'express';
+import { json, urlencoded } from 'express';
 import type { INestApplication } from '@nestjs/common';
 import { ErrorFilter } from './filter';
 
@@ -12,6 +12,15 @@ export function configureApp(app: INestApplication) {
     (app.getHttpAdapter().getInstance() as { set: (k: string, v: unknown) => void }).set('trust proxy', Number(process.env.TRUST_PROXY));
   }
   app.use('/feedback', json({ limit: FEEDBACK_BODY_LIMIT }));
+  // 支付回调：保留原始字节供验签（真实微信/支付宝要用原始报文）；支付宝回调是表单编码
+  app.use('/payments/notify', json({
+    limit: DEFAULT_BODY_LIMIT,
+    verify: (req, _res, buf) => { (req as { rawBody?: Buffer }).rawBody = Buffer.from(buf); },
+  }));
+  app.use('/payments/notify', urlencoded({
+    extended: false, limit: DEFAULT_BODY_LIMIT,
+    verify: (req, _res, buf) => { (req as { rawBody?: Buffer }).rawBody = Buffer.from(buf); },
+  }));
   app.use(json({ limit: DEFAULT_BODY_LIMIT })); // body-parser 遇到已解析的请求会跳过
   app.useGlobalFilters(new ErrorFilter());
 }

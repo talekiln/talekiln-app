@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type {
-  Account, Device, FeedbackRecord, InviteCode, RefreshTokenRecord, Repositories, TelemetryRow,
+  AdminAuditRecord, AdminRoleRecord, AnnouncementRecord, ReleaseRecord,
+  Account, Device, FeedbackRecord, InvoiceRecord, InviteCode, LicenceUsageRecord, OrderRecord, PaymentRecord,
+  Plan, PlanVersion, RefreshTokenRecord, RefundRecord, Repositories, Subscription, TelemetryRow,
 } from './repositories';
 
 // 内存实现：仅用于测试（单线程 JS 下每个方法体天然原子）。
@@ -13,8 +15,89 @@ export function createMemoryRepositories(): Repositories {
   const telemetry: TelemetryRow[] = [];
   const feedback = new Map<string, FeedbackRecord>();
   const clicks: { id: string; code: string; src: string | null; createdAt: Date }[] = [];
+  const plans = new Map<string, Plan>();
+  const versions = new Map<string, PlanVersion>();
+  const subs = new Map<string, Subscription>(); // key: accountId
+  const orders = new Map<string, OrderRecord>();
+  const payments = new Map<string, PaymentRecord>(); // key: orderId
+  const refunds = new Map<string, RefundRecord>();
+  const invoices = new Map<string, InvoiceRecord>();
+  const usages: LicenceUsageRecord[] = [];
+  const notifications = new Set<string>();
+  const announcements = new Map<string, AnnouncementRecord>();
+  const releases = new Map<string, ReleaseRecord>();
+  const adminRoles = new Map<string, AdminRoleRecord>(); // key: accountId
+  const audits: AdminAuditRecord[] = [];
+  const clone = <T extends object>(x: T): T => structuredClone(x);
+  const cloneOrNull = <T extends object>(x: T | undefined | null): T | null => (x ? structuredClone(x) : null);
 
   return {
+    announcements: {
+      async create(a, now) {
+        const rec: AnnouncementRecord = { ...a, id: randomUUID(), createdAt: now, updatedAt: now };
+        announcements.set(rec.id, rec);
+        return clone(rec);
+      },
+      async update(id, patch, now) {
+        const r = announcements.get(id);
+        if (!r) return null;
+        Object.assign(r, patch, { updatedAt: now });
+        return clone(r);
+      },
+      async delete(id) { return announcements.delete(id); },
+      async findById(id) { return cloneOrNull(announcements.get(id)); },
+      async list() {
+        return [...announcements.values()].sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime() || a.id.localeCompare(b.id)).map(clone);
+      },
+      async listEffective(now, channel) {
+        return [...announcements.values()]
+          .filter((a) => a.enabled && a.startsAt <= now && (!a.endsAt || a.endsAt > now) && (a.channel === 'all' || a.channel === channel))
+          .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime() || a.id.localeCompare(b.id)).map(clone);
+      },
+    },
+    releases: {
+      async create(r, now) {
+        for (const x of releases.values()) if (x.version === r.version && x.channel === r.channel) throw new Error('unique:version');
+        const rec: ReleaseRecord = { ...r, id: randomUUID(), createdAt: now, updatedAt: now };
+        releases.set(rec.id, rec);
+        return clone(rec);
+      },
+      async update(id, patch, now) {
+        const r = releases.get(id);
+        if (!r) return null;
+        Object.assign(r, patch, { updatedAt: now });
+        return clone(r);
+      },
+      async findById(id) { return cloneOrNull(releases.get(id)); },
+      async list() { return [...releases.values()].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || a.id.localeCompare(b.id)).map(clone); },
+      async listEnabled(channels) { return [...releases.values()].filter((r) => r.enabled && channels.includes(r.channel)).map(clone); },
+    },
+    adminRoles: {
+      async set(accountId, role, grantedBy, now) {
+        const cur = adminRoles.get(accountId);
+        const rec: AdminRoleRecord = { accountId, role, grantedBy, createdAt: cur?.createdAt ?? now, updatedAt: now };
+        adminRoles.set(accountId, rec);
+        return clone(rec);
+      },
+      async find(accountId) { return cloneOrNull(adminRoles.get(accountId)); },
+      async remove(accountId) { return adminRoles.delete(accountId); },
+      async list() { return [...adminRoles.values()].map(clone); },
+    },
+    adminAudit: {
+      async add(r) {
+        const rec: AdminAuditRecord = { ...r, id: randomUUID(), detail: r.detail === undefined ? null : structuredClone(r.detail) };
+        audits.push(rec);
+        return clone(rec);
+      },
+      async list(f) {
+        return audits
+          .filter((a) => (!f.actorId || a.actorId === f.actorId) && (!f.action || a.action === f.action)
+            && (!f.targetType || a.targetType === f.targetType) && (!f.targetId || a.targetId === f.targetId)
+            && (!f.before || a.at < f.before))
+          .sort((a, b) => b.at.getTime() - a.at.getTime() || b.id.localeCompare(a.id))
+          .slice(0, f.limit).map(clone);
+      },
+    },
     accounts: {
       async create(a) {
         for (const x of accounts.values()) if (x.email === a.email) throw new Error('unique:email');
@@ -28,6 +111,7 @@ export function createMemoryRepositories(): Repositories {
         return null;
       },
       async list() { return [...accounts.values()].map((x) => ({ ...x })); },
+      async setRole(id, role) { const a = accounts.get(id); if (a) a.role = role; },
       async setDisabled(id, at) { const a = accounts.get(id); if (a) a.disabledAt = at; },
       async delete(id) {
         // 与数据库外键语义一致：设备/刷新令牌级联删除，邀请码的使用者置空
@@ -35,6 +119,9 @@ export function createMemoryRepositories(): Repositories {
         for (const [k, d] of devices) if (d.accountId === id) devices.delete(k);
         for (const [k, t] of tokens) if (t.accountId === id) tokens.delete(k);
         for (const i of invites.values()) if (i.usedById === id) i.usedById = null;
+        subs.delete(id);
+        adminRoles.delete(id);
+        for (let n = usages.length - 1; n >= 0; n--) if (usages[n].accountId === id) usages.splice(n, 1);
       },
     },
     invites: {
@@ -81,6 +168,23 @@ export function createMemoryRepositories(): Repositories {
         };
         devices.set(rec.id, rec);
         return { ...rec };
+      },
+      async registerLimited(accountId, fingerprint, name, maxDevices) {
+        // 方法体内无 await，天然原子（对应 PG 实现里的账号行锁）
+        for (const x of devices.values()) {
+          if (x.accountId === accountId && x.fingerprint === fingerprint) {
+            x.name = name;
+            return { ok: true as const, device: { ...x }, created: false };
+          }
+        }
+        const active = [...devices.values()].filter((d) => d.accountId === accountId && !d.revokedAt).length;
+        if (active >= maxDevices) return { ok: false as const, reason: 'limit' as const };
+        const rec: Device = {
+          id: randomUUID(), accountId, fingerprint, name,
+          createdAt: new Date(), lastSeenAt: null, revokedAt: null,
+        };
+        devices.set(rec.id, rec);
+        return { ok: true as const, device: { ...rec }, created: true };
       },
       async findById(id) { const r = devices.get(id); return r ? { ...r } : null; },
       async listByAccount(accountId) {
@@ -135,6 +239,210 @@ export function createMemoryRepositories(): Repositories {
     referralClicks: {
       async create(c) { const rec = { ...c, id: randomUUID() }; clicks.push(rec); return { ...rec }; },
       async countByCode(code) { return clicks.filter((x) => x.code === code).length; },
+      async between(from, to) {
+        return clicks.filter((x) => x.createdAt >= from && x.createdAt < to).map((x) => ({ ...x }));
+      },
+    },
+    plans: {
+      async create(p) {
+        for (const x of plans.values()) if (x.code === p.code) throw new Error('unique:code');
+        const rec: Plan = { id: randomUUID(), code: p.code, name: p.name, enabled: true, createdAt: new Date() };
+        plans.set(rec.id, rec);
+        return { ...rec };
+      },
+      async setEnabled(code, enabled) {
+        for (const x of plans.values()) if (x.code === code) { x.enabled = enabled; return true; }
+        return false;
+      },
+      async findByCode(code) {
+        for (const x of plans.values()) if (x.code === code) return { ...x };
+        return null;
+      },
+      async addVersion(planId, v) {
+        const plan = plans.get(planId);
+        if (!plan) throw new Error('fk:planId');
+        const max = Math.max(0, ...[...versions.values()].filter((x) => x.planId === planId).map((x) => x.version));
+        const rec: PlanVersion = { id: randomUUID(), planId, planCode: plan.code, version: max + 1, ...clone(v), createdAt: new Date() };
+        versions.set(rec.id, rec);
+        return clone(rec);
+      },
+      async findVersion(id) { return cloneOrNull(versions.get(id)); },
+      async latestVersion(planId) {
+        const vs = [...versions.values()].filter((x) => x.planId === planId).sort((a, b) => b.version - a.version);
+        return cloneOrNull(vs[0]);
+      },
+      async list() {
+        return [...plans.values()].map((plan) => ({
+          plan: { ...plan },
+          versions: [...versions.values()].filter((v) => v.planId === plan.id).sort((a, b) => a.version - b.version).map(clone),
+        }));
+      },
+    },
+    orders: {
+      async create(o) {
+        for (const x of orders.values()) if (x.outTradeNo === o.outTradeNo) throw new Error('unique:outTradeNo');
+        const rec: OrderRecord = {
+          ...o, id: randomUUID(), status: 'PENDING', codeUrl: null, paidAt: null, periodStart: null, periodEnd: null,
+        };
+        orders.set(rec.id, rec);
+        return clone(rec);
+      },
+      async findById(id) { return cloneOrNull(orders.get(id)); },
+      async findByOutTradeNo(n) {
+        for (const x of orders.values()) if (x.outTradeNo === n) return clone(x);
+        return null;
+      },
+      async listByAccount(accountId) {
+        return [...orders.values()].filter((o) => o.accountId === accountId)
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).map(clone);
+      },
+      async list(f) {
+        return [...orders.values()]
+          .filter((o) => (!f.status || o.status === f.status) && (!f.accountId || o.accountId === f.accountId))
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, f.limit).map(clone);
+      },
+      async setCodeUrl(id, codeUrl) { const o = orders.get(id); if (o) o.codeUrl = codeUrl; },
+      async close(id, _now) {
+        const o = orders.get(id);
+        if (!o || o.status !== 'PENDING') return false;
+        o.status = 'CLOSED';
+        return true;
+      },
+      async findPayment(orderId) { return cloneOrNull(payments.get(orderId)); },
+    },
+    subscriptions: {
+      async findByAccount(accountId) { return cloneOrNull(subs.get(accountId)); },
+    },
+    refunds: {
+      async findById(id) { return cloneOrNull(refunds.get(id)); },
+      async listByOrder(orderId) {
+        return [...refunds.values()].filter((r) => r.orderId === orderId)
+          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).map(clone);
+      },
+      async list(limit) {
+        return [...refunds.values()].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, limit).map(clone);
+      },
+    },
+    invoices: {
+      async create(i) {
+        for (const x of invoices.values()) if (x.orderId === i.orderId) throw new Error('unique:orderId');
+        const { now, ...rest } = i;
+        const rec: InvoiceRecord = {
+          ...rest, id: randomUUID(), createdAt: now,
+          issuedAt: i.status === 'ISSUED' ? now : null, voidedAt: null,
+        };
+        invoices.set(rec.id, rec);
+        return clone(rec);
+      },
+      async findById(id) { return cloneOrNull(invoices.get(id)); },
+      async findByOrder(orderId) {
+        for (const x of invoices.values()) if (x.orderId === orderId) return clone(x);
+        return null;
+      },
+      async list(f) {
+        return [...invoices.values()].filter((x) => !f.status || x.status === f.status)
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, f.limit).map(clone);
+      },
+      async issue(id, invoiceNo, now) {
+        const x = invoices.get(id);
+        if (!x || x.status !== 'REQUESTED') return false;
+        x.status = 'ISSUED'; x.invoiceNo = invoiceNo; x.issuedAt = now;
+        return true;
+      },
+      async void(id, now) {
+        const x = invoices.get(id);
+        if (!x || x.status === 'VOID') return false;
+        x.status = 'VOID'; x.voidedAt = now;
+        return true;
+      },
+    },
+    licenceUsage: {
+      async record(u) { usages.push({ ...u, id: randomUUID() }); },
+      async listByAccount(accountId, limit) {
+        return usages.filter((u) => u.accountId === accountId)
+          .sort((a, b) => b.issuedAt.getTime() - a.issuedAt.getTime()).slice(0, limit).map(clone);
+      },
+      async countByAccount(accountId) { return usages.filter((u) => u.accountId === accountId).length; },
+    },
+    billing: {
+      // 以下方法体内没有 await：单线程下每个方法天然原子，语义与 Prisma 实现（账号行锁 + 事务）一致。
+      async settlePaid(i) {
+        let order: OrderRecord | undefined;
+        for (const x of orders.values()) if (x.outTradeNo === i.outTradeNo) order = x;
+        if (!order) return { outcome: 'not_found' as const };
+        const key = `${i.provider}|${i.notifyId}`;
+        if (notifications.has(key)) return { outcome: 'duplicate_notify' as const };
+        for (const p of payments.values()) {
+          if (p.provider === i.provider && p.tradeNo === i.tradeNo && p.orderId !== order.id) throw new Error('unique:payment');
+        }
+        notifications.add(key);
+        if (order.status !== 'PENDING' && order.status !== 'CLOSED') {
+          return { outcome: 'already_settled' as const, order: clone(order) };
+        }
+        const cur = subs.get(order.accountId) ?? null;
+        const period = i.periodFor(cur ? clone(cur) : null, clone(order));
+        order.status = 'PAID';
+        order.paidAt = i.paidAt;
+        order.periodStart = period.start;
+        order.periodEnd = period.end;
+        payments.set(order.id, {
+          id: randomUUID(), orderId: order.id, provider: i.provider, tradeNo: i.tradeNo,
+          amountCents: i.amountCents, paidAt: i.paidAt, createdAt: new Date(),
+        });
+        let sub = cur;
+        if (sub) {
+          const renewing = sub.currentPeriodEnd.getTime() > i.paidAt.getTime();
+          sub.planVersionId = order.planVersionId;
+          sub.currentPeriodEnd = period.end;
+          if (!renewing) sub.currentPeriodStart = period.start;
+        } else {
+          sub = {
+            id: randomUUID(), accountId: order.accountId, planVersionId: order.planVersionId,
+            currentPeriodStart: period.start, currentPeriodEnd: period.end, createdAt: new Date(),
+          };
+          subs.set(order.accountId, sub);
+        }
+        return { outcome: 'applied' as const, order: clone(order), subscription: clone(sub) };
+      },
+      async beginRefund(i) {
+        const order = orders.get(i.orderId);
+        if (!order || order.status !== 'PAID') return null;
+        for (const r of refunds.values()) if (r.outRefundNo === i.outRefundNo) throw new Error('unique:outRefundNo');
+        order.status = 'REFUNDING';
+        const rec: RefundRecord = {
+          id: randomUUID(), orderId: i.orderId, outRefundNo: i.outRefundNo, amountCents: i.amountCents,
+          status: 'PENDING', reason: i.reason, providerRefundNo: null, failureReason: null,
+          createdBy: i.createdBy, createdAt: i.now, finishedAt: null,
+        };
+        refunds.set(rec.id, rec);
+        return clone(rec);
+      },
+      async finishRefund(refundId, i) {
+        const refund = refunds.get(refundId);
+        if (!refund || refund.status !== 'PENDING') return null;
+        const order = orders.get(refund.orderId)!;
+        refund.status = 'SUCCESS';
+        refund.providerRefundNo = i.providerRefundNo;
+        refund.finishedAt = i.now;
+        order.status = 'REFUNDED';
+        const sub = subs.get(order.accountId) ?? null;
+        if (sub) {
+          let end = sub.currentPeriodEnd.getTime() - i.cutMs;
+          if (end < i.now.getTime()) end = Math.min(sub.currentPeriodEnd.getTime(), i.now.getTime());
+          sub.currentPeriodEnd = new Date(end);
+        }
+        return { refund: clone(refund), subscription: sub ? clone(sub) : null };
+      },
+      async failRefund(refundId, i) {
+        const refund = refunds.get(refundId);
+        if (!refund || refund.status !== 'PENDING') return false;
+        refund.status = 'FAILED';
+        refund.failureReason = i.reason;
+        refund.finishedAt = i.now;
+        const order = orders.get(refund.orderId);
+        if (order && order.status === 'REFUNDING') order.status = 'PAID';
+        return true;
+      },
     },
   };
 }

@@ -11,6 +11,72 @@ export const FALLBACK_RESOLUTIONS = [
   { key: '720p-v', label: '720p 竖屏 (720×1280)', width: 720, height: 1280 },
 ]
 
+/** 平台预设兜底（与后端 exporters/presets.js 一致）；码率仅为建议值 */
+export const FALLBACK_PLATFORM_PRESETS = [
+  { key: 'douyin-9x16', platform: '抖音', label: '抖音 竖屏 9:16 (1080×1920)', aspect: '9:16', width: 1080, height: 1920, fps: 30, bitrate_kbps: 8000 },
+  { key: 'shipinhao-3x4', platform: '视频号', label: '视频号 3:4 (1080×1440)', aspect: '3:4', width: 1080, height: 1440, fps: 30, bitrate_kbps: 8000 },
+  { key: 'shipinhao-9x16', platform: '视频号', label: '视频号 竖屏 9:16 (1080×1920)', aspect: '9:16', width: 1080, height: 1920, fps: 30, bitrate_kbps: 8000 },
+  { key: 'landscape-16x9', platform: '通用', label: '横屏 16:9 (1920×1080)', aspect: '16:9', width: 1920, height: 1080, fps: 30, bitrate_kbps: 10000 },
+]
+
+/** 普通分辨率 + 平台预设合成一张表，buildStartRequest 按 key 查宽高 */
+export function sizeTable(resolutions, presets) {
+  return [...(resolutions || []), ...(presets || [])]
+}
+
+/** 取预设（不存在返回 null）；选中预设时界面把帧率一并切过去 */
+export function presetOf(presets, key) {
+  return (presets || []).find((p) => p.key === key) || null
+}
+
+export function presetHint(preset) {
+  if (!preset) return ''
+  return `建议码率 ${preset.bitrate_kbps} kbps、${preset.fps} fps。码率只是建议值，当前渲染按质量模式导出，尚未按码率控制；发布前请以平台后台要求为准。`
+}
+
+export const MEDIA_TARGETS = [
+  { value: 'jianying', label: '剪映草稿' },
+  { value: 'xmeml', label: 'Premiere（xmeml）' },
+  { value: 'fcpxml', label: 'FCPXML（Final Cut / 达芬奇）' },
+]
+
+/** 导出到剪映 / Premiere 的表单校验；返回错误文案，通过返回空串 */
+export function validateMediaForm(form) {
+  if (!form.resolution) return '请选择尺寸'
+  const p = String(form.media_dir || '').trim()
+  if (!p) return '请填写导出文件夹'
+  if (!/^([a-zA-Z]:[\\/]|\\\\|\/)/.test(p)) return '导出文件夹必须是绝对路径，例如 D:\\导出'
+  return ''
+}
+
+/** 请求体与接口：剪映走 /export/jianying；Premiere 与 FCPXML 走 /export/fcpxml（format 区分） */
+export function buildMediaRequest(form, sizes, episodeId, target, extra = {}) {
+  const r = sizes.find((x) => x.key === form.resolution)
+  const body = {
+    episode_id: Number(episodeId),
+    output_dir: String(form.media_dir).trim(),
+    width: r.width,
+    height: r.height,
+    fps: Number(form.fps),
+    ...extra,
+  }
+  const name = String(form.media_name || '').trim()
+  if (name) body.name = name
+  if (target === 'jianying') return { kind: 'jianying', body }
+  return { kind: 'fcpxml', body: { ...body, format: target === 'fcpxml' ? 'fcpxml' : 'xmeml' } }
+}
+
+/** 导出结果 -> 一句话 */
+export function mediaResultText(r) {
+  if (!r) return ''
+  const st = r.stats || {}
+  const parts = [`${r.written ? '已导出' : '检查通过（未写文件）'}：${r.output_dir}`]
+  const n = st.video_segments ?? st.video_clips
+  if (n != null) parts.push(`视频 ${n} 段`)
+  if (st.subtitle_segments != null || st.subtitle_cues != null) parts.push(`字幕 ${st.subtitle_segments ?? st.subtitle_cues} 条`)
+  return parts.join(' · ')
+}
+
 const ENCODER_TEXT = {
   h264_nvenc: 'NVIDIA 显卡 (h264_nvenc)',
   h264_qsv: 'Intel 核显 (h264_qsv)',

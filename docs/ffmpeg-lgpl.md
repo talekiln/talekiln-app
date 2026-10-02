@@ -8,6 +8,8 @@
 2. **独立进程、动态使用**：lycore 只通过 `ffmpeg` / `ffprobe` **可执行文件的子进程**调用，不静态或动态链接 libav*。ffmpeg 保持为可单独替换的文件，用户可以换成自己编译的版本（`LYCORE_FFMPEG_DIR` 或 `ffmpegDir` 参数指向的目录）。
 3. **随安装包内置**（`scripts/ffmpeg-pin.json` 固定 BtbN win64-lgpl 构建的地址与 sha256，构建时由 `scripts/fetch-ffmpeg.mjs` 下载校验，放入 `<安装目录>/resources/lycore/ffmpeg/`，LICENSE 一并随附）。首次使用时下载的路径保留为后备。无论哪种，应用向用户分发 ffmpeg 都需要履行下列义务。注意：BtbN autobuild 的旧版本可能被上游清理，发布前应把该文件转存到自有存储并更新固定地址。
 
+**macOS**：`scripts/ffmpeg-pin.json` 已按平台分条目（schema 2），`darwin-arm64` / `darwin-x64` 目前是 TODO，没有核实过的 LGPL 预编译来源，拒绝下载；获取与自编译方案、VideoToolbox 与无 libx264 的后果见 `docs/phase2-macos.md` 第 4 节。
+
 ## 供应方式（`packages/core/client/ffmpeg-provision.js`）
 
 - 清单 `packages/core/ffmpeg-manifest.json`：版本、各平台文件名、相对路径、**固定的 SHA-256**、大小。校验值只来自随应用发布的清单，不信任服务器返回的任何哈希。

@@ -3,7 +3,7 @@
     <div class="shell">
       <div class="top">
         <h1 class="brand">故事窑</h1>
-        <el-button v-if="step !== 'done'" text data-test="skip" @click="skip">跳过，稍后在 AI 配置中设置</el-button>
+        <el-button v-if="step !== 'done'" text data-test="skip" :disabled="needConsent && !agreed" @click="skip">跳过，稍后在 AI 配置中设置</el-button>
       </div>
 
       <el-steps :active="stepIndex(step, steps)" finish-status="success" align-center class="steps">
@@ -22,9 +22,21 @@
             <li>没有 Key 也可以先看示例项目，不会产生任何费用。</li>
             <li>现在不想配也行，随时可以在“AI 配置”里补。</li>
           </ul>
+          <div class="consent" data-test="consent">
+            <el-checkbox v-model="agreed" data-test="consent-check">
+              我已阅读并同意用户协议与隐私政策
+            </el-checkbox>
+            <span class="consent-links">
+              <template v-for="l in legalLinks" :key="l.id">
+                <a v-if="l.url" :href="l.url" target="_blank" rel="noopener noreferrer">{{ l.label }}</a>
+                <span v-else class="pending">{{ l.label }}（{{ PENDING_LABEL }}）</span>
+              </template>
+            </span>
+            <el-alert v-if="consentError" :title="consentError" type="error" show-icon :closable="false" data-test="consent-error" />
+          </div>
           <div class="actions">
-            <el-button type="primary" size="large" data-test="start" @click="go(nextStep('welcome', steps))">开始配置</el-button>
-            <el-button size="large" :loading="sampleLoading" data-test="try-sample" @click="trySample">先看示例项目</el-button>
+            <el-button type="primary" size="large" data-test="start" :disabled="!agreed" @click="start">开始配置</el-button>
+            <el-button size="large" :loading="sampleLoading" :disabled="!agreed" data-test="try-sample" @click="trySampleWithConsent">先看示例项目</el-button>
           </div>
         </template>
 
@@ -124,6 +136,7 @@ import {
   stepsFor, validateKeyInput, visibleProviders,
 } from '@/utils/onboarding'
 import { seedSampleLocation } from '@/utils/sample'
+import { PENDING_LABEL, hasCurrentConsent, recordConsent, resolveLegalLinks, safeLocalStorage } from '@/utils/legal'
 
 const router = useRouter()
 const loading = ref(true)
@@ -137,6 +150,30 @@ const testing = ref(false)
 const testState = ref('idle')
 const errorMsg = ref('')
 const sampleLoading = ref(false)
+
+// 同意用户协议与隐私政策：版本和时间只记在本机，不上传。已同意当前版本则不再询问。
+const legalLinks = resolveLegalLinks(import.meta.env)
+const needConsent = ref(!hasCurrentConsent(safeLocalStorage()))
+const agreed = ref(!needConsent.value)
+const consentError = ref('')
+
+function commitConsent() {
+  if (!needConsent.value) return true
+  const { ok } = recordConsent(safeLocalStorage())
+  if (!ok) { consentError.value = '无法在本机记录同意，请检查浏览器存储设置后重试'; return false }
+  needConsent.value = false
+  return true
+}
+
+function start() {
+  if (!agreed.value || !commitConsent()) return
+  go(nextStep('welcome', steps.value))
+}
+
+async function trySampleWithConsent() {
+  if (!agreed.value || !commitConsent()) return
+  await trySample()
+}
 
 const current = computed(() => getProvider(provider.value))
 // 只开放一个服务商时去掉选择步骤并隐含选定（config.yaml providers.enabled）
@@ -209,6 +246,7 @@ async function runTest() {
 }
 
 async function skip() {
+  if (needConsent.value && (!agreed.value || !commitConsent())) return
   await persist({ dismissed: true })
   router.replace('/')
 }
@@ -236,7 +274,7 @@ onMounted(async () => {
     const s = resumeStep(status.value)
     // 已配好 Key 且不在测试/完成步骤：不再显示向导
     if (status.value.has_key && !['test', 'done'].includes(s)) { router.replace('/'); return }
-    step.value = s
+    step.value = needConsent.value ? 'welcome' : s // 尚未同意协议时一律从欢迎页开始
   } catch (_) {
     step.value = 'welcome'
   } finally {
@@ -263,5 +301,8 @@ onMounted(async () => {
 .provider.active { border-color: var(--el-color-primary); box-shadow: 0 0 0 1px var(--el-color-primary); }
 .key-form { margin-top: 16px; }
 .error { margin-bottom: 12px; }
+.consent { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.consent-links { display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px; }
+.consent-links .pending { color: var(--el-text-color-secondary); }
 .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
 </style>

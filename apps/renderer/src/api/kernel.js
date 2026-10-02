@@ -6,6 +6,9 @@ const quiet = { silentError: true }
 export const kernelAPI = {
   graph(ep) { return request.get(`/episodes/${ep}/graph`, quiet) },
   view(ep, name) { return request.get(`/episodes/${ep}/views/${name}`, quiet) },
+  // 只读：版本历史界面（packages/local/src/routes/kernel.js）
+  versions(ep) { return request.get(`/episodes/${ep}/versions`, quiet) },
+  history(ep, limit) { return request.get(`/episodes/${ep}/history`, { ...quiet, params: limit ? { limit } : undefined }) },
   importLegacy(ep) { return request.post(`/episodes/${ep}/import-legacy`, {}, quiet) },
   intent(ep, view, name, args, txId) {
     return request.post(`/episodes/${ep}/intent`, { view, name, args: args || {}, ...(txId ? { tx_id: txId } : {}) }, quiet)

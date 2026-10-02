@@ -1,6 +1,7 @@
 import { createPublicKey, type KeyObject } from 'node:crypto';
 import { jwtVerify, SignJWT, type JWK } from 'jose';
 import type { AppConfig } from './config';
+import { EntitlementService } from './entitlement.service';
 import { ServiceError } from './errors';
 import type { Repositories } from '../domain/repositories';
 
@@ -16,6 +17,10 @@ export interface LicenceClaims {
   plan: string;
   entitlements: string[];
   graceDays: number;
+  /** 当前权益的限额：设备数、导出最大高度（像素）、是否带水印。 */
+  limits: { maxDevices: number; exportMaxHeight: number; watermark: boolean };
+  /** 付费订阅到期时间（Unix 秒）；免费版/内测账号为 null。客户端应在此时间后按免费版处理。 */
+  subEnd: number | null;
   exp: number;
   iat: number;
   iss: string;
@@ -28,6 +33,7 @@ export class LicenceService {
     private readonly repos: Repositories,
     private readonly cfg: AppConfig,
     private readonly now: () => Date = () => new Date(),
+    private readonly entitlements: EntitlementService = new EntitlementService(repos, now),
   ) {
     this.publicKey = createPublicKey(cfg.licencePrivateKey);
   }
@@ -41,11 +47,22 @@ export class LicenceService {
     if (!account) throw new ServiceError('not_found');
     if (account.disabledAt) throw new ServiceError('account_disabled');
 
+    const eff = await this.entitlements.resolve(accountId);
+    // 降级后设备数超限：只有按注册先后排在前 maxDevices 个的未吊销设备能续期，其余需要用户先吊销别的设备
+    const active = (await this.repos.devices.listByAccount(accountId))
+      .filter((d) => !d.revokedAt)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
+    if (active.findIndex((d) => d.id === device.id) >= eff.entitlements.maxDevices) {
+      throw new ServiceError('device_limit', `device limit reached (${eff.entitlements.maxDevices})`);
+    }
+
     const iat = Math.floor(this.now().getTime() / 1000);
     const exp = iat + this.cfg.licenceTtlSeconds;
-    const entitlements = [...(PLAN_ENTITLEMENTS[account.plan] ?? [])];
+    const subEnd = eff.source === 'subscription' && eff.periodEnd ? Math.floor(eff.periodEnd.getTime() / 1000) : null;
+    const { maxDevices, exportMaxHeight, watermark } = eff.entitlements;
     const licence = await new SignJWT({
-      did: device.id, plan: account.plan, entitlements, graceDays: this.cfg.graceDays,
+      did: device.id, plan: eff.planCode, entitlements: [...eff.entitlements.features], graceDays: this.cfg.graceDays,
+      limits: { maxDevices, exportMaxHeight, watermark }, subEnd,
     })
       .setProtectedHeader({ alg: 'ES256', kid: this.cfg.licenceKeyId, typ: 'JWT' })
       .setIssuer(this.cfg.licenceIssuer)
@@ -54,6 +71,10 @@ export class LicenceService {
       .setExpirationTime(exp)
       .sign(this.cfg.licencePrivateKey);
     await this.repos.devices.touch(device.id, this.now());
+    await this.repos.licenceUsage.record({
+      accountId, deviceId: device.id, planCode: eff.planCode,
+      issuedAt: new Date(iat * 1000), expiresAt: new Date(exp * 1000),
+    });
     return { licence, expiresAt: new Date(exp * 1000).toISOString(), graceDays: this.cfg.graceDays };
   }
 
