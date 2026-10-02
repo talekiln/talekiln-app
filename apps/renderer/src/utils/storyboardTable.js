@@ -20,6 +20,11 @@ export function statusLabel(status) {
   return STATUS_LABELS[status] || '待生成'
 }
 
+/** 「添加镜头」的创建参数：追加到末尾，描述留空（用占位提示引导填写，不预填需要手动清掉的文字）。 */
+export function newShotPayload(episodeId, rows) {
+  return { episode_id: episodeId, storyboard_number: rows.length + 1, description: '', duration: 3 }
+}
+
 /** 后端行 -> 表格行。thumb 为首帧缩略图地址（local_path 优先）。 */
 export function rowFromApi(sb) {
   const lp = sb.local_path && String(sb.local_path).trim()
@@ -90,7 +95,13 @@ export function patchFromRow(row) {
  * 防抖自动保存器。任务按 key 去重（同一 key 只保留最新任务，任务内部应读取最新数据）。
  * 状态：saved | dirty | saving | error。保存失败时任务保留，下次 flush / 重试再执行。
  */
-export function createAutosaver({ delay = 800, onState = () => {}, timers = { setTimeout, clearTimeout } } = {}) {
+// 浏览器里 window.setTimeout 必须以 window 为 this 调用，直接塞进对象再调用会抛 "Illegal invocation"，所以包一层。
+const defaultTimers = {
+  setTimeout: (fn, ms) => globalThis.setTimeout(fn, ms),
+  clearTimeout: (t) => globalThis.clearTimeout(t),
+}
+
+export function createAutosaver({ delay = 800, onState = () => {}, timers = defaultTimers } = {}) {
   const tasks = new Map()
   let timer = null
   let running = null

@@ -19,7 +19,7 @@ const TRANSITIONS = {
   submitting: ['submitted', 'queued', 'failed', 'cancelled'],
   submitted: ['polling', 'downloading', 'succeeded', 'failed', 'cancelled'],
   polling: ['polling', 'downloading', 'succeeded', 'failed', 'cancelled'],
-  downloading: ['succeeded', 'failed', 'cancelled'],
+  downloading: ['downloading', 'succeeded', 'failed', 'cancelled'], // self: transient download error, retry later
   succeeded: [],
   failed: [],
   cancelled: [],
