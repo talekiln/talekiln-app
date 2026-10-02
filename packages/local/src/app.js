@@ -184,7 +184,7 @@ function createApp(opts = {}) {
   // P3-S 工作室：复用云备份的 S3 设置与密钥，身份走 cloud.account
   const studio = opts.studio || require('./studio').createStudioService({ db, storageRoot, cloud, backup, templates, log });
   const onExportFinished = (evt) => { try { backup.onExportFinished(evt); } catch (e) { log.error && log.error('backup after export', { error: e && e.message }); } };
-  app.use('/api/v1', setupRouter(config, db, log, aiQueue, cloud, { storageRoot, exporter: opts.exporter, getCore, generation, batch, templates, consistency, pluginHost, regionEdit, voiceover, backup, onExportFinished, studio }));
+  app.use('/api/v1', setupRouter(config, db, log, aiQueue, cloud, { storageRoot, exporter: opts.exporter, getCore, generation, batch, templates, consistency, pluginHost, regionEdit, voiceover, backup, onExportFinished, studio, listConfigs: opts.listConfigs, directorDeps: opts.directorDeps }));
 
   // 前端静态资源（sxy：web/dist）；Electron 打包时可设 WEB_DIST_PATH
   const webDist = process.env.WEB_DIST_PATH || path.join(process.cwd(), '..', 'frontweb', 'dist');
