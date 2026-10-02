@@ -41,6 +41,8 @@ export function createBuiltinCommands(deps) {
     { id: 'director.open', title: '导演模式', group: '编辑', keywords: ['导演', '自然语言', '改片', '一句话', 'director', 'ai'], when: hasEpisode, run: (ctx) => deps.openDirector(ctx.episodeId) },
     // P3-P
     page('nav.plugins', '插件与服务商', '/settings/plugins', ['插件', '服务商', '扩展', 'plugins', 'providers', '开发者模式']),
+    // P3-K
+    page('nav.backup', '云备份', '/settings/backup', ['备份', '云备份', '快照', '恢复', 'MinIO', 'S3', 'backup', 'restore', '对象存储']),
   ]
 }
 

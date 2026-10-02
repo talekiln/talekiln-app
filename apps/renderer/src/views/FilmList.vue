@@ -36,6 +36,9 @@
           <el-button class="btn-library" title="AI 花费统计" @click="$router.push('/spend')">
             花费统计
           </el-button>
+          <el-button class="btn-library" title="云备份：把项目备份到自己的对象存储（MinIO / S3 兼容）" data-test="to-backup" @click="$router.push('/settings/backup')">
+            云备份
+          </el-button>
           <el-button class="btn-library" title="关于、隐私政策、用户协议与举报" data-test="to-about" @click="$router.push('/settings/about')">
             关于
           </el-button>
