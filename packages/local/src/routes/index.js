@@ -540,6 +540,16 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
     r.get('/backup/status', bk.status);
     r.get('/backup/runs', bk.runs);
   }
+  // P2-C 登录：短信验证码 / 微信扫码（透传云端，见 routes/cloud.js）
+  if (cloud) {
+    const c = require('./cloud')(cloud, log);
+    r.post('/account/sms/send', c.smsSend);
+    r.post('/account/sms/login', c.smsLogin);
+    r.post('/account/wechat/qr', c.wechatQr);
+    r.get('/account/wechat/qr/:ticket', c.wechatQrStatus);
+    r.post('/account/wechat/qr/:ticket/confirm', c.wechatConfirm);
+    r.post('/account/wechat/login', c.wechatLogin);
+  }
 
   return r;
 }

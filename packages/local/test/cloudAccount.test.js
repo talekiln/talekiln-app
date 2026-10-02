@@ -274,6 +274,97 @@ describe('local account routes', () => {
   });
 });
 
+// P2-C：短信验证码 / 微信扫码经本地透传
+describe('local sms / wechat login routes (P2-C)', () => {
+  let ctx; let server; let base;
+  const TOKEN = 'unit-test-local-token';
+  const PHONE = '13800138000';
+  beforeEach(async () => {
+    ctx = await setup();
+    const app = express();
+    app.use(localTokenGuard(TOKEN));
+    app.use(express.json());
+    const c = cloudRoutes(ctx.cloud, { error() {}, warn() {} });
+    app.post('/api/v1/account/sms/send', c.smsSend);
+    app.post('/api/v1/account/sms/login', c.smsLogin);
+    app.post('/api/v1/account/wechat/qr', c.wechatQr);
+    app.get('/api/v1/account/wechat/qr/:ticket', c.wechatQrStatus);
+    app.post('/api/v1/account/wechat/qr/:ticket/confirm', c.wechatConfirm);
+    app.post('/api/v1/account/wechat/login', c.wechatLogin);
+    app.get('/api/v1/account/status', c.status);
+    app.post('/api/v1/account/logout', c.logout);
+    await new Promise((r) => { server = app.listen(0, '127.0.0.1', r); });
+    base = `http://127.0.0.1:${server.address().port}/api/v1`;
+  });
+  afterEach(async () => { server.close(); await ctx.mock.close(); secrets.setSecretStore(null); });
+  const call = (method, path, body, token = TOKEN) => fetch(base + path, {
+    method,
+    headers: { 'Content-Type': 'application/json', ...(token ? { 'X-Talekiln-Token': token } : {}) },
+    body: method === 'GET' ? undefined : JSON.stringify(body || {}),
+  }).then(async (r) => ({ status: r.status, json: await r.json() }));
+
+  it('sms: send -> invite required on first login -> login; status carries phone and login_method; no tokens echoed', async () => {
+    assert.equal((await call('POST', '/account/sms/send', {})).status, 400);
+    const sent = await call('POST', '/account/sms/send', { phone: PHONE });
+    assert.equal(sent.status, 200);
+    assert.equal(sent.json.data.debug_code, '246810');
+    const need = await call('POST', '/account/sms/login', { phone: PHONE, code: '246810' });
+    assert.equal(need.status, 400);
+    assert.equal(need.json.error.code, 'INVITE_REQUIRED');
+    const wrong = await call('POST', '/account/sms/login', { phone: PHONE, code: '000000', invite_code: 'GOOD-INVITE' });
+    assert.equal(wrong.status, 401);
+    assert.equal(wrong.json.error.code, 'INVALID_CODE');
+    const ok = await call('POST', '/account/sms/login', { phone: PHONE, code: '246810', invite_code: 'GOOD-INVITE' });
+    assert.equal(ok.status, 200, JSON.stringify(ok.json));
+    assert.equal(ok.json.data.logged_in, true);
+    assert.equal(ok.json.data.account.phone, PHONE);
+    assert.equal(ok.json.data.account.login_method, 'sms');
+    assert.ok(!/rt-|at-/.test(JSON.stringify(ok.json)), 'no tokens in response');
+    assert.ok(ctx.store.has('cloud:refresh_token'));
+    const st = await call('GET', '/account/status');
+    assert.equal(st.json.data.account.login_method, 'sms');
+    // 验证码一次性
+    const again = await call('POST', '/account/sms/login', { phone: PHONE, code: '246810' });
+    assert.equal(again.json.error.code, 'CODE_EXPIRED');
+    // 限频映射
+    const limited = await call('POST', '/account/sms/send', { phone: PHONE });
+    assert.equal(limited.status, 429);
+    assert.equal(limited.json.error.code, 'CLOUD_RATE_LIMITED');
+  });
+
+  it('wechat: qr -> poll -> simulated confirm -> invite required -> login; reuse is QR_EXPIRED; unknown ticket 404', async () => {
+    const qr = await call('POST', '/account/wechat/qr', {});
+    assert.equal(qr.status, 200);
+    const { ticket } = qr.json.data;
+    assert.ok(ticket && qr.json.data.qr_url && qr.json.data.simulated === true);
+    assert.equal((await call('GET', `/account/wechat/qr/${ticket}`)).json.data.status, 'pending');
+    assert.equal((await call('GET', '/account/wechat/qr/nope')).json.error.code, 'NOT_FOUND');
+    const scanned = await call('POST', `/account/wechat/qr/${ticket}/confirm`, { scan_only: true });
+    assert.equal(scanned.json.data.status, 'scanned');
+    const confirmed = await call('POST', `/account/wechat/qr/${ticket}/confirm`, {});
+    assert.deepEqual([confirmed.json.data.status, confirmed.json.data.new_account], ['confirmed', true]);
+    const need = await call('POST', '/account/wechat/login', { ticket });
+    assert.equal(need.json.error.code, 'INVITE_REQUIRED');
+    const ok = await call('POST', '/account/wechat/login', { ticket, invite_code: 'GOOD-INVITE' });
+    assert.equal(ok.status, 200, JSON.stringify(ok.json));
+    assert.equal(ok.json.data.account.login_method, 'wechat');
+    assert.equal(ok.json.data.account.phone, null);
+    const reuse = await call('POST', '/account/wechat/login', { ticket });
+    assert.equal(reuse.status, 410);
+    assert.equal(reuse.json.error.code, 'QR_EXPIRED');
+  });
+
+  it('maps cloud 503 (adapter not configured) to LOGIN_METHOD_UNAVAILABLE', async () => {
+    ctx.mock.st.loginProviders = false;
+    const sms = await call('POST', '/account/sms/send', { phone: PHONE });
+    assert.equal(sms.status, 503);
+    assert.equal(sms.json.error.code, 'LOGIN_METHOD_UNAVAILABLE');
+    const qr = await call('POST', '/account/wechat/qr', {});
+    assert.equal(qr.status, 503);
+    assert.equal(qr.json.error.code, 'LOGIN_METHOD_UNAVAILABLE');
+  });
+});
+
 function db2rows(db) {
   return db.prepare('SELECT key, value FROM global_settings').all();
 }
