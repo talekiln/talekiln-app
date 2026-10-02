@@ -43,6 +43,8 @@ export function createBuiltinCommands(deps) {
     page('nav.plugins', '插件与服务商', '/settings/plugins', ['插件', '服务商', '扩展', 'plugins', 'providers', '开发者模式']),
     // P3-K
     page('nav.backup', '云备份', '/settings/backup', ['备份', '云备份', '快照', '恢复', 'MinIO', 'S3', 'backup', 'restore', '对象存储']),
+    // P3-S
+    page('nav.studio', '工作室', '/settings/studio', ['工作室', '成员', '席位', '邀请', '共享角色', '共享模板', '共享库', 'studio', 'team', 'seat']),
   ]
 }
 

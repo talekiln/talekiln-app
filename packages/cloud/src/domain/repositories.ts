@@ -632,6 +632,75 @@ export interface WechatQrRepository {
   transition(ticket: string, from: WechatQrStatus[], to: WechatQrStatus, openId: string | null): Promise<boolean>;
   /** 原子地标记消费：仅当 status=confirmed 且 consumedAt 为空时成功。 */
   consume(ticket: string, now: Date): Promise<boolean>;
+// 工作室版（P3-S）：工作室、成员、席位、邀请。云端只记「谁在哪个工作室」，共享素材在对象存储里。
+// ---------------------------------------------------------------------------
+export type StudioStatus = 'active' | 'suspended';
+export type StudioRole = 'owner' | 'admin' | 'member';
+export type StudioMemberStatus = 'invited' | 'active' | 'removed';
+export type StudioInviteRole = 'admin' | 'member';
+
+export interface StudioRecord {
+  id: string;
+  name: string;
+  ownerId: string;
+  /** 席位上限（由后台设置，将来由订阅驱动；定价待定）。 */
+  seatLimit: number;
+  status: StudioStatus;
+  createdAt: Date;
+  updatedAt: Date;
+}
+export type StudioInput = Omit<StudioRecord, 'id' | 'createdAt' | 'updatedAt'>;
+
+export interface StudioMemberRecord {
+  id: string;
+  studioId: string;
+  accountId: string;
+  role: StudioRole;
+  status: StudioMemberStatus;
+  joinedAt: Date | null;
+  removedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+export type StudioMemberInput = Omit<StudioMemberRecord, 'id' | 'createdAt' | 'updatedAt'>;
+
+export interface StudioInviteRecord {
+  id: string;
+  studioId: string;
+  code: string;
+  /** 指定邮箱时只有该邮箱的账号能接受；为空则凭邀请码任何人可接受。 */
+  email: string | null;
+  role: StudioInviteRole;
+  createdBy: string | null;
+  expiresAt: Date;
+  usedAt: Date | null;
+  usedById: string | null;
+  revokedAt: Date | null;
+  createdAt: Date;
+}
+export type StudioInviteInput = Omit<StudioInviteRecord, 'id' | 'usedAt' | 'usedById' | 'revokedAt' | 'createdAt'>;
+
+export interface StudioRepository {
+  create(s: StudioInput, now: Date): Promise<StudioRecord>;
+  update(id: string, patch: Partial<Omit<StudioInput, 'ownerId'>>, now: Date): Promise<StudioRecord | null>;
+  findById(id: string): Promise<StudioRecord | null>;
+  /** 全部工作室，按创建时间升序。 */
+  list(): Promise<StudioRecord[]>;
+  /** 某账号为 active 成员的工作室。 */
+  listByMember(accountId: string): Promise<StudioRecord[]>;
+  /** (studioId, accountId) 重复抛唯一键错误。 */
+  addMember(m: StudioMemberInput, now: Date): Promise<StudioMemberRecord>;
+  updateMember(id: string, patch: Partial<Pick<StudioMemberRecord, 'role' | 'status' | 'joinedAt' | 'removedAt'>>, now: Date): Promise<StudioMemberRecord | null>;
+  findMember(studioId: string, accountId: string): Promise<StudioMemberRecord | null>;
+  /** 某工作室全部成员（含 removed），按创建时间升序。 */
+  listMembers(studioId: string): Promise<StudioMemberRecord[]>;
+  /** code 重复抛唯一键错误。 */
+  createInvite(i: StudioInviteInput, now: Date): Promise<StudioInviteRecord>;
+  findInviteByCode(code: string): Promise<StudioInviteRecord | null>;
+  findInvite(id: string): Promise<StudioInviteRecord | null>;
+  /** 某工作室全部邀请，新的在前。 */
+  listInvites(studioId: string): Promise<StudioInviteRecord[]>;
+  updateInvite(id: string, patch: Partial<Pick<StudioInviteRecord, 'usedAt' | 'usedById' | 'revokedAt'>>): Promise<StudioInviteRecord | null>;
 }
 
 export const REPOS = Symbol('REPOS');
@@ -659,4 +728,5 @@ export interface Repositories {
   plugins: PluginRepository;
   smsCodes: SmsCodeRepository;
   wechatQr: WechatQrRepository;
+  studios: StudioRepository;
 }

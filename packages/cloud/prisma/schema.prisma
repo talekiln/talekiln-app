@@ -457,3 +457,54 @@ model WechatQrTicket {
 
   @@index([expiresAt])
 }
+
+// ---- P3-S：工作室版基础（工作室、成员、席位、邀请） ----
+// 云端只管「谁在哪个工作室、什么角色、席位用了多少」；共享素材本身在对象存储（MinIO）的 shared/<studio_id>/ 前缀下，
+// 由本机服务读写。seatLimit 由后台管理员设置（将来由订阅驱动）；席位定价待定，这里不含任何价格字段。
+
+model Studio {
+  id        String         @id @default(uuid())
+  name      String
+  ownerId   String
+  seatLimit Int            @default(3)
+  status    String         @default("active") // active | suspended
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  members   StudioMember[]
+  invites   StudioInvite[]
+
+  @@index([ownerId])
+}
+
+model StudioMember {
+  id        String    @id @default(uuid())
+  studioId  String
+  studio    Studio    @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  accountId String
+  role      String    @default("member") // owner | admin | member
+  status    String    @default("active") // invited | active | removed
+  joinedAt  DateTime?
+  removedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([studioId, accountId])
+  @@index([accountId, status])
+}
+
+model StudioInvite {
+  id        String    @id @default(uuid())
+  studioId  String
+  studio    Studio    @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  code      String    @unique
+  email     String?
+  role      String    @default("member") // admin | member
+  createdBy String?
+  expiresAt DateTime
+  usedAt    DateTime?
+  usedById  String?
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([studioId, usedAt, revokedAt])
+}

@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import type {
   AdminAuditRecord, AdminRoleRecord, AnnouncementRecord, Entitlements, PlanVersion, PluginReviewRecord, PluginVersionRecord, ReleaseRecord, Repositories,
-  TemplateRecord, TemplateVersionRecord, SmsCodeRecord, WechatQrTicketRecord,
+  TemplateRecord, TemplateVersionRecord, SmsCodeRecord, WechatQrTicketRecord, StudioRecord, StudioMemberRecord, StudioInviteRecord,
 } from './repositories';
 
 // Prisma 实现（需要真实 PostgreSQL 才能验证）。
@@ -31,6 +31,42 @@ export function createPrismaRepositories(db: PrismaClient): Repositories {
       },
       async listPublished() {
         return (await db.templateVersion.findMany({ where: { published: true }, orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }] })).map(toTemplateVersion);
+      },
+    },
+    studios: {
+      async create(s, now) { return toStudio(await db.studio.create({ data: { ...s, createdAt: now, updatedAt: now } })); },
+      async update(id, patch, now) {
+        const r = await db.studio.updateMany({ where: { id }, data: { ...patch, updatedAt: now } });
+        return r.count === 1 ? toStudio(await db.studio.findUniqueOrThrow({ where: { id } })) : null;
+      },
+      async findById(id) { const r = await db.studio.findUnique({ where: { id } }); return r ? toStudio(r) : null; },
+      async list() { return (await db.studio.findMany({ orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] })).map(toStudio); },
+      async listByMember(accountId) {
+        return (await db.studio.findMany({ where: { members: { some: { accountId, status: 'active' } } }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] })).map(toStudio);
+      },
+      async addMember(m, now) { return toStudioMember(await db.studioMember.create({ data: { ...m, createdAt: now, updatedAt: now } })); },
+      async updateMember(id, patch, now) {
+        const r = await db.studioMember.updateMany({ where: { id }, data: { ...patch, updatedAt: now } });
+        return r.count === 1 ? toStudioMember(await db.studioMember.findUniqueOrThrow({ where: { id } })) : null;
+      },
+      async findMember(studioId, accountId) {
+        const r = await db.studioMember.findUnique({ where: { studioId_accountId: { studioId, accountId } } });
+        return r ? toStudioMember(r) : null;
+      },
+      async listMembers(studioId) {
+        return (await db.studioMember.findMany({ where: { studioId }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] })).map(toStudioMember);
+      },
+      async createInvite(i, now) {
+        return toStudioInvite(await db.studioInvite.create({ data: { ...i, createdAt: now, usedAt: null, usedById: null, revokedAt: null } }));
+      },
+      async findInviteByCode(code) { const r = await db.studioInvite.findUnique({ where: { code } }); return r ? toStudioInvite(r) : null; },
+      async findInvite(id) { const r = await db.studioInvite.findUnique({ where: { id } }); return r ? toStudioInvite(r) : null; },
+      async listInvites(studioId) {
+        return (await db.studioInvite.findMany({ where: { studioId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] })).map(toStudioInvite);
+      },
+      async updateInvite(id, patch) {
+        const r = await db.studioInvite.updateMany({ where: { id }, data: patch });
+        return r.count === 1 ? toStudioInvite(await db.studioInvite.findUniqueOrThrow({ where: { id } })) : null;
       },
     },
     plugins: {
@@ -557,4 +593,16 @@ function toPluginVersion(r: {
 
 function toPluginReview(r: { id: string; versionId: string; action: string; notes: string; actorId: string | null; actorEmail: string | null; createdAt: Date }): PluginReviewRecord {
   return { ...r, action: r.action as PluginReviewRecord['action'] };
+}
+
+function toStudio(r: { id: string; name: string; ownerId: string; seatLimit: number; status: string; createdAt: Date; updatedAt: Date }): StudioRecord {
+  return { ...r, status: r.status as StudioRecord['status'] };
+}
+
+function toStudioMember(r: { id: string; studioId: string; accountId: string; role: string; status: string; joinedAt: Date | null; removedAt: Date | null; createdAt: Date; updatedAt: Date }): StudioMemberRecord {
+  return { ...r, role: r.role as StudioMemberRecord['role'], status: r.status as StudioMemberRecord['status'] };
+}
+
+function toStudioInvite(r: { id: string; studioId: string; code: string; email: string | null; role: string; createdBy: string | null; expiresAt: Date; usedAt: Date | null; usedById: string | null; revokedAt: Date | null; createdAt: Date }): StudioInviteRecord {
+  return { ...r, role: r.role as StudioInviteRecord['role'] };
 }
