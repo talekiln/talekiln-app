@@ -23,7 +23,7 @@ SDK 与插件使用 MIT；宿主（界面、本地服务）使用 AGPL-3.0，二
 | `name` | `^[a-z][a-z0-9-]{1,39}$`，即服务商 id |
 | `version` | 插件自己的 semver |
 | `sdkVersion` | 写插件时所用 SDK 版本；主版本必须与宿主相同，次版本不得高于宿主 |
-| `capabilities` | 只能取 `llm.chat`、`image.generate`、`video.submit`、`video.poll`、`tts.synthesize`；`video.submit` 与 `video.poll` 必须成对 |
+| `capabilities` | 只能取 `llm.chat`、`image.generate`、`video.submit`、`video.poll`、`tts.synthesize`、`video.edit`；`video.submit` 与 `video.poll` 必须成对；`video.edit`（带遮罩 / 时间段的视频编辑，SDK 1.1 起）需要同时声明 `video.poll` |
 | `permissions` | 至少一个 `network:<主机名>`（或 `*.域名`，不许 `*`、不许带协议/端口/路径）；`secret:apiKey` 表示需要用户的 Key |
 | `entry` | 插件目录内的相对 `.js` / `.cjs` 路径，不许 `..` 和绝对路径 |
 

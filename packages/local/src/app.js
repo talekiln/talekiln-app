@@ -105,11 +105,13 @@ function createApp(opts = {}) {
   // 持久化 AI 任务队列 + worker（由 server.js / 桌面主进程调用 aiQueue.worker.start()）
   const cloud = opts.cloud || createCloud({ config, db, log: logger });
   let generation = null; // I1：任务成功后写回数据内核（在 aiQueue 之后创建，所以这里用闭包取）
+  let regionEdit = null; // P3-R：改片任务结束后拼接并记成新版本（同样闭包取）
   const aiQueue = createAiQueue({
     cloud, config, db, log, storageRoot,
     providers: opts.queueProviders || buildQueueProviders({ db, storageDir: storageRoot, listConfigs: opts.listConfigs }),
     onTaskFinished: (t) => {
       if (generation) { try { generation.onTaskFinished(t); } catch (e) { log.error && log.error('generation finish', { error: e && e.message }); } }
+      if (regionEdit) { try { regionEdit.onTaskFinished(t); } catch (e) { log.error && log.error('region edit finish', { error: e && e.message }); } }
       if (opts.onTaskFinished) opts.onTaskFinished(t);
     },
   });
@@ -121,7 +123,13 @@ function createApp(opts = {}) {
     catalogModels: () => { try { return cloud.catalog.getCatalog().models || []; } catch (_) { return []; } },
   });
   generation.recoverFinished().catch((e) => log.error && log.error('generation recover', { error: e && e.message }));
-  app.use('/api/v1', setupRouter(config, db, log, aiQueue, cloud, { storageRoot, exporter: opts.exporter, getCore, generation }));
+  // P3-R 选镜改片：与生成服务共用队列、花费与存储；任务结束后在 onTaskFinished 里拼接写回
+  regionEdit = opts.regionEdit || require('./regionEdit').createRegionEditService({
+    db, store: aiQueue.store, worker: aiQueue.worker, spend: aiQueue.spend, storageRoot, listConfigs: opts.listConfigs, log,
+    catalogModels: () => { try { return cloud.catalog.getCatalog().models || []; } catch (_) { return []; } },
+  });
+  regionEdit.recoverFinished().catch((e) => log.error && log.error('region edit recover', { error: e && e.message }));
+  app.use('/api/v1', setupRouter(config, db, log, aiQueue, cloud, { storageRoot, exporter: opts.exporter, getCore, generation, regionEdit }));
 
   // 前端静态资源（sxy：web/dist）；Electron 打包时可设 WEB_DIST_PATH
   const webDist = process.env.WEB_DIST_PATH || path.join(process.cwd(), '..', 'frontweb', 'dist');

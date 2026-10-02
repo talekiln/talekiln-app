@@ -84,7 +84,7 @@ export function buildRegenerateBody({ shot, model, firstFrameUrl, aspectRatio, r
   return body
 }
 
-/** 动作 -> 处理函数。ctx: { regenerate, pick(n), toggleCompare }；供 createKeyHandler 使用。 */
+/** 动作 -> 处理函数。ctx: { regenerate, pick(n), toggleCompare, markIn, markOut }；供 createKeyHandler 使用。 */
 export function buildWorkbenchHandlers(ctx) {
   return {
     'shot.regenerate': () => ctx.regenerate(),
@@ -93,5 +93,8 @@ export function buildWorkbenchHandlers(ctx) {
     'shot.pick3': () => ctx.pick(3),
     'shot.pick4': () => ctx.pick(4),
     'shot.compareToggle': () => ctx.toggleCompare(),
+    // P3-R 选镜改片：I / O 设入点 / 出点
+    'shot.markIn': () => ctx.markIn && ctx.markIn(),
+    'shot.markOut': () => ctx.markOut && ctx.markOut(),
   }
 }

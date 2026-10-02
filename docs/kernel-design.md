@@ -53,7 +53,7 @@ Node { id, type, params, legacy_id? }
 - 校验：端口类型、环检测、节点存在、`layout` 坐标为有限数、`children` 无重复、每个 shot 在且仅在一个 group 里、compose 的 segments 引用的 shot 必须存在、片段区间合法。
 - 意图层（每个视图一组，只产出事务，不直接改图）：
   - 剧本：`rewriteLine, insertLine, deleteLine, splitLine, mergeLines, reorderLines`
-  - 分镜：`setShotField, splitShot, mergeShots, reorderShots, moveShotToGroup, addShot, deleteShot, regenerateShot`
+  - 分镜：`setShotField, splitShot, mergeShots, reorderShots, moveShotToGroup, addShot, deleteShot, regenerateShot`；P3-R 选镜改片：`editShotRegion`（把 `{base, mode, t0_ms, t1_ms, rect, prompt}` 写进 video 节点的 `edit` 参数，进 cacheKey）、`adoptShotVersion`（采用某个视频版本并让 `edit` 参数跟随该版本的 `metadata.edit`，采用改片结果与切回原版本都保持新鲜），见 docs/phase3-region-edit.md
   - 时间线：`trimSegment, moveSegment（跨镜头边界 = 改镜头顺序，同镜头内 = 改 gap）, splitSegment, deleteSegment, setTransition, addMusic`
   - 画布：`moveNode（只改 layout）, setNodeParam（属性面板改参数）, connectNodes, disconnectNodes, addNodeAt, deleteNode`
   - 生成输入（服务内部用，不对 REST 放行）：`setShotReferences`，见 §13
@@ -160,7 +160,7 @@ Node { id, type, params, legacy_id? }
 | `GET /episodes/:id/graph` | 全图 + `stale` 集合 + `seq` + `can_undo/can_redo` |
 | `GET /episodes/:id/views/{script,shots,timeline,canvas}` | 四个视图（`shot` 同 `shots`） |
 | `POST /episodes/:id/tx` | `{tx_id, label, ops}` 原始 op 事务 |
-| `POST /episodes/:id/intent` | `{view, name, args, tx_id?}`；只放行规格 §3 的 26 个意图（K4 起含 `canvas.setNodeParam`），`setVoice`/`recordGeneration`/`setShotReferences`/`moveNodes` 等未放行 |
+| `POST /episodes/:id/intent` | `{view, name, args, tx_id?}`；只放行规格 §3 的 27 个意图（K4 起含 `canvas.setNodeParam`，P3-R 起含 `shot.editShotRegion`），`setVoice`/`recordGeneration`/`setShotReferences`/`adoptShotVersion`（经 `POST /shots/:id/adopt-version`）/`moveNodes` 等未放行 |
 | `POST /episodes/:id/undo`、`/redo` | `{tx_id?}` |
 | `POST /episodes/:id/import-legacy` | 首次 201，已存在 200 |
 | `GET /episodes/:id/versions` | 只读（P2-D）：每个生成类节点的版本列表，含采用标记、是否匹配当前输入（`current`）、产生时间（取自加入该版本的日志，导入版本为 null）、资产与元数据摘要 |

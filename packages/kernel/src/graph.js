@@ -68,6 +68,40 @@ function defaultParams(type) {
  */
 const isStr = (v) => typeof v === 'string';
 const posNum = (v) => typeof v === 'number' && Number.isFinite(v) && v > 0;
+
+const EDIT_MODES = ['region', 'segment'];
+const RECT_KEYS = ['x', 'y', 'w', 'h'];
+const round4 = (n) => Math.round(n * 1e4) / 1e4;
+/**
+ * 选镜改片的画面区域：归一化坐标（0..1，相对画面宽高），四位小数。返回规范化后的矩形或错误说明。
+ * 整幅画面 = { x:0, y:0, w:1, h:1 }。
+ */
+function normalizeRect(rect) {
+  if (!isObj(rect)) return { error: 'rect must be an object {x,y,w,h}' };
+  const out = {};
+  for (const k of RECT_KEYS) {
+    const v = rect[k];
+    if (typeof v !== 'number' || !Number.isFinite(v)) return { error: `rect.${k} must be a finite number` };
+    out[k] = round4(v);
+  }
+  if (out.x < 0 || out.y < 0) return { error: 'rect.x / rect.y must be >= 0' };
+  if (out.w <= 0 || out.h <= 0) return { error: 'rect.w / rect.h must be > 0' };
+  if (out.x + out.w > 1 + 1e-9 || out.y + out.h > 1 + 1e-9) return { error: 'rect must stay inside the frame (0..1)' };
+  return { rect: out };
+}
+/** video.edit 参数（由 editShotRegion 写入）的取值校验：错误说明或 null。 */
+function checkEdit(v) {
+  if (!isObj(v)) return 'must be an object';
+  if (!isStr(v.base) || !v.base) return 'base must be a non-empty string (the edited version id)';
+  if (!EDIT_MODES.includes(v.mode)) return `mode must be one of ${EDIT_MODES.join('/')}`;
+  if (!isInt(v.t0_ms) || !isInt(v.t1_ms) || v.t0_ms < 0 || v.t1_ms <= v.t0_ms) return 't0_ms / t1_ms must be integers with 0 <= t0 < t1';
+  if (!isStr(v.prompt) || !v.prompt.trim()) return 'prompt must be a non-empty string';
+  const r = normalizeRect(v.rect);
+  if (r.error) return r.error;
+  if (RECT_KEYS.some((k) => r.rect[k] !== v.rect[k])) return 'rect must be normalized to 4 decimals';
+  return null;
+}
+
 const NODE_PARAM_RULES = {
   script_line: {
     kind: { check: (v) => (LINE_KINDS.includes(v) ? null : `must be one of ${LINE_KINDS.join('/')}`) },
@@ -89,6 +123,8 @@ const NODE_PARAM_RULES = {
     model: { check: (v) => (isStr(v) && v ? null : 'must be a non-empty string') },
     seed: { check: (v) => (isInt(v) ? null : 'must be an integer') },
     tail_frame_hash: { optional: true, check: (v) => (isStr(v) && v ? null : 'must be a non-empty string') },
+    // 选镜改片（P3-R）：{ base, mode, t0_ms, t1_ms, rect, prompt }，由 shot.editShotRegion 写入；清除 = 回到整镜生成的 key
+    edit: { optional: true, check: checkEdit },
   },
   narration: {
     voice: { check: (v) => (isStr(v) && v ? null : 'must be a non-empty string') },
@@ -281,8 +317,8 @@ function validateGraph(g) {
 }
 
 module.exports = {
-  KernelError, NODE_TYPES, NODE_PARAM_RULES, GENERATED_TYPES, LINE_KINDS, SPOKEN_KINDS, DEFAULT_SHOT_MS, PORTS,
-  isObj, isInt, clone, canonicalJSON, sha256, defaultParams, emptyGraph, cloneGraph, toJSON, fromJSON, graphEquals,
+  KernelError, NODE_TYPES, NODE_PARAM_RULES, GENERATED_TYPES, LINE_KINDS, SPOKEN_KINDS, DEFAULT_SHOT_MS, PORTS, EDIT_MODES,
+  isObj, isInt, clone, canonicalJSON, sha256, defaultParams, emptyGraph, cloneGraph, toJSON, fromJSON, graphEquals, normalizeRect, checkEdit,
   nodesOfType, composeId, groupOf, orderOf, shotOrder, lineOrder, edgesTo, edgesFrom, indexMap,
   linesOfShot, shotsOfLine, partsOfShot, spokenLines, shotDialogue, segmentsOfShot, adoptedVersion, validateGraph,
 };

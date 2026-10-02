@@ -41,3 +41,5 @@
 ## 进度
 
 （随合入更新）
+
+- P3-R 选镜改片：分支 `p3-region-edit`，见 docs/phase3-region-edit.md。内核意图 `editShotRegion` / `adoptShotVersion`（edit 进 cacheKey）、迁移 29 `edit_regions`、服务 `packages/local/src/regionEdit/`（估算只算重做的那一段；厂商能力位 `video.edit`，百炼 / 方舟未实现则走“截两帧 -> 首尾帧生视频 -> ffmpeg 拼接”的降级路径；结果作为新版本入图、不自动采用）、路由 `POST /shots/:id/edit-region`、`GET /shots/:id/edit-regions`、`POST /shots/:id/adopt-version`、分镜工作台「选镜改片」面板与基于内核版本的 V1..Vn / A/B 对比 / 采用。自动化：拼接后时长误差在一帧内（lavfi 样例）。未验证：百炼是否有带遮罩的视频编辑模型、降级路径接缝效果（真机）。

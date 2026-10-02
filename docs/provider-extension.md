@@ -33,7 +33,7 @@ providers:
 
 ### 2.1 能力契约（只读，不要改）
 
-业务代码只按能力调用，不碰厂商 SDK。契约写在 `packages/local/src/providers/capabilities.js` 顶部注释，共五个能力：
+业务代码只按能力调用，不碰厂商 SDK。契约写在 `packages/local/src/providers/capabilities.js` 顶部注释，共六个能力（第六个 `video.edit` 为三期选镜改片新增，可选）：
 
 | 能力 | 入参 | 返回 |
 |---|---|---|
@@ -42,6 +42,7 @@ providers:
 | `video.submit` | `{model?, prompt, imageUrl?, firstFrameUrl?, lastFrameUrl?, referenceUrls?, duration?, resolution?, signal?}` | `{taskId}` |
 | `video.poll` | `{taskId, signal?}` | `{status:'pending'\|'running'\|'succeeded'\|'failed', videoUrl?, usage?, actualPrompt?, error?}` |
 | `tts.synthesize` | `{model?, text, voice?, format?, sampleRate?, rate?, pitch?, volume?, wordTimestamps?, signal?}` | `{audio: Buffer, format, words?: {text, startMs, endMs}[], usage?}` |
+| `video.edit`（可选） | `{model?, prompt, videoUrl, edit:{t0_ms, t1_ms, rect:{x,y,w,h}, mode:'region'\|'segment'}, duration?, resolution?, signal?}`，`rect` 归一化到 0..1 | `{taskId}`，之后同样用 `video.poll` 轮询；内置的百炼 / 方舟适配器都**没有**实现（见 docs/phase3-region-edit.md），没有它时选镜改片走降级拼接 |
 
 规则：
 
