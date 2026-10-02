@@ -180,7 +180,7 @@ mod tests {
         assert_eq!(r["recommended"], json!(["h264_qsv", "h264_mf", "libx264"]));
         assert_eq!(r["best"], "h264_qsv");
         let enc = r["encoders"].as_array().unwrap();
-        assert_eq!(enc.len(), 6);
+        assert_eq!(enc.len(), 7, "every CANDIDATES entry is reported");
         assert_eq!(enc[0]["name"], "h264_nvenc");
         assert_eq!(enc[0]["available"], false);
         assert_eq!(enc[0]["reason"], "Cannot load libcuda.so.1");
