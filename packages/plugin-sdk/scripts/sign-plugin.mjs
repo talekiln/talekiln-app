@@ -11,7 +11,14 @@
 //
 // The private key (EC P-256, PKCS8 PEM) is read ONLY from the file named by TALEKILN_PLUGIN_SIGNING_KEY_FILE
 // (or, for CI secret stores, inline from TALEKILN_PLUGIN_SIGNING_KEY_PEM with `\n` escapes). Never pass it as
-// an argument and never commit it. The key id must match the `kid` published in the official JWKS.
+// an argument and never commit it.
+//
+// IMPORTANT: a signature made here is only "official" if the matching public key is published under the same
+// `kid` in the official JWKS (GET /.well-known/licence-jwks.json of the Talekiln cloud). The official plugin
+// signing key lives only on the cloud server and is never handed out, so a developer's own key produces a
+// signature that every client reports as `invalid (unknown kid)` and loads only in developer mode. Use this
+// command for local testing with your own JWKS; for an official signature submit the `--inspect` output to the
+// registry and let the cloud `sign` step produce `signedManifest` (see docs/phase3-plugins.md).
 import { createRequire } from 'node:module';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -67,7 +74,9 @@ function main() {
   if (args.help || !args.dir) {
     console.log('usage: sign-plugin.mjs <pluginDir> --kid <kid> [--out <manifest.json>] [--dry-run]\n'
       + '       sign-plugin.mjs <pluginDir> --inspect   (no key: files, hashes and fingerprint as JSON)\n'
-      + '       private key: TALEKILN_PLUGIN_SIGNING_KEY_FILE=<pem path> (or TALEKILN_PLUGIN_SIGNING_KEY_PEM)');
+      + '       private key: TALEKILN_PLUGIN_SIGNING_KEY_FILE=<pem path> (or TALEKILN_PLUGIN_SIGNING_KEY_PEM)\n'
+      + '       note: only a key whose public half is in the official JWKS yields an official signature; official\n'
+      + '             signatures come from the cloud registry sign step, never from a developer key');
     process.exit(args.help ? 0 : 2);
   }
   const dir = resolve(args.dir);
@@ -86,6 +95,7 @@ function main() {
   const text = `${JSON.stringify(manifest, null, 2)}\n`;
   if (!args.dryRun) writeFileSync(args.out ? resolve(args.out) : manifestPath, text, 'utf8');
   console.log(`${args.dryRun ? '[dry-run] ' : ''}signed ${manifest.name}@${manifest.version} kid=${args.kid} files=${files.length} hash=${hash}`);
+  console.log(`note: clients treat this as official only if kid=${args.kid} is published in the official JWKS; a developer key gives a non-official signature (loads in developer mode only)`);
 }
 
 try { main(); } catch (e) {
