@@ -497,6 +497,83 @@ export interface TemplateRepository {
   /** 全部已发布版本，publishedAt 新的在前。 */
   listPublished(): Promise<TemplateVersionRecord[]>;
 }
+// 插件注册表（P3-P）：登记、版本、审核、官方签名。云端不存插件包，只存 manifest 与哈希。
+// ---------------------------------------------------------------------------
+export type PluginReviewStatus = 'pending' | 'approved' | 'rejected';
+export type PluginReviewAction = 'submit' | 'approve' | 'reject' | 'sign';
+
+export interface PluginSignature { alg: 'ES256'; kid: string; value: string }
+
+export interface PluginRecord {
+  id: string;
+  name: string;
+  label: string;
+  homepage: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PluginVersionRecord {
+  id: string;
+  pluginId: string;
+  pluginName: string;
+  version: string;
+  /** 提交时的 manifest（含 files，不含 signature）。 */
+  manifest: Record<string, unknown>;
+  /** { "<相对路径>": "<sha256 hex>" } */
+  fileHashes: Record<string, string>;
+  /** sha256(签名载荷)：本地插件页展示的指纹，用于把已安装插件对到审核记录。 */
+  hash: string;
+  packageUrl: string;
+  sha256: string;
+  signature: PluginSignature | null;
+  signedAt: Date | null;
+  signedBy: string | null;
+  reviewStatus: PluginReviewStatus;
+  reviewedAt: Date | null;
+  reviewedBy: string | null;
+  submittedBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PluginReviewRecord {
+  id: string;
+  versionId: string;
+  action: PluginReviewAction;
+  notes: string;
+  actorId: string | null;
+  actorEmail: string | null;
+  createdAt: Date;
+}
+
+export interface PluginVersionInput {
+  pluginId: string;
+  version: string;
+  manifest: Record<string, unknown>;
+  fileHashes: Record<string, string>;
+  hash: string;
+  packageUrl: string;
+  sha256: string;
+  submittedBy: string | null;
+}
+
+export interface PluginRepository {
+  /** 按 name 新建或更新 label/homepage（每个插件名一条）。 */
+  upsertPlugin(p: { name: string; label: string; homepage: string | null }, now: Date): Promise<PluginRecord>;
+  findPluginByName(name: string): Promise<PluginRecord | null>;
+  listPlugins(): Promise<PluginRecord[]>;
+  /** (pluginId, version) 重复抛唯一键错误。 */
+  createVersion(v: PluginVersionInput, now: Date): Promise<PluginVersionRecord>;
+  findVersion(id: string): Promise<PluginVersionRecord | null>;
+  /** 新的在前。 */
+  listVersions(f: { pluginId?: string; reviewStatus?: PluginReviewStatus; limit: number }): Promise<PluginVersionRecord[]>;
+  setReview(id: string, r: { reviewStatus: PluginReviewStatus; reviewedAt: Date | null; reviewedBy: string | null }, now: Date): Promise<PluginVersionRecord | null>;
+  setSignature(id: string, s: { signature: PluginSignature | null; signedAt: Date | null; signedBy: string | null }, now: Date): Promise<PluginVersionRecord | null>;
+  addReview(r: Omit<PluginReviewRecord, 'id'>): Promise<PluginReviewRecord>;
+  /** 按时间升序。 */
+  listReviews(versionId: string): Promise<PluginReviewRecord[]>;
+}
 
 export const REPOS = Symbol('REPOS');
 export interface Repositories {
@@ -520,4 +597,5 @@ export interface Repositories {
   adminRoles: AdminRoleRepository;
   adminAudit: AdminAuditRepository;
   templates: TemplateRepository;
+  plugins: PluginRepository;
 }

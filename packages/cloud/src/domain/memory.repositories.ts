@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type {
   AdminAuditRecord, AdminRoleRecord, AnnouncementRecord, ReleaseRecord,
   Account, Device, FeedbackRecord, InvoiceRecord, InviteCode, LicenceUsageRecord, OrderRecord, PaymentRecord,
-  Plan, PlanVersion, RefreshTokenRecord, RefundRecord, Repositories, Subscription, TelemetryRow,
+  Plan, PlanVersion, PluginRecord, PluginReviewRecord, PluginVersionRecord, RefreshTokenRecord, RefundRecord, Repositories, Subscription, TelemetryRow,
   TemplateRecord, TemplateVersionRecord,
 } from './repositories';
 
@@ -31,6 +31,9 @@ export function createMemoryRepositories(): Repositories {
   const audits: AdminAuditRecord[] = [];
   const templates = new Map<string, TemplateRecord>();
   const templateVersions = new Map<string, TemplateVersionRecord>();
+  const plugins = new Map<string, PluginRecord>();
+  const pluginVersions = new Map<string, PluginVersionRecord>();
+  const pluginReviews: PluginReviewRecord[] = [];
   const clone = <T extends object>(x: T): T => structuredClone(x);
   const cloneOrNull = <T extends object>(x: T | undefined | null): T | null => (x ? structuredClone(x) : null);
   const byNewest = (a: { createdAt: Date; id: string }, b: { createdAt: Date; id: string }) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id);
@@ -77,6 +80,63 @@ export function createMemoryRepositories(): Repositories {
       async listPublished() {
         return [...templateVersions.values()].filter((v) => v.published)
           .sort((a, b) => (b.publishedAt!.getTime() - a.publishedAt!.getTime()) || byNewest(a, b)).map(clone);
+      },
+    },
+    plugins: {
+      async upsertPlugin(p, now) {
+        for (const x of plugins.values()) {
+          if (x.name === p.name) {
+            Object.assign(x, { label: p.label, homepage: p.homepage, updatedAt: now });
+            return clone(x);
+          }
+        }
+        const rec: PluginRecord = { ...p, id: randomUUID(), createdAt: now, updatedAt: now };
+        plugins.set(rec.id, rec);
+        return clone(rec);
+      },
+      async findPluginByName(name) {
+        for (const x of plugins.values()) if (x.name === name) return clone(x);
+        return null;
+      },
+      async listPlugins() { return [...plugins.values()].sort((a, b) => a.name.localeCompare(b.name)).map(clone); },
+      async createVersion(v, now) {
+        const plugin = plugins.get(v.pluginId);
+        if (!plugin) throw new Error('fk:pluginId');
+        for (const x of pluginVersions.values()) if (x.pluginId === v.pluginId && x.version === v.version) throw new Error('unique:version');
+        const rec: PluginVersionRecord = {
+          ...clone(v), id: randomUUID(), pluginName: plugin.name, signature: null, signedAt: null, signedBy: null,
+          reviewStatus: 'pending', reviewedAt: null, reviewedBy: null, createdAt: now, updatedAt: now,
+        };
+        pluginVersions.set(rec.id, rec);
+        return clone(rec);
+      },
+      async findVersion(id) { return cloneOrNull(pluginVersions.get(id)); },
+      async listVersions(f) {
+        return [...pluginVersions.values()]
+          .filter((x) => (!f.pluginId || x.pluginId === f.pluginId) && (!f.reviewStatus || x.reviewStatus === f.reviewStatus))
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id))
+          .slice(0, f.limit).map(clone);
+      },
+      async setReview(id, r, now) {
+        const x = pluginVersions.get(id);
+        if (!x) return null;
+        Object.assign(x, r, { updatedAt: now });
+        return clone(x);
+      },
+      async setSignature(id, s, now) {
+        const x = pluginVersions.get(id);
+        if (!x) return null;
+        Object.assign(x, clone(s), { updatedAt: now });
+        return clone(x);
+      },
+      async addReview(r) {
+        const rec: PluginReviewRecord = { ...r, id: randomUUID() };
+        pluginReviews.push(rec);
+        return clone(rec);
+      },
+      async listReviews(versionId) {
+        return pluginReviews.filter((x) => x.versionId === versionId)
+          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).map(clone);
       },
     },
     announcements: {

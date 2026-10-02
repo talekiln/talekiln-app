@@ -39,6 +39,8 @@ export function createBuiltinCommands(deps) {
     page('nav.templates', '模板市场', '/templates', ['模板', '套用', '市场', 'template', 'templates']),
     // P3-D
     { id: 'director.open', title: '导演模式', group: '编辑', keywords: ['导演', '自然语言', '改片', '一句话', 'director', 'ai'], when: hasEpisode, run: (ctx) => deps.openDirector(ctx.episodeId) },
+    // P3-P
+    page('nav.plugins', '插件与服务商', '/settings/plugins', ['插件', '服务商', '扩展', 'plugins', 'providers', '开发者模式']),
   ]
 }
 
