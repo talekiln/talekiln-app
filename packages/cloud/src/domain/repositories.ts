@@ -632,6 +632,9 @@ export interface WechatQrRepository {
   transition(ticket: string, from: WechatQrStatus[], to: WechatQrStatus, openId: string | null): Promise<boolean>;
   /** 原子地标记消费：仅当 status=confirmed 且 consumedAt 为空时成功。 */
   consume(ticket: string, now: Date): Promise<boolean>;
+}
+
+// ---------------------------------------------------------------------------
 // 工作室版（P3-S）：工作室、成员、席位、邀请。云端只记「谁在哪个工作室」，共享素材在对象存储里。
 // ---------------------------------------------------------------------------
 export type StudioStatus = 'active' | 'suspended';
