@@ -485,6 +485,19 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
     r.post('/templates/:id/apply', t.apply);
     r.delete('/templates/:id', t.remove);
   }
+  // P3-D
+  // ---------- director mode: natural-language edit -> validated plan -> one undoable kernel transaction ----------
+  {
+    const { createDirectorService } = require('../director');
+    const directorService = extras.director || createDirectorService({
+      db, log, spend: aiQueue && aiQueue.spend, generation: extras.generation, config: cfg, listConfigs: extras.listConfigs,
+    });
+    const director = require('./director')(directorService, log);
+    r.post('/episodes/:id/director/plan', director.plan);
+    r.get('/episodes/:id/director/turns', director.turns);
+    r.post('/episodes/:id/director/turns/:turnId/apply', director.apply);
+    r.post('/episodes/:id/director/turns/:turnId/undo', director.undo);
+  }
 
   return r;
 }

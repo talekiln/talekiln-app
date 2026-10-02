@@ -7,6 +7,7 @@
       <el-tag v-if="genChip" :type="genChip.type" data-test="gen-chip">{{ genChip.label }}</el-tag>
       <span v-if="genFailureText" class="gen-fail">{{ genFailureText }}</span>
       <el-button text @click="$router.push('/task-center')">任务中心</el-button>
+      <el-button :disabled="!episodeId" title="用一句话描述修改，先看计划与花费再执行（可整体撤销）" data-test="open-director" @click="openDirector(episodeId)">导演模式</el-button>
       <el-button :disabled="!episodeId || genBusy" data-test="gen-frame" @click="askGenerate('image')">生成首帧图</el-button>
       <el-button :disabled="!episodeId || genBusy" data-test="gen-both" @click="askGenerate('both')">首帧图 + 视频</el-button>
       <el-button type="primary" :disabled="!episodeId || genBusy" data-test="gen-video" @click="regenerate">重新生成视频 (R)</el-button>
@@ -85,6 +86,8 @@ import { dramaAPI } from '@/api/drama'
 import { useKeymap } from '@/composables/useKeymap'
 import GenerateDialog from '@/components/GenerateDialog.vue'
 import { useGeneration } from '@/composables/useGeneration'
+import { openDirector } from '@/composables/useDirectorPanel'
+import { useProjectViewsStore } from '@/stores/projectViews'
 import { failureText, isBusy } from '@/utils/generationView'
 import { SCOPE_WORKBENCH } from '@/utils/keymap'
 import { assetImageUrl } from '@/utils/mediaUrl'
@@ -118,6 +121,9 @@ const canRegen = computed(() => canRegenerate({ busy: busy.value, shot: shot.val
 
 const episodeId = computed(() => Number(shot.value?.episode_id) || 0)
 const gen = useGeneration(episodeId)
+// 导演模式执行 / 撤销（或别处的内核撤销）后，重新读取这个镜头（字段已由内核物化到旧表）
+const views = useProjectViewsStore()
+watch(() => views.revision, () => { if (!loading.value) load() })
 const genStatus = computed(() => gen.shotStatus(shotId))
 const genChip = computed(() => gen.chip(shotId))
 const genBusy = computed(() => isBusy(genStatus.value))

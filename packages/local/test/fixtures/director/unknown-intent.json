@@ -1,0 +1,9 @@
+{
+  "id": "unknown-intent",
+  "note": "模型编造了动作 shot.explodeShot；修正回合仍坚持同一动作，两次尝试后整份计划被拒绝。",
+  "message": "把第二镜炸开成三个快切镜头",
+  "replies": [
+    "{\"summary\": \"把第二镜拆成三个快切\", \"steps\": [{\"view\": \"shot\", \"name\": \"explodeShot\", \"args\": {\"shot_id\": \"shot_2\", \"pieces\": 3}, \"reason\": \"快切需要三个镜头\"}], \"untouched\": [\"其它镜头不变\"]}",
+    "{\"summary\": \"把第二镜拆成三个快切\", \"steps\": [{\"view\": \"shot\", \"name\": \"explodeShot\", \"args\": {\"shot_id\": \"shot_2\", \"pieces\": 3}, \"reason\": \"快切需要三个镜头\"}], \"untouched\": [\"其它镜头不变\"]}"
+  ]
+}
