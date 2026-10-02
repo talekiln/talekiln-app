@@ -3,7 +3,7 @@
  * 生成输入（锁定的参考图、尾帧、所选模型）-> 镜头 image/video 节点的参数。
  *
  * 这些输入以前只进队列的幂等键，不进节点的 cacheKey，所以改了锁定参考图/尾帧/模型，已新鲜的节点仍显示“新鲜”。
- * 现在它们是节点自己的参数（image.model / image.reference_hashes / video.model / video.tail_frame_hash），
+ * 现在它们是节点自己的参数（image.model / image.reference_hashes / video.model / video.reference_hashes / video.tail_frame_hash），
  * 经内核意图 `setShotReferences` 写入事务，自然进入 cacheKey：改了 -> 该镜头 image + video + 合成过期；改回去 -> key 回到原值，
  * 旧版本可零成本重新采用（和提示词改回去一样）。
  *
@@ -61,6 +61,7 @@ function inputOps(db, g, shotIds, { models = null, tail = true } = {}) {
     const parts = kernel.partsOfShot(g, id);
     const args = {};
     if (parts.image) args.reference_hashes = inp.refs.map(hashRef);
+    if (parts.video) args.video_reference_hashes = inp.refs.map(hashRef); // 视频请求也直接带锁定参考图（P3-C）
     if (tail && parts.video) args.tail_frame_hash = inp.tail ? hashRef(inp.tail) : null;
     if (models && models.image && parts.image) args.image_model = models.image(inp) || 'default';
     if (models && models.video && parts.video) args.video_model = models.video(inp) || 'default';
