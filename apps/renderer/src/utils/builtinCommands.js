@@ -5,6 +5,7 @@
  *   go(location)            跳转（vue-router 的 push）
  *   undo() / redo()         内核历史
  *   openHistory()           打开版本历史抽屉
+ *   openDirector(episodeId) 打开导演模式抽屉（P3-D）
  *   select(sel)             设置四视图共享选择 { kind, id }
  *   getViews()              { script, shots }（内核视图投影，可能为 null）
  * ctx（每次搜索现取）: { episodeId, dramaId, canUndo, canRedo, busy }
@@ -32,6 +33,8 @@ export function createBuiltinCommands(deps) {
     { id: 'edit.redo', title: '重做', group: '编辑', keywords: ['redo'], hint: 'Ctrl+Shift+Z', when: hasEpisode, enabled: (c) => c.canRedo && !c.busy, run: () => deps.redo() },
     { id: 'history.open', title: '打开版本历史', group: '编辑', keywords: ['历史', '版本', 'history', 'versions', '操作记录'], when: hasEpisode, run: () => deps.openHistory() },
     { id: 'project.export', title: '导出视频', group: '项目', keywords: ['导出', 'export', '渲染', '成片'], when: hasEpisode, run: (ctx) => deps.go({ path: `/episodes/${ctx.episodeId}/export`, query: ctx.dramaId ? { drama: String(ctx.dramaId) } : {} }) },
+    // P3-D
+    { id: 'director.open', title: '导演模式', group: '编辑', keywords: ['导演', '自然语言', '改片', '一句话', 'director', 'ai'], when: hasEpisode, run: (ctx) => deps.openDirector(ctx.episodeId) },
   ]
 }
 
