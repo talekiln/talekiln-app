@@ -28,7 +28,7 @@ function defineScenarioTests(pick) {
 const SHARDS = {
   script: ['rewrite_line', 'change_line_kind', 'split_line', 'merge_lines', 'reorder_lines', 'delete_line', 'insert_line'],
   shots: ['split_shot', 'merge_shots', 'reorder_shots_swap', 'move_shot_across_scenes_neutral', 'move_shot_across_scenes', 'delete_shot', 'add_shot', 'set_shot_title', 'set_shot_duration', 'regenerate_shot', 'regenerate_video_only', 'change_voice', 'change_references', 'change_tail_frame', 'change_image_model', 'change_video_model', 'adopt_old_version', 'reorder_after_split'],
-  timeline_canvas: ['timeline_trim', 'timeline_split_segment', 'timeline_reorder_within_shot', 'timeline_gap', 'timeline_transition', 'timeline_add_music', 'canvas_move_node', 'canvas_connect_disconnect', 'canvas_delete_node', 'canvas_rewire', 'compose_created_late'],
+  timeline_canvas: ['timeline_trim', 'timeline_split_segment', 'timeline_reorder_within_shot', 'timeline_gap', 'timeline_transition', 'timeline_add_music', 'canvas_move_node', 'canvas_connect_disconnect', 'canvas_delete_node', 'canvas_rename_group', 'canvas_rewire', 'compose_created_late'],
   sessions: ['mixed_session_undo_redo', 'crash_reload_mid_session'],
 };
 

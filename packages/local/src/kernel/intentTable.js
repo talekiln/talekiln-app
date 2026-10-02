@@ -53,6 +53,7 @@ const INTENTS = {
     disconnectNodes: (g, a, o) => I.canvas.disconnectNodes(g, { edge_id: a.edge_id, from: a.from_id, to: a.to_id, port: a.port }, o),
     addNodeAt: (g, a, o) => { need(a, 'type'); const { type, ...rest } = a; return I.canvas.addNodeAt(g, type, rest, o); },
     deleteNode: (g, a, o) => { need(a, 'node_id'); return I.canvas.deleteNode(g, a.node_id, o); },
+    renameGroup: (g, a, o) => { need(a, 'group_id', 'title'); return I.canvas.renameGroup(g, a.group_id, a.title, o); },
   },
 };
 

@@ -1,10 +1,10 @@
 # 数据内核一致性验收报告
 
-> 由 `node packages/kernel/test/conformance/report.js` 生成（2026-10-01），请勿手改；规格见 [kernel-design.md](kernel-design.md) 第 7 节。
+> 由 `node packages/kernel/test/conformance/report.js` 生成（2026-10-02），请勿手改；规格见 [kernel-design.md](kernel-design.md) 第 7 节。
 
 ## 1. 结论
 
-- 场景 × 入口视图 × 故事共 **1014** 次执行（38 个场景，13 个样例故事，另有 228 次“不同入口终态必须一致”的等价性比较），**失败 0**，另有 26 次因故事形状不适用而跳过（见第 4 节）。
+- 场景 × 入口视图 × 故事共 **1027** 次执行（39 个场景，13 个样例故事，另有 228 次“不同入口终态必须一致”的等价性比较），**失败 0**，另有 26 次因故事形状不适用而跳过（见第 4 节）。
 - 每次执行的**每一步**之后检查 I1–I8，并做逐步撤销/重做、重复 tx_id、独立预言机比对；执行结束再做整段撤销重做链和“每个事务边界崩溃重放”。
 - 套件抓到 **2 个内核缺陷**，均已修复并各有回归测试（第 6 节）。
 - 其余套件：来回一圈 + 意图足迹 + 携带表 0/0；事务原子性 + 意图错误处理 0/0；随机会话（3 个种子 × 13 故事 × 18 步） 0/0；套件自检（变异）与缺陷回归 0/0。
@@ -56,6 +56,7 @@
 | `timeline_add_music` | 加音乐（不影响场景缓存键） | — | — | 13/13<br>`addMusic` | — | — |
 | `canvas_move_node` | 画布移动节点（不得改变过期集合 / cacheKey / 其它视图） | — | — | — | 39/39<br>`moveNode` `moveNodes(多选)` `move compose + line + generated` | — |
 | `canvas_connect_disconnect` | 画布连线 / 断线 | — | — | — | 39/39<br>`line->shot 断开再连回` `image->video 断开再连回` `连线替换单连接端口` | — |
+| `canvas_rename_group` | 画布场景组改名（只写 groups.<id>.title，不影响过期集合 / 其它视图内容） | — | — | — | 13/13<br>`renameGroup` | — |
 | `canvas_delete_node` | 画布删除生成节点（image / video / narration） | — | — | — | 39/39<br>`deleteNode(image)` `deleteNode(video)` `deleteNode(narration)` | — |
 | `canvas_rewire` | 画布重连：删 image、新建 image、接回 shot 和 video | — | — | — | 13/13<br>`delete+addNodeAt+connect×2` | — |
 | `change_references` | 改锁定的参考图（只有该镜头的 image + video + 合成过期；改回去零成本重新采用旧版本） | — | 13/13<br>`setShotReferences` | — | 13/13<br>`setNodeParam` | 13/13<br>`graph` |
@@ -68,7 +69,7 @@
 | `mixed_session_undo_redo` | 四种视图混合编辑的会话 + 批量撤销/重做（分四种起手视图） | 12/12（1 个故事不适用）<br>`lead:script` | 12/12（1 个故事不适用）<br>`lead:shot` | 12/12（1 个故事不适用）<br>`lead:timeline` | 12/12（1 个故事不适用）<br>`lead:canvas` | — |
 | `crash_reload_mid_session` | 会话中途崩溃重载（快照 + 日志重放）后继续编辑（分四种起手视图） | 12/12（1 个故事不适用）<br>`lead:script` | 12/12（1 个故事不适用）<br>`lead:shot` | 12/12（1 个故事不适用）<br>`lead:timeline` | 12/12（1 个故事不适用）<br>`lead:canvas` | — |
 
-按入口视图的执行次数：script 126，shot 327，timeline 212，canvas 349（合计 1014）。
+按入口视图的执行次数：script 126，shot 327，timeline 212，canvas 362（合计 1027）。
 
 ## 4. 不适用（跳过）
 

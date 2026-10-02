@@ -1,0 +1,99 @@
+{
+  "_notice": "测试专用的固定价目（2026-10-01 的示例价表）。批量 / 导演模式的测试断言写死了分值，用这份表而不是 configs/prices.json，这样核对真实价目时测试不会跟着变。",
+  "sample": true,
+  "version": "sample-2026-10-01",
+  "currency": "CNY",
+  "max_factor": 1.2,
+  "defaults": {
+    "duration_seconds": 5
+  },
+  "providers": {
+    "bailian": {
+      "image": {
+        "wan2.6-t2i": {
+          "per": "image",
+          "price": 0.2
+        },
+        "wan2.6-image": {
+          "per": "image",
+          "price": 0.2
+        },
+        "z-image-turbo": {
+          "per": "image",
+          "price": 0.1
+        },
+        "_default": {
+          "per": "image",
+          "price": 0.2
+        }
+      },
+      "video": {
+        "wan2.6-t2v": {
+          "per": "second",
+          "price": 0.6,
+          "by_resolution": {
+            "480P": 0.3,
+            "720P": 0.6,
+            "1080P": 1.0
+          }
+        },
+        "wan2.6-i2v-flash": {
+          "per": "second",
+          "price": 0.3,
+          "by_resolution": {
+            "480P": 0.15,
+            "720P": 0.3,
+            "1080P": 0.5
+          }
+        },
+        "wan2.6-r2v-flash": {
+          "per": "second",
+          "price": 0.3
+        },
+        "wan2.2-kf2v-flash": {
+          "per": "second",
+          "price": 0.1
+        },
+        "_default": {
+          "per": "second",
+          "price": 0.6
+        }
+      },
+      "tts": {
+        "cosyvoice-v2": {
+          "per": "char",
+          "price": 0.0002
+        },
+        "_default": {
+          "per": "char",
+          "price": 0.0002
+        }
+      }
+    },
+    "ark": {
+      "image": {
+        "_default": {
+          "per": "image",
+          "price": 0.25
+        }
+      },
+      "video": {
+        "_default": {
+          "per": "second",
+          "price": 0.5,
+          "by_resolution": {
+            "480p": 0.25,
+            "720p": 0.5,
+            "1080p": 0.9
+          }
+        }
+      },
+      "tts": {
+        "_default": {
+          "per": "char",
+          "price": 0.0002
+        }
+      }
+    }
+  }
+}

@@ -9,7 +9,9 @@ const express = require('express');
 const kernel = require('@talekiln/kernel');
 const kstore = require('../src/kernel/store');
 const { createAiTaskStore, createAiTaskQueue, createWorker, blobPath } = require('../src/queue');
-const { createSpendService } = require('../src/spend');
+const { createSpendService, createEstimator } = require('../src/spend');
+// 固定价目：断言里的分值按这份示例价表算，不随 configs/prices.json 的核对更新而变
+const TEST_PRICES = require('./fixtures/prices.sample.json');
 const { createGenerationService } = require('../src/generation');
 const batchMod = require('../src/batch');
 const batchRoutes = require('../src/routes/batches');
@@ -37,8 +39,10 @@ function fakeVendor(storageDir) {
     async poll(task) {
       if (v.hold && !v.released.has(task.id)) return { status: 'running' };
       if (v.shouldFail(task)) { v.failures++; return { status: 'failed', errorCode: 'TASK_FAILED', errorMessage: 'fake failure' }; }
+      // 回传的用量 = 请求的时长：花费服务按用量记实际费用（spend.recordFinished），这样实际与估算一致，断言可以直接比
+      const seconds = Number(JSON.parse(task.params || '{}').duration) || 5;
       return task.kind === 'video'
-        ? { status: 'succeeded', result: { url: `https://fake.invalid/${task.id}.mp4`, usage: { duration: 5 } } }
+        ? { status: 'succeeded', result: { url: `https://fake.invalid/${task.id}.mp4`, usage: { duration: seconds } } }
         : { status: 'succeeded', result: { urls: [`https://fake.invalid/${task.id}.png`] } };
     },
     async download(task, result) {
@@ -80,7 +84,7 @@ async function harness({ episodes = 3, limits = LIMITS } = {}) {
   const taskStore = createAiTaskStore(db, { now });
   const vendor = fakeVendor(storageDir);
   const queue = createAiTaskQueue({ store: taskStore, providers: { bailian: vendor.provider }, limits, now });
-  const spend = createSpendService(db, { now });
+  const spend = createSpendService(db, { now, estimator: createEstimator(TEST_PRICES) });
   let gen = null;
   let batch = null;
   const worker = createWorker({ queue, store: taskStore, config: {}, onTaskFinished: (t) => { spend.recordFinished(t); gen.onTaskFinished(t); batch.onTaskFinished(t); }, onError() {} });
@@ -241,7 +245,7 @@ describe('批量生成：调度', () => {
     assert.equal(done.progress.shots_done, 15);
     assert.equal(done.progress.items_done, 3);
     assert.equal(done.totals.spent_cents, h.spendTotalCents(), '已花费 = 花费表里这些任务之和');
-    assert.equal(done.totals.spent_cents, done.totals.estimate_min_cents, '假服务商不回传实际费用，按估算入账');
+    assert.equal(done.totals.spent_cents, done.totals.estimate_min_cents, '假服务商回传的时长等于请求时长，实际费用等于估算');
     assert.equal(done.totals.remaining_min_cents, 0);
     assert.equal(done.totals.in_flight_max_cents, 0);
     assert.ok(done.finished_at >= done.started_at);

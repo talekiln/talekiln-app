@@ -16,6 +16,7 @@ function setup() {
   const db = new Database(path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'spendrep-')), 't.db'));
   db.exec(mig('23_ai_tasks.sql'));
   db.exec(mig('25_spend_log.sql'));
+  db.exec(mig('28_spend_log_usage.sql'));
   db.exec(`CREATE TABLE global_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT '')`);
   const spend = createSpendService(db, { now: () => T0 });
   const ins = db.prepare(`INSERT INTO spend_log (task_id, provider, kind, model, project_id, currency, estimated, actual, day, created_at)
