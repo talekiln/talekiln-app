@@ -1,0 +1,30 @@
+# 可选：自建 MinIO（P3-K 云备份 / 工作室版共享存储的对象存储）。与主 compose 叠加使用：
+#   docker compose -f docker-compose.yml -f docker-compose.minio.yml up -d
+# 凭据只从 .env 读（MINIO_ROOT_USER / MINIO_ROOT_PASSWORD），不要写进本文件。
+# 9000 是 S3 API，由宿主机 Caddy 反代为 https（见 docs/tencent-deploy.md「对象存储（MinIO）」）；
+# 9001 是管理控制台，只绑 127.0.0.1，需要时用 SSH 端口转发访问，不对公网开放。
+# 大陆机房拉不到 Docker Hub 时，把 MINIO_IMAGE 换成镜像站地址（同主 compose 的做法）。
+services:
+  minio:
+    image: ${MINIO_IMAGE:-minio/minio:latest}
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?请在 .env 设置 MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?请在 .env 设置 MINIO_ROOT_PASSWORD（至少 8 位）}
+      # 对外的 S3 地址（Caddy 反代后的 https 域名），控制台生成的预签名链接会用它
+      MINIO_SERVER_URL: ${MINIO_SERVER_URL:-}
+      MINIO_BROWSER_REDIRECT_URL: ${MINIO_BROWSER_REDIRECT_URL:-}
+    volumes:
+      - miniodata:/data
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  miniodata:

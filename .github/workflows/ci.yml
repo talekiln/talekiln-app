@@ -59,6 +59,45 @@ jobs:
       - run: pnpm --filter @talekiln/cloud exec prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
       - run: pnpm --filter @talekiln/cloud test:pg
 
+  # 云备份（P3-K）：对一次性的 MinIO 容器跑一遍 S3 兼容客户端与「备份 -> 列表 -> 恢复 -> 清理」链路（需要 Linux runner 跑 Docker）。
+  # 下面的账号口令仅用于该一次性容器，不是任何真实环境的凭据；桶由客户端自己创建，不另装 mc。
+  backup-minio:
+    runs-on: ubuntu-latest
+    env:
+      TALEKILN_TEST_S3_ENDPOINT: http://127.0.0.1:9000
+      TALEKILN_TEST_S3_BUCKET: talekiln-ci
+      TALEKILN_TEST_S3_ACCESS_KEY: ci
+      TALEKILN_TEST_S3_SECRET_KEY: ci-throwaway-minio
+      TALEKILN_TEST_S3_CREATE_BUCKET: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm native:node
+      - name: Start MinIO (throwaway credentials) and wait for /minio/health/live
+        run: |
+          docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=ci -e MINIO_ROOT_PASSWORD=ci-throwaway-minio minio/minio server /data
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null; then echo "minio up after $i tries"; break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:9000/minio/health/live
+      - name: Create the test bucket with the client itself
+        working-directory: packages/local
+        run: |
+          node -e "const { createS3Client } = require('./src/backup/s3'); const e = process.env;
+            createS3Client({ endpoint: e.TALEKILN_TEST_S3_ENDPOINT, bucket: e.TALEKILN_TEST_S3_BUCKET, accessKey: e.TALEKILN_TEST_S3_ACCESS_KEY, secretKey: e.TALEKILN_TEST_S3_SECRET_KEY })
+              .createBucket().then((r) => console.log('bucket', JSON.stringify(r)))"
+      - name: Live backup test against MinIO
+        working-directory: packages/local
+        run: node --test --test-reporter=spec test/backup.live.test.js
+      - if: always()
+        run: docker logs minio --tail 50 || true
+
   package:
     needs: test
     # 私有仓库的 Actions 分钟有限（Windows 计 2 倍、macOS 计 10 倍）。安装包只在 main、手动触发和非草稿 PR 上构建；
