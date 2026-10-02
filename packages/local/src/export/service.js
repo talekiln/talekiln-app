@@ -51,6 +51,7 @@ function systemOpener(file) {
 function createExportService(db, {
   getCore, storageRoot, ffmpegPath = null, ffmpegDir = null, opener = systemOpener,
   runFfmpeg, now = () => Date.now(), newId = () => crypto.randomUUID(), platformHome = os.homedir(),
+  onFinished = null, // P3-K：成片导出完成（含 AIGC 标识）后回调一次 { job_id, episode_id, output_path }；云备份的 after_export 挂在这里
 } = {}) {
   if (typeof getCore !== 'function') throw new Error('getCore is required');
   if (!storageRoot) throw new Error('storageRoot is required');
@@ -198,6 +199,10 @@ function createExportService(db, {
     if (job.postState === 'running') return { ...base, status: 'running', stage: 'AI 内容标识', percent: 99.5 };
     if (job.postState === 'failed') {
       return { ...base, status: 'failed', result: null, error: { code: 'AIGC_METADATA_FAILED', message: job.postError } };
+    }
+    if (!job.notified) {
+      job.notified = true;
+      if (onFinished) { try { onFinished({ job_id: job.id, episode_id: job.episodeId, output_path: job.outputPath }); } catch (_) { /* 钩子不影响导出结果 */ } }
     }
     return base;
   }

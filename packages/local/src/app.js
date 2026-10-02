@@ -173,7 +173,15 @@ function createApp(opts = {}) {
     db, store: aiQueue.store, worker: aiQueue.worker, spend: aiQueue.spend, storageRoot, listConfigs: opts.listConfigs, resolve: opts.voiceoverResolve, log,
   });
   voiceover.recoverFinished().catch((e) => log.error && log.error('voiceover recover', { error: e && e.message }));
-  app.use('/api/v1', setupRouter(config, db, log, aiQueue, cloud, { storageRoot, exporter: opts.exporter, getCore, generation, batch, templates, consistency, pluginHost, regionEdit, voiceover }));
+  // P3-K 可选云备份：设置在 global_settings、Secret Key 在密钥存储；每日调度器与队列 worker 同生命周期，成片导出完成后可自动备份
+  const backup = opts.backup || require('./backup').createBackupService({ db, config, log, appVersion: require('../package.json').version });
+  if (opts.backupScheduler !== false) {
+    const backupScheduler = require('./backup').createBackupScheduler({ service: backup, onError: (e) => log.error && log.error('backup scheduler', { error: e && e.message }) });
+    attachToWorker(aiQueue.worker, backupScheduler);
+    aiQueue.backupScheduler = backupScheduler;
+  }
+  const onExportFinished = (evt) => { try { backup.onExportFinished(evt); } catch (e) { log.error && log.error('backup after export', { error: e && e.message }); } };
+  app.use('/api/v1', setupRouter(config, db, log, aiQueue, cloud, { storageRoot, exporter: opts.exporter, getCore, generation, batch, templates, consistency, pluginHost, regionEdit, voiceover, backup, onExportFinished }));
 
   // 前端静态资源（sxy：web/dist）；Electron 打包时可设 WEB_DIST_PATH
   const webDist = process.env.WEB_DIST_PATH || path.join(process.cwd(), '..', 'frontweb', 'dist');
