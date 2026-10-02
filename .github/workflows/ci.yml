@@ -16,7 +16,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm secrets:scan
+      # spec 报告器会在末尾单独列出失败用例和错误；TAP 输出夹在几万行迁移日志里，日志尾部看不到失败的是谁
       - run: pnpm test
+        env:
+          NODE_OPTIONS: --test-reporter=spec
       - run: pnpm build
       - run: pnpm --filter @talekiln/admin build
 
