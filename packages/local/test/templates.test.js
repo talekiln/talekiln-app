@@ -18,8 +18,10 @@ const templateRoutes = require('../src/routes/templates');
 const { seededDb, log } = require('./helpers/kernelDb');
 const { startMockCloud, es256Sign, newKeyPair } = require('./helpers/mockCloud');
 const { ENTRIES } = require('../src/errors');
+const { PRESET_VALUES } = require('../src/constants/generationStylePresets');
 
-const BUILTIN = ['official-guofeng-drama', 'official-knowledge-explainer', 'official-product-seeding'];
+// 内置官方模板：按磁盘目录枚举（docs/phase3-templates.md §1 的表），新增一个包不用改这里。
+const BUILTIN = fs.readdirSync(DEFAULT_BUILTIN_DIR).filter((d) => fs.existsSync(path.join(DEFAULT_BUILTIN_DIR, d, 'manifest.json'))).sort();
 const readBuiltin = (id) => JSON.parse(fs.readFileSync(path.join(DEFAULT_BUILTIN_DIR, id, 'manifest.json'), 'utf8'));
 const PRO_STATUS = { logged_in: true, account: { email: 'a@b.c', plan: 'pro', role: 'USER' }, licence: { state: 'valid', verified: true, plan: 'pro', entitlements: ['generate'], sub_end: null } };
 const minimal = (over = {}) => ({
@@ -36,18 +38,62 @@ function service(db, extra = {}) {
 }
 
 describe('manifest schema', () => {
-  it('builtin packs validate, each 6–10 shots, exactly one pro example', () => {
+  it('builtin packs validate: 6–14 shots, 30–90 s, Chinese prompts, valid preset, slots used consistently, free and pro both present', () => {
+    assert.equal(BUILTIN.length, 11);
     const tiers = [];
     for (const id of BUILTIN) {
       const m = readBuiltin(id);
       const v = schema.validateManifest(m);
       assert.deepEqual(v.errors, [], id);
       assert.equal(m.id, id);
-      assert.ok(m.shots.length >= 6 && m.shots.length <= 10, `${id} shots ${m.shots.length}`);
-      for (const s of m.shots) assert.match(s.prompt_template, /[一-龥]/);
+      assert.match(m.id, /^official-/);
+      assert.ok(m.shots.length >= 6 && m.shots.length <= 14, `${id} shots ${m.shots.length}`);
+      const total = m.shots.reduce((n, s) => n + s.duration_ms, 0);
+      assert.ok(total >= 30_000 && total <= 90_000, `${id} total ${total}ms`);
+      assert.ok(PRESET_VALUES.includes(m.style.preset), `${id} preset ${m.style.preset}`);
+      assert.equal(m.style.aspect_ratio, '9:16', id);
+      assert.match(m.description, /[一-龥]/);
+      assert.ok(m.character_slots.length >= 1 && m.character_slots.length <= 4, `${id} slots ${m.character_slots.length}`);
+      const declared = new Set(m.character_slots.map((c) => c.id));
+      const used = new Set();
+      for (const s of m.shots) {
+        assert.match(s.prompt_template, /[一-龥]/, `${id} ${s.title}`);
+        assert.match(s.prompt_template, /\{\{scene\}\}/, `${id} ${s.title} 没有 {{scene}}`);
+        assert.ok(s.scene_slot && s.camera && s.group, `${id} ${s.title} 缺 scene_slot / camera / group`);
+        assert.ok(s.duration_ms >= 3000 && s.duration_ms <= 8000, `${id} ${s.title} duration ${s.duration_ms}`);
+        for (const c of s.character_slots) {
+          assert.ok(declared.has(c), `${id} ${s.title} 未声明的槽位 ${c}`);
+          assert.ok(s.prompt_template.includes(`{{${c}}}`), `${id} ${s.title} 槽位 ${c} 没出现在提示词里`);
+          used.add(c);
+        }
+        for (const l of s.lines || []) {
+          assert.match(l.text, /[一-龥]/, `${id} ${s.title}`);
+          if (l.kind === 'dialogue') assert.ok(l.speaker && s.character_slots.includes(l.speaker), `${id} ${s.title} 台词 speaker ${l.speaker} 不在镜头槽位里`);
+        }
+      }
+      assert.deepEqual([...used].sort(), [...declared].sort(), `${id} 有槽位没被任何镜头用到`);
       tiers.push(m.tier);
     }
-    assert.equal(tiers.filter((t) => t === 'pro').length, 1);
+    assert.ok(tiers.includes('pro') && tiers.includes('free'));
+    assert.equal(tiers.filter((t) => t === 'pro').length, 3, 'knowledge-explainer + revenge + suspense');
+  });
+
+  it('every builtin pack: summaryOf reports each slot used by ≥1 shot; renderPrompt leaves no {{ when all slots are mapped', () => {
+    for (const id of BUILTIN) {
+      const m = readBuiltin(id);
+      const s = schema.summaryOf(m);
+      assert.equal(s.shot_count, m.shots.length);
+      assert.ok(s.group_count >= 3, `${id} groups ${s.group_count}`);
+      assert.ok(s.line_count >= m.shots.length * 0.8, `${id} lines ${s.line_count}`);
+      for (const slot of s.slots) assert.ok(slot.required_by >= 1, `${id} slot ${slot.id} required_by ${slot.required_by}`);
+      const slots = Object.fromEntries(m.character_slots.map((c) => [c.id, c.name]));
+      for (const shot of m.shots) {
+        const out = schema.renderPrompt(shot.prompt_template, { slots, scene: shot.scene_slot, style: m.style.prompt });
+        assert.doesNotMatch(out, /\{\{/, `${id} ${shot.title}`);
+        assert.ok(out.includes(shot.scene_slot), `${id} ${shot.title} scene`);
+        for (const c of shot.character_slots) assert.ok(out.includes(slots[c]), `${id} ${shot.title} ${c}`);
+      }
+    }
   });
 
   it('rejects bad ids, tiers, durations, undeclared placeholders and duplicate slots', () => {
@@ -311,7 +357,7 @@ describe('install / remove', () => {
     assert.equal(r.signature.reason, 'no_signature');
     assert.equal(r.replaced, false);
     assert.equal(r.version, '2.0.0');
-    assert.equal((await svc.list()).items.length, 4);
+    assert.equal((await svc.list()).items.length, BUILTIN.length + 1);
     const r2 = await svc.install({ path: path.join(dir, 'folder', 'manifest.json') }); // 直接给 manifest.json 也行
     assert.equal(r2.replaced, true);
     assert.deepEqual(svc.remove('my-guofeng'), { id: 'my-guofeng', removed: true });
@@ -450,7 +496,7 @@ describe('routes', () => {
   it('list / get / estimate / apply / install / delete', async () => {
     const l = await call('GET', '/templates');
     assert.equal(l.status, 200);
-    assert.equal(l.body.data.items.length, 3);
+    assert.equal(l.body.data.items.length, BUILTIN.length);
     assert.equal(l.body.data.pro_available, false);
     const g = await call('GET', '/templates/official-guofeng-drama');
     assert.equal(g.body.data.summary.shot_count, 8);

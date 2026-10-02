@@ -1,12 +1,20 @@
 // 模板市场（P3-T，设计稿 P3-01）的纯函数：分组、「套用后会得到」摘要、估价文案、角色槽位映射校验、请求体。
 import { formatMoney } from './spendView.js'
 
+// 内置官方模板的 genre（docs/phase3-templates.md §1）都要有中文名；未知类型原样显示。
 export const GENRE_LABEL = {
   guofeng: '国风短剧',
+  'urban-sweet': '都市甜宠',
+  revenge: '逆袭打脸',
+  suspense: '悬疑反转',
+  rebirth: '穿越重生',
+  campus: '校园青春',
+  family: '家庭伦理',
+  workplace: '职场逆袭',
+  healing: '萌宠治愈',
   ecommerce: '产品种草',
   knowledge: '知识讲解',
   romance: '都市言情',
-  suspense: '悬疑',
   comedy: '喜剧',
   vlog: '生活记录',
 }

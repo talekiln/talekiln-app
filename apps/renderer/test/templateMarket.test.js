@@ -1,10 +1,15 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
-  applyBody, applyTarget, canApply, characterOptions, cloudItemState, estimateText, formatDuration, genreLabel, groupByGenre,
+  GENRE_LABEL, applyBody, applyTarget, canApply, characterOptions, cloudItemState, estimateText, formatDuration, genreLabel, groupByGenre,
   signatureLabel, sourceLabel, summaryLines, tierLabel, validateSlotMapping,
 } from '../src/utils/templateMarket.js'
 import { createBuiltinCommands } from '../src/utils/builtinCommands.js'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const SUMMARY = {
   shot_count: 8, total_duration_ms: 45000, group_count: 3, groups: ['开场', '冲突', '反转'], line_count: 9,
@@ -26,6 +31,20 @@ test('groupByGenre: 按类型分组，组内按使用次数再按名字', () => 
   assert.deepEqual(groupByGenre([]), [])
   assert.equal(genreLabel('knowledge'), '知识讲解')
   assert.equal(genreLabel('xyz'), 'xyz')
+  assert.equal(genreLabel(''), '其他')
+})
+
+test('genreLabel: 每个内置官方模板的 genre 都有中文名', () => {
+  const dir = path.join(__dirname, '..', '..', '..', 'packages', 'local', 'templates')
+  const ids = fs.readdirSync(dir).filter((d) => fs.existsSync(path.join(dir, d, 'manifest.json')))
+  assert.ok(ids.length >= 11)
+  const genres = new Set(ids.map((id) => JSON.parse(fs.readFileSync(path.join(dir, id, 'manifest.json'), 'utf8')).genre))
+  for (const g of genres) {
+    assert.ok(Object.prototype.hasOwnProperty.call(GENRE_LABEL, g), `genre ${g} 没有中文名`)
+    assert.match(GENRE_LABEL[g], /^[一-龥]{2,6}$/, g)
+  }
+  assert.deepEqual([...genres].sort(), ['campus', 'ecommerce', 'family', 'guofeng', 'healing', 'knowledge', 'rebirth', 'revenge', 'suspense', 'urban-sweet', 'workplace'])
+  assert.equal(groupByGenre(ids.map((id) => ({ id, genre: JSON.parse(fs.readFileSync(path.join(dir, id, 'manifest.json'), 'utf8')).genre }))).some((g) => g.label === '其他'), false)
 })
 
 test('标签与时长', () => {

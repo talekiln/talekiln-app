@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -19,6 +19,8 @@ import type { TemplateManifest } from '../src/services/template.service';
 // P3-T 模板市场（云端）：清单校验、摘要与签名、仓储契约、公开目录、管理接口鉴权与审计。
 const LOCAL_TEMPLATES = path.join(__dirname, '..', '..', 'local', 'templates');
 const builtin = (id: string): TemplateManifest => JSON.parse(readFileSync(path.join(LOCAL_TEMPLATES, id, 'manifest.json'), 'utf8'));
+// 全部内置官方模板（按目录枚举，docs/phase3-templates.md §1）
+const BUILTIN_IDS = readdirSync(LOCAL_TEMPLATES).filter((d) => existsSync(path.join(LOCAL_TEMPLATES, d, 'manifest.json'))).sort();
 const T0 = new Date('2026-10-01T00:00:00.000Z');
 const at = (ms: number) => new Date(T0.getTime() + ms);
 const ADMIN = { email: 'root@example.com', password: 'test-root-pass-123' };
@@ -39,7 +41,8 @@ function minimal(over: Partial<TemplateManifest> = {}): TemplateManifest {
 // 清单与摘要
 // ---------------------------------------------------------------------------
 test('清单校验：本地内置模板全部通过；常见错误被拒绝', () => {
-  for (const id of ['official-guofeng-drama', 'official-product-seeding', 'official-knowledge-explainer']) {
+  assert.ok(BUILTIN_IDS.length >= 11, BUILTIN_IDS.join(','));
+  for (const id of BUILTIN_IDS) {
     const r = manifestSchema.safeParse(builtin(id));
     assert.ok(r.success, id + ' ' + (r.success ? '' : JSON.stringify(r.error.issues)));
     assert.equal(r.data.id, id);
@@ -71,7 +74,7 @@ test('摘要算法与本地端一致：忽略键序与 signature，不同内容�
   assert.match(templateDigest(m), /^tpl-[0-9a-f]{64}$/);
   // 本地 packages/local/src/templates/schema.js 的 templateDigest 必须给出同一个值（客户端用它验签）
   const localSchema = createRequire(__filename)(path.join(LOCAL_TEMPLATES, '..', 'src', 'templates', 'schema.js')) as { templateDigest: (m: unknown) => string };
-  for (const id of ['official-guofeng-drama', 'official-product-seeding']) {
+  for (const id of BUILTIN_IDS) {
     const parsed = manifestSchema.parse(builtin(id));
     assert.equal(localSchema.templateDigest(parsed), templateDigest(parsed), id);
     assert.equal(localSchema.templateDigest(builtin(id)), templateDigest(builtin(id)), id + ' raw');
