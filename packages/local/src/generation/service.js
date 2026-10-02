@@ -10,9 +10,13 @@
  *             物化到旧表；失败 -> 图不动，旧版本保留，只有队列里的任务状态变化。
  *   status    每镜头 none / queued / running / stale / fresh / failed。
  *
- * 锁定的参考图、尾帧、所选模型是节点自己的参数（image.model/reference_hashes、video.model/tail_frame_hash，见 kernel/inputs.js），
+ * 锁定的参考图、尾帧、所选模型是节点自己的参数（image.model/reference_hashes、video.model/reference_hashes/tail_frame_hash，见 kernel/inputs.js），
  * 估算/建任务前先经内核事务同步进图，所以它们进 cacheKey：改了会让该镜头的 image + video + 合成过期，改回去命中旧版本。
- * 幂等键仍带上它们（防御性，与 cacheKey 重复无害）。
+ * 幂等键仍带上它们（防御性，与 cacheKey 重复无害）。锁定参考图同时进出图请求（referenceImages）与出视频请求（referenceUrls，
+ * 适配器按模型决定是否真的发给服务商）。
+ *
+ * onAdopted（可选钩子）：每次有新版本写进图后调用 { task, episode_id, shot_id, storyboard_id, node, kind, version_id, adopted }；
+ * 一致性评分（P3-C）挂在这里。钩子的 promise 计入 idle()。
  */
 const path = require('node:path');
 const kernel = require('@talekiln/kernel');
@@ -53,7 +57,7 @@ function kindsOf(kind) {
 
 function createGenerationService({
   db, store: taskStore, worker = null, spend, storageRoot, getCore = null, listConfigs = null,
-  catalogModels = () => [], log = console, resolution = null,
+  catalogModels = () => [], log = console, resolution = null, onAdopted = null,
 }) {
   if (!db || !taskStore || !spend) throw new Error('db, store and spend are required');
   const list = listConfigs || ((type) => require('../services/aiConfigService').listConfigsInternal(db, type));
@@ -98,7 +102,7 @@ function createGenerationService({
 
   // ---------- 计划 ----------
 
-  function buildParams(kind, { shot, refs, firstFrame, tailFrame, model, projectId, seconds }) {
+  function buildParams(kind, { shot, refs = [], firstFrame, tailFrame, model, projectId, seconds }) {
     const p = {};
     if (kind === 'image') {
       p.prompt = shot.image_prompt || shot.description || '';
@@ -108,6 +112,7 @@ function createGenerationService({
       p.duration = seconds;
       if (firstFrame) p.firstFrameUrl = firstFrame;
       if (firstFrame && tailFrame) p.lastFrameUrl = tailFrame;
+      if (refs.length) p.referenceUrls = refs; // 锁定参考图：与旧流程 videoService 的 reference_urls 一致，适配器按模型取用
       if (resolution) p.resolution = resolution;
     }
     if (model) p.model = model;
@@ -136,6 +141,8 @@ function createGenerationService({
       const legacyId = shotNode.legacy_id ?? null;
       const row = legacyId != null ? sbRow.get(legacyId) : null;
       const base = { shot_id: shotId, storyboard_id: legacyId };
+      let refsCache = null;
+      const shotRefs = () => refsCache || (refsCache = inputs.shotInputs(db, g, shotId).refs); // 锁定参考图（图与视频共用）
 
       const nodeState = (kind) => kernel.nodeState(g, parts[kind], keys);
       // 缓存命中：同 key 的旧版本；或没有记录模型的旧版本（当时用的模型未知）且提示词/上游/参考图/尾帧与现在一致（改记到当前 key 后采用）
@@ -160,7 +167,7 @@ function createGenerationService({
           else if (cacheVersion(node)) imageItem = { ...it, action: 'cache_hit', version_id: cacheVersion(node).id, ref: cacheVersion(node).asset.ref };
           else if (!(shot.image_prompt || shot.description)) imageItem = { ...it, action: 'blocked', reason: 'no_prompt' };
           else {
-            const refs = inputs.shotInputs(db, g, shotId).refs;
+            const refs = shotRefs();
             const { provider, ready } = providerFor.image;
             const saved = g.nodes[node].params.model; // 已同步进图的所选模型；'default' = 交给适配器挑
             const model = saved && saved !== 'default' ? saved : pickModel({ provider, kind: 'image', hasRefs: refs.length > 0, listConfigs: list, catalogModels: catalog });
@@ -214,11 +221,12 @@ function createGenerationService({
         if (chained) imageItem.then_video = true;
         const seconds = Math.min(VIDEO_MAX_SEC, Math.max(VIDEO_MIN_SEC, Math.round((shot.duration_ms || kernel.DEFAULT_SHOT_MS) / 1000)));
         const { provider, ready } = providerFor.video;
-        const params = buildParams('video', { shot, firstFrame, tailFrame, model, projectId: dramaId, seconds });
+        const refs = shotRefs();
+        const params = buildParams('video', { shot, refs, firstFrame, tailFrame, model, projectId: dramaId, seconds });
         items.push({
           ...it, action: chained ? 'chain' : 'create', provider, provider_ready: ready, model: model || null,
-          mode: hasFrame ? 'first_frame' : 'text', first_frame: firstFrame, tail_frame: tailFrame, warnings,
-          inputs: { model: model || null, reference_hashes: [], tail_frame_hash: tailFrame ? inputs.hashRef(tailFrame) : null },
+          mode: hasFrame ? 'first_frame' : 'text', first_frame: firstFrame, tail_frame: tailFrame, warnings, refs,
+          inputs: { model: model || null, reference_hashes: refs.map(inputs.hashRef), tail_frame_hash: tailFrame ? inputs.hashRef(tailFrame) : null },
           spec: { provider, kind: 'video', params },
         });
       }
@@ -262,7 +270,7 @@ function createGenerationService({
     const p = item.spec.params;
     const extra = kernel.sha256(kernel.canonicalJSON({
       provider: item.spec.provider, model: p.model || null, first: p.firstFrameUrl || null, last: p.lastFrameUrl || null,
-      refs: p.referenceImages || null, duration: p.duration || null, resolution: p.resolution || null,
+      refs: p.referenceImages || null, ref_urls: p.referenceUrls || null, duration: p.duration || null, resolution: p.resolution || null,
     }));
     return `${GEN_PREFIX}${ep}:${item.node}:${item.cache_key.slice(0, 32)}:${extra.slice(0, 12)}`;
   }
@@ -499,6 +507,14 @@ function createGenerationService({
       throw e;
     }
     if (adoptedNow && gen.then_video) chainVideo(ep, gen, (parseJson(task.params) || {})._batch || null);
+    if (onAdopted) {
+      // 新版本已在图里：交给钩子（一致性评分等），失败只记日志，不影响写回结果
+      const hook = Promise.resolve()
+        .then(() => onAdopted({ task, episode_id: ep, shot_id: gen.shot_id, storyboard_id: gen.storyboard_id ?? null, node: gen.node, kind: gen.kind, version_id: vid, adopted: adoptedNow }))
+        .catch((e) => warn('generation adopted hook', { error: e && e.message, task: task.id }));
+      pending.add(hook);
+      hook.finally(() => pending.delete(hook));
+    }
     return { adopted: adoptedNow, reason: adoptedNow ? 'adopted' : 'superseded' };
   }
 

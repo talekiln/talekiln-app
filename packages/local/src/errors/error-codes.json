@@ -375,6 +375,21 @@
       "message": "写入导出文件失败",
       "action": "检查目标磁盘空间和写入权限，或换一个文件夹"
     },
+    "CONSISTENCY_UNAVAILABLE": {
+      "scope": "local",
+      "message": "一致性评分不可用：渲染核心未启动或连不上",
+      "action": "重启应用后重试；社区版没有渲染核心，无法评分"
+    },
+    "CONSISTENCY_FAILED": {
+      "scope": "local",
+      "message": "一致性评分失败",
+      "action": "确认参考图与生成结果文件都在本机存储目录里，然后在工作台点「重评」"
+    },
+    "NO_REFERENCE_CANDIDATES": {
+      "scope": "local",
+      "message": "该角色没有可用的本机候选图",
+      "action": "先为角色生成或上传图片，再自动挑选参考图"
+    },
     "device_limit": {
       "scope": "cloud",
       "message": "设备数已达套餐上限",

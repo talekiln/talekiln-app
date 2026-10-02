@@ -136,6 +136,32 @@ describe('生成编排：估算与建任务', () => {
     assert.equal(p.prompt, '改过的提示词');
   });
 
+  it('视频：锁定的参考图也进视频请求（referenceUrls），哈希记进视频节点参数与版本输入（P3-C）', async () => {
+    const h = await harness();
+    const [s1] = h.shots();
+    const cid = h.db.prepare('SELECT id FROM characters LIMIT 1').get().id;
+    referenceLocks.setLock(h.db, 'character', cid, { local_path: 'media/char-ref.png' });
+    h.edit(s1, { characters: [cid] }, 'e1');
+    const r = h.gen.create(h.ep, { shots: [s1], kind: 'video' });
+    assert.equal(r.tasks.length, 1);
+    const p = JSON.parse(h.db.prepare("SELECT params FROM ai_tasks WHERE kind = 'video'").get().params);
+    const hash = kernelInputs.hashRef('/static/media/char-ref.png');
+    assert.deepEqual(p.referenceUrls, ['/static/media/char-ref.png'], '与旧流程 videoService 的 reference_urls 一致');
+    assert.equal(p.model, 'wan2.2-kf2v-flash', '有首帧仍走首帧模型，参考图由适配器按模型取用');
+    assert.deepEqual(p._gen.inputs.reference_hashes, [hash]);
+    const vnode = kernel.partsOfShot(h.graph(), s1).video;
+    assert.deepEqual(h.graph().nodes[vnode].params.reference_hashes, [hash], '经 setShotReferences 记进视频节点参数');
+    await h.drain();
+    const v = kernel.adoptedVersion(h.graph(), vnode);
+    assert.deepEqual(v.metadata.inputs.reference_hashes, [hash]);
+    assert.equal(h.gen.status(h.ep).shots[0].video.state, 'fresh');
+    // 解除锁定 -> 视频节点参数删除 -> 过期
+    referenceLocks.clearLock(h.db, 'character', cid);
+    kernelInputs.syncReferences(h.db);
+    assert.ok(!('reference_hashes' in h.graph().nodes[vnode].params));
+    assert.equal(h.gen.status(h.ep).shots[0].video.state, 'stale');
+  });
+
   it('再点一次不花钱：排队中复用同一任务；跑完后全部新鲜，不再建任务', async () => {
     const h = await harness();
     h.gen.create(h.ep, { shots: 'all', kind: 'video' });

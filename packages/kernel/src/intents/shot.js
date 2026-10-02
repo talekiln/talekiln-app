@@ -179,11 +179,12 @@ function setVoice(g, shotId, { voice, speed }, opts) {
 
 /**
  * 记录镜头的生成输入（让它们进入 image/video 的 cacheKey）：
- *   image_model / video_model（所选模型，空 = 'default'）、reference_hashes（锁定参考图的哈希，有序；空数组 = 清除）、
- *   tail_frame_hash（尾帧哈希；空 = 清除）。没给的字段不动；写入的是节点参数，所以改了就让该镜头的 image/video/合成过期，
+ *   image_model / video_model（所选模型，空 = 'default'）、reference_hashes（出图用的锁定参考图哈希，有序；空数组 = 清除）、
+ *   video_reference_hashes（出视频用的锁定参考图哈希，同上）、tail_frame_hash（尾帧哈希；空 = 清除）。
+ *   没给的字段不动；写入的是节点参数，所以改了就让该镜头的 image/video/合成过期，
  *   改回去则 cacheKey 回到原值（旧版本可零成本重新采用）。由生成服务与参考图锁定流程调用。
  */
-function setShotReferences(g, shotId, { image_model, video_model, reference_hashes, tail_frame_hash } = {}, opts) {
+function setShotReferences(g, shotId, { image_model, video_model, reference_hashes, video_reference_hashes, tail_frame_hash } = {}, opts) {
   U.need(g, shotId, 'shot');
   const parts = G.partsOfShot(g, shotId);
   const node = (kind, given) => {
@@ -197,6 +198,7 @@ function setShotReferences(g, shotId, { image_model, video_model, reference_hash
   set('image', 'model', image_model === undefined ? undefined : image_model || 'default');
   set('video', 'model', video_model === undefined ? undefined : video_model || 'default');
   set('image', 'reference_hashes', empty(reference_hashes));
+  set('video', 'reference_hashes', empty(video_reference_hashes));
   set('video', 'tail_frame_hash', empty(tail_frame_hash));
   return U.mkTx('setShotReferences', ops, opts);
 }

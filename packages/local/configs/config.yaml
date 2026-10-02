@@ -71,6 +71,13 @@ generation:
 director:
   model: qwen-plus
   max_attempts: 2
+
+# 角色一致性（P3-C）：生成完成后用渲染核心（lycore）给首帧图 / 视频与锁定参考图评分（感知哈希 + 直方图 + 主色调，不依赖模型）。
+# min_score：低于它给“检查”建议，再低 20 分给“重试”建议并附重做估价；sample_frames：视频均匀抽帧数。没有内核时静默不评分。
+consistency:
+  enabled: true
+  min_score: 60
+  sample_frames: 5
 # 云端（账号/许可证/目录/推广跳转）。base_url 留占位表示未配置；也可用环境变量 TALEKILN_CLOUD_URL 覆盖
 cloud:
   base_url: https://cloud.talekiln.example

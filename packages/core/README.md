@@ -20,6 +20,8 @@ Rust crate `lycore`：以本地 JSON-RPC 2.0 服务形式运行的核心进程�
 | `render.start` | 已实现 | 异步渲染任务，返回 `jobId`；进度通过 `render.status` 轮询或 `render.progress` 通知 |
 | `render.status` | 已实现 | 查询任务状态/百分比/结果/错误 |
 | `render.cancel` | 已实现 | 取消任务并终止 ffmpeg 子进程 |
+| `consistency.score` | 已实现 | 参考图与生成结果（图或视频）的跨镜一致性评分（感知哈希 + 直方图 + 主色调，不依赖模型） |
+| `consistency.pick_reference` | 已实现 | 候选参考图按清晰度、分辨率、与锚图相似度排序 |
 
 ### licence.status
 
@@ -145,6 +147,44 @@ Rust crate `lycore`：以本地 JSON-RPC 2.0 服务形式运行的核心进程�
 
 音乐轨**不参与任何场景 key**：场景缓存只含画面 + 字幕 + 视频原声 + 旁白；音乐在最终合成阶段整体混音，计划通过 `music` 返回（起止、素材、源内偏移、已乘轨道音量的 `gain`）。因此修改音乐只需重做最终混音，不会使任何场景缓存失效。编码器与分辨率/帧率属于输出设置，改动会使所有场景 key 变化。
 
+### consistency.score
+
+参数：`{"reference": "<参考图>", "target": "<图片或视频>", "sample_frames": 5（可选，1–30）, "min_score": 60（可选，0–100）, "timeoutSec": 30（可选）, "ffmpegDir": "（可选）"}`
+
+每一帧都由 ffmpeg 解成小尺寸原始 RGB（`crop` 取中央正方形，`scale=64:64:flags=area`），之后全是纯函数：
+
+| 部分 | 算法 | 权重 |
+| --- | --- | --- |
+| `phash` | 32x32 亮度图做二维 DCT，取左上 8x8 按中位数二值化得 64 位；相似度 = `1 - 汉明距离 / 24`（截到 0–1；不相关的图汉明距离约 32） | 0.5 |
+| `histogram` | RGB 各通道 8 格 + HSV（色相 16 格、饱和度 4 格、明度 4 格）归一化直方图交集，RGB 与 HSV 各占一半 | 0.3 |
+| `palette` | 每通道 4 级量化取出现最多的 5 种主色，加权最近色距离（对称），距离达 0.25（归一化）记 0 | 0.2 |
+
+`score = 100 × (0.5·phash + 0.3·histogram + 0.2·palette)`。目标先经 `ffprobe` 判定：图片格式（`image2`、`*_pipe`、png/mjpeg/webp/bmp 等编码，或时长 < 0.2s）取 1 帧；视频按 `sample_frames` 在 `(i+0.5)/n × 时长` 处均匀抽帧，总分为各帧均值。`suggestion`：`score ≥ min_score` 为 `ok`，低于 `min_score - 20` 为 `retry`，其间为 `check`。
+
+`result`：
+
+```json
+{"reference":"ref.png","target":"clip.mp4","kind":"video","score":83.4,
+ "parts":{"phash":91.7,"histogram":80.2,"palette":67.5},
+ "frames":[{"t_ms":500,"score":84.1,"parts":{"phash":95.8,"histogram":80.0,"palette":67.5}}],
+ "suggestion":"ok","min_score":60,"weights":{"phash":0.5,"histogram":0.3,"palette":0.2}}
+```
+
+只衡量色彩与构图，认不出“是不是同一张脸”。缺少 `reference`/`target` 返回 -32602；ffmpeg 缺失 -32020；文件不存在或无法解码 -32021；输出尺寸不符 -32023。
+
+### consistency.pick_reference
+
+参数：`{"candidates": ["<图片>", ...], "anchor": "<锚图，可选，如四视图>", "timeoutSec": 30（可选）, "ffmpegDir": "（可选）"}`
+
+每张候选：`ffprobe` 取宽高；ffmpeg 解成 256x256 亮度图算拉普拉斯方差（清晰度），再降采样到 64x64 与锚图算上面的一致性分。排名分：
+
+- 有锚图：`100 × (0.4·清晰度 + 0.2·分辨率 + 0.4·相似度/100)`
+- 无锚图：`100 × (0.65·清晰度 + 0.35·分辨率)`
+
+清晰度取相对值（除以候选中的最大值），分辨率 = `min(1, √(宽×高) / 1024)`。与锚图同路径的候选不参与排名，重复路径只算一次；单张无法读取的候选进入 `skipped`（不影响其它），ffmpeg 缺失整体返回 -32020。
+
+`result`：`{"anchor":"four-view.png","ranked":[{"path","score","sharpness","width","height","similarity"}],"skipped":[{"path","error"}]}`（`ranked` 按 `score` 降序；无锚图时 `similarity` 为 `null`）。
+
 ## 渲染（render.start / render.status / render.cancel）
 
 ### render.start
@@ -176,14 +216,16 @@ Rust crate `lycore`：以本地 JSON-RPC 2.0 服务形式运行的核心进程�
 cd packages/core
 cargo build --release
 cargo test
-node client/test.js   # 集成测试：启动二进制，用临时目录中的假 ffmpeg/ffprobe（LYCORE_FFMPEG_DIR）测试 core.hello / media.probe / encoder.detect / render.*
+node client/test.js   # 集成测试：启动二进制，用临时目录中的假 ffmpeg/ffprobe（LYCORE_FFMPEG_DIR）测试 core.hello / media.probe / encoder.detect / render.* / consistency.*
 ```
 
 Node 客户端助手位于 `client/index.js`（CommonJS，无依赖）：`connectRetry(endpoint)` 返回带 `call` / `hello` / `close` 的对象。
 
 渲染测试（`src/render/tests.rs`）：参数构造为纯函数单元测试；若 PATH 上有真实 `ffmpeg`/`ffprobe`（需含 libass），则用 lavfi 生成素材做端到端渲染、缓存命中、编码器回退测试，否则自动跳过；另有记录参数的假 ffmpeg 脚本（仅 unix）测试重试/回退顺序、原子重命名与取消。
 
-客户端：`renderStart(params)` / `renderStatus(id)` / `renderCancel(id)` / `renderWait(id, onProgress)` / `onNotification(fn)`。
+客户端：`renderStart(params)` / `renderStatus(id)` / `renderCancel(id)` / `renderWait(id, onProgress)` / `onNotification(fn)` / `consistencyScore(params)` / `pickReference(params)`。
+
+一致性测试（`src/consistency.rs`）：纯函数部分用合成帧（同图、换色、噪声、逐步混入噪声）验证分数单调；PATH 上有真实 ffmpeg 时另跑一次端到端（lavfi 生成图片与短视频），否则跳过。
 
 ## 进程守护（桌面主进程）
 
