@@ -64,3 +64,18 @@
 | P3-P2 插件签名服务器保管 | `p3b-signing` | 云端独立签名密钥（环境变量）、JWKS 多 kid 与退役公钥、后台插件审核页（登记 / 审核 / 签名 / 下载已签名清单）、服务器密钥生成与轮换手册 |
 | P3-K 云备份（MinIO） | `p3b-backup` | 本机服务 S3 兼容客户端（SigV4，无新依赖）、项目备份 / 快照列表 / 恢复 / 保留策略 / 自动备份、云备份设置页、服务器 MinIO 部署手册、CI 用真实 MinIO 跑一次 |
 | P3-T2 官方模板文案 | `p3b-templates` | 8 套新模板（都市甜宠、逆袭打脸、悬疑反转、穿越重生、校园、家庭伦理、职场、治愈），其中两套付费示例；文案规范 |
+
+### 第二批进度（2026-10-02 中午）
+
+四个工作包已全部合入 `claude/phase3-foundation-mxao0h`（头 `3cfda1e`，草稿 PR #6）。合入后全量测试通过：local 652（650 通过、2 个需真实 S3 / 人脸模型的测试按环境跳过）、kernel 200、renderer 275 并 `vite build`、desktop 77、admin 46 并 `vite build`、cloud 103、plugin-sdk 64、scripts 19、core（cargo）68；密钥扫描 991 个文件通过；许可证检查通过。人脸模型下载脚本在云端沙箱实测可用（两个模型落到 `apps/desktop/resources/models/face`）。合并时的冲突只在 `routes/index.js` 挂载块、`app.js` 服务装配、`docs/tencent-deploy.md` 的章节编号（MinIO 改为第 8 节）。
+
+**CI 仍未跑**：GitHub Actions 的私有仓库免费分钟数已用尽，每个作业 3 秒失败且无日志，需要 Jay 在组织账单里加卡并设支出上限后重跑（`backup-minio` 作业与 Windows 上的人脸模型下载步骤都还没有真正跑过一次）。
+
+| 包 | 状态 | 未验证 |
+|---|---|---|
+| P3-F 人脸级一致性 | `packages/local/src/consistency/face.js`：YuNet 检测 + SFace 特征（onnxruntime-node，CPU，不联网），阈值余弦 0.363，总分 = 0.6·人脸 + 0.4·原算法；`scripts/fetch-face-models.mjs` 按 `face-models-pin.json` 固定哈希下载，模型随安装包、不进 git；报告与芯片显示人脸分，缺模型时 `face_available=false` 回退原算法，见 `docs/phase3-face.md`、`docs/face-models.md` | 只在 Linux 沙箱用 3 张公共领域人像测过；Windows / macOS、打包后的二进制加载、动漫与国风脸型都没跑过；阈值要按真实出图再调 |
+| P3-P2 插件签名服务器保管 | 云端独立签名密钥 `PLUGIN_SIGNING_PRIVATE_KEY_PEM` / `PLUGIN_SIGNING_KEY_ID`（默认 kid `plg-1`），JWKS 带退役公钥，`GET /admin/plugins/signing-key`，后台「插件审核」页（登记 / 审核 / 签名 / 下载已签名清单），见 `docs/phase3-plugins.md` §5、`docs/tencent-deploy.md` §7 | 密钥还没在真实服务器上生成；后台页只过了测试与构建，没有点过；离线备份由谁保管、轮换周期、审核员人选未定 |
+| P3-K 云备份（MinIO） | 手写 SigV4 S3 客户端（path-style，仅回环 / 内网允许 http）、备份 / 快照列表 / 恢复 / 保留策略 / 自动备份（迁移 34），设置存 `global_settings.backup`，密钥走 secret store；渲染端「云备份」设置页；`packages/cloud/docker-compose.minio.yml`；CI 新增 `backup-minio` 作业，见 `docs/phase3-backup.md`、`docs/tencent-deploy.md` §8 | 从未对真实 MinIO 跑过（沙箱拉不到 Docker Hub，只用了模拟 S3 服务校验 SigV4）；设置页没打开过；备份 ZIP 在内存里拼装，大项目要看内存；`after_export` 触发依赖界面轮询 |
+| P3-T2 官方模板文案 | 8 套新模板包（都市甜宠、逆袭打脸、悬疑反转、穿越重生、校园、家庭伦理、职场、治愈），付费示例为 `official-revenge-god-of-war`、`official-suspense-seventh-visitor`；`GENRE_LABEL` 扩充；文案规范写进 `docs/phase3-templates.md`（共 11 套） | 文案没有用真 Key 出过图，提示词效果未验；运营口径需 Jay 过目 |
+
+下一步：Jay 恢复 Actions 配额后重跑 CI；Windows 真机过一遍人脸评分、云备份设置页、插件审核页；服务器重装后按部署手册生成签名密钥并起 MinIO。
