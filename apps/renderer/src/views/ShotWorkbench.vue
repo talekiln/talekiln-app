@@ -241,7 +241,7 @@ const genFailureText = computed(() => failureText(genStatus.value))
 const consistency = ref(null)
 const consShot = computed(() => consistencyShotMap(consistency.value).get(Number(shotId)) || null)
 const consBadge = computed(() => consistencyBadge(consShot.value))
-const consHint = computed(() => consistencyHint(consShot.value, consistency.value?.min_score))
+const consHint = computed(() => consistencyHint(consShot.value, consistency.value?.min_score, consistency.value))
 let consTimer = null
 async function loadConsistency() {
   if (!episodeId.value) return

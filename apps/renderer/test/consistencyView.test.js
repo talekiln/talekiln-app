@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   autoPickSummary, badgeForShot, busyCount, consistencyBadge, consistencyHint, consistencyShotMap, rankedToCandidates,
-  regenerateCostText, shouldRefreshConsistency, unavailableText,
+  regenerateCostText, shouldRefreshConsistency, unavailableText, faceText,
 } from '../src/utils/consistencyView.js'
 
 const shot = (over = {}) => ({
@@ -81,4 +81,30 @@ test('autoPickSummary / rankedToCandidates', () => {
     { id: null, status: 'completed', image_url: null, local_path: 'characters/main.png', score: 70, source: 'main', sourceLabel: '主图' },
   ])
   assert.deepEqual(rankedToCandidates(null), [])
+})
+
+test('faceText / consistencyHint 带人脸部分：人脸 NN、未检测到人脸、参考图未检测到人脸、人脸模型未安装', () => {
+  const row = (face) => ({ entity_type: 'character', entity_id: 3, parts: { phash: 50, face } })
+  assert.equal(faceText(row({ ref_faces: 1, target_faces: 1, matched_frames: 1, similarity: 0.751, score: 84.4 })), '人脸 84')
+  assert.equal(faceText(row({ ref_faces: 1, target_faces: 0, matched_frames: 0, similarity: null, score: 0 })), '未检测到人脸')
+  assert.equal(faceText(row({ ref_faces: 1, target_faces: 2, matched_frames: 0, similarity: null, score: 0 })), '未检测到人脸')
+  assert.equal(faceText(row({ ref_faces: 0, target_faces: 0, matched_frames: 0, similarity: null, score: null })), '参考图未检测到人脸')
+  assert.equal(faceText(row(undefined), { face_available: false, face_reason: 'models_missing' }), '人脸模型未安装')
+  assert.equal(faceText(row(undefined), { face_available: false, face_reason: 'disabled' }), '')
+  assert.equal(faceText(row(undefined), { face_available: true }), '')
+  assert.equal(faceText(row({ error: 'boom' }), { face_available: true }), '')
+  assert.equal(faceText({ entity_type: 'scene', entity_id: 1, parts: {} }, { face_available: false }), '')
+  assert.equal(faceText(null), '')
+  const rows = (face) => [{ entity_type: 'character', entity_id: 3, parts: { face } }]
+  const ok = shot({ suggestion: 'ok', worst: 70, image: { scored: true, best: 70, worst: 70, suggestion: 'ok', scores: rows({ ref_faces: 1, matched_frames: 1, similarity: 0.751, score: 84.4 }) }, regenerate: null })
+  assert.equal(consistencyHint(ok, 60, { face_available: true }), '首帧图与「李雷」的锁定参考图一致（最低 70 分，人脸 84）')
+  const none = shot({ suggestion: 'check', worst: 40, image: { scored: true, best: 40, worst: 40, suggestion: 'check', scores: rows({ ref_faces: 1, matched_frames: 0, similarity: null, score: 0 }) }, regenerate: null })
+  assert.equal(consistencyHint(none, 60), '首帧图与「李雷」的锁定参考图有差异（最低 40 分，未检测到人脸，阈值 60）：请检查画面')
+  const noModel = shot({ image: { scored: true, best: 90, worst: 35.4, suggestion: 'retry', scores: [{ entity_type: 'character', entity_id: 3, parts: { phash: 35 } }] } })
+  assert.equal(consistencyHint(noModel, 60, { face_available: false, face_reason: 'models_missing' }), '首帧图与「李雷」的锁定参考图相差较大（最低 35 分，人脸模型未安装，阈值 60）：重做首帧图 + 视频预计 ¥0.50（最高 ¥0.60）')
+  // 最差的是视频时从视频那一行取
+  const vid = shot({ suggestion: 'check', worst: 52, image: { scored: true, worst: 80, scores: rows({ ref_faces: 1, matched_frames: 1, similarity: 0.9, score: 95 }) }, video: { scored: true, worst: 52, scores: rows({ ref_faces: 1, matched_frames: 2, similarity: 0.4, score: 62.3 }) }, regenerate: null })
+  assert.equal(consistencyHint(vid, 60), '视频与「李雷」的锁定参考图有差异（最低 52 分，人脸 62，阈值 60）：请检查画面')
+  // 没传报告、行里没有人脸部分：文案与以前完全一样
+  assert.equal(consistencyHint(shot(), 60), '首帧图与「李雷」的锁定参考图相差较大（最低 35 分，阈值 60）：重做首帧图 + 视频预计 ¥0.50（最高 ¥0.60）')
 })
