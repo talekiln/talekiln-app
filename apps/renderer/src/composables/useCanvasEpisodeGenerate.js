@@ -5,6 +5,7 @@ import { storyboardsAPI } from '@/api/storyboards'
 import { taskAPI } from '@/api/task'
 import { parseDramaMetadata } from '@/utils/canvasLayout'
 import { getDramaGenerationOptions } from '@/utils/canvasWorkflow'
+import { approveBatch } from '@/api/queuedGeneration'
 import { runImageStep, runVideoStep } from '@/composables/useCanvasWorkflowRunner'
 import { hasStoryboardImage, hasStoryboardVideo } from '@/utils/storyboardMedia'
 import { CANVAS_NODE_STATUS_LABELS } from '@/composables/useCanvasNodeStatus'
@@ -165,12 +166,9 @@ export function useCanvasEpisodeGenerate(deps) {
       return
     }
     try {
-      await ElMessageBox.confirm(
-        `将为 ${todo.length} 个分镜依次生图，耗时可能较长，是否继续？`,
-        '批量生成分镜图',
-        { type: 'info', confirmButtonText: '开始' }
-      )
-    } catch {
+      await approveBatch(todo[0].episode_id, todo.map((sb) => sb.id), 'image')
+    } catch (e) {
+      if (e && e.message && e.message !== '已取消') ElMessage.error(e.message)
       return
     }
 
@@ -214,12 +212,9 @@ export function useCanvasEpisodeGenerate(deps) {
       return
     }
     try {
-      await ElMessageBox.confirm(
-        `将为 ${todo.length} 个分镜依次生视频，是否继续？`,
-        '批量生成分镜视频',
-        { type: 'info', confirmButtonText: '开始' }
-      )
-    } catch {
+      await approveBatch(todo[0].episode_id, todo.map((sb) => sb.id), 'video')
+    } catch (e) {
+      if (e && e.message && e.message !== '已取消') ElMessage.error(e.message)
       return
     }
 

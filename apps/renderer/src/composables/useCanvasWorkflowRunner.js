@@ -1,6 +1,5 @@
 import { taskAPI } from '@/api/task'
-import { imagesAPI } from '@/api/images'
-import { videosAPI } from '@/api/videos'
+import { queueShot } from '@/api/queuedGeneration'
 import request from '@/utils/request'
 import { storyboardImageUrl } from '@/utils/mediaUrl'
 import {
@@ -33,13 +32,7 @@ async function pollTaskSimple(taskId, options = {}) {
 export async function runImageStep(drama, sb, genOpts) {
   const prompt = sb.polished_prompt || sb.image_prompt || sb.description || sb.action || ''
   if (!prompt.trim()) throw new Error(`分镜 #${sb.storyboard_number ?? sb.id} 缺少图片提示词`)
-  const res = await imagesAPI.create({
-    storyboard_id: sb.id,
-    drama_id: drama.id,
-    prompt,
-    style: genOpts.style || undefined,
-    aspect_ratio: genOpts.aspectRatio,
-  })
+  const res = await queueShot(sb.episode_id ?? genOpts?.episodeId, sb.id, 'image')
   if (res?.task_id) {
     const polled = await pollTaskSimple(res.task_id)
     if (polled.status !== 'completed') throw new Error(polled.error || '分镜图生成失败')
@@ -57,18 +50,7 @@ export async function runVideoStep(drama, sb, genOpts) {
   const absoluteFirst = toAbsoluteMediaUrl(imgPath)
   const absoluteLast = last ? toAbsoluteMediaUrl(last) : undefined
   const prompt = sb.video_prompt || sb.polished_prompt || sb.image_prompt || sb.description || ''
-  const res = await videosAPI.create({
-    drama_id: drama.id,
-    storyboard_id: sb.id,
-    prompt,
-    image_url: absoluteFirst || undefined,
-    first_frame_url: absoluteFirst || undefined,
-    last_frame_url: absoluteLast,
-    style: genOpts.style || undefined,
-    aspect_ratio: genOpts.aspectRatio,
-    resolution: genOpts.videoResolution || undefined,
-    duration: sb.duration || undefined,
-  })
+  const res = await queueShot(sb.episode_id ?? genOpts?.episodeId, sb.id, 'video')
   if (res?.task_id) {
     const polled = await pollTaskSimple(res.task_id)
     if (polled.status !== 'completed') throw new Error(polled.error || '视频生成失败')
