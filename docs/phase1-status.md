@@ -16,7 +16,7 @@
 | C04 Key 存系统密钥 | 已做（Windows 打包版验证） | safeStorage 密文落盘，接口只回末 4 位，日志脱敏，旧明文自动迁移；任务 4 在打包版实测：`secrets.enc.json` 只有密文、重启后 Key 仍可用（解密后真的发到了服务商）、日志无明文 |
 | E01 任务队列持久化 | 已做 | ai_tasks 状态机、幂等键、崩溃三点测试；未接入现有路由 |
 | F02 时间线数据模型 | 已做 | 四轨、校验、从分镜装配、REST 路由；前端编辑器（F03）未做 |
-| G01 媒体探测与编码器检测 | 已做（Windows 真机验证） | lycore media.probe / encoder.detect；任务 4 在本机检测到 h264_qsv / h264_mf 可用、nvenc / amf / libx264 不可用，推荐 qsv 并以之导出成功；第二轮把固定版 LGPL ffmpeg 自带的 libopenh264 加进候选表（软件编码，排 libx264 之后），没有硬件编码器时回退到它而不是只剩 h264_mf |
+| G01 媒体探测与编码器检测 | 已做（Windows 真机验证） | lycore media.probe / encoder.detect；任务 4 在本机检测到 h264_qsv / h264_mf 可用、nvenc / amf / libx264 不可用，推荐 qsv 并以之导出成功；第二轮把固定版 LGPL ffmpeg 自带的 libopenh264 加进候选表（软件编码，排 libx264 之后），没有硬件编码器时回退到它而不是只剩 h264_mf；合并后本地验证发现 `encoder.detect` 走的是客户端统一的 5 秒 RPC 超时，而它要顺序试编码 7 个候选（每个 lycore 自带 15 秒探测超时），机器忙时就报 `timeout: encoder.detect`，已给该调用单独放宽到 120 秒（客户端 `call(method, params, { timeoutMs })`） |
 | F03 时间线编辑器首版 | 部分 | 四轨、拖拽、吸附、切分、预览；缺波形、缩略图、旁白/音乐播放 |
 | D02 分镜模板 / F01 配音字幕 / C05 连通测试 | 已做（联网会话） | PR #2、#3 已合入 |
 | D01 新建项目 / D03 分镜表 | 已做（Windows 打包版人眼打开过分镜页） | 同步生成，无进度流；2026-10-02 人眼测出分镜页删镜 / 排序 / 编辑的自动保存在浏览器里抛「Illegal invocation」（`createAutosaver` 默认 timers 把 `window.setTimeout` 塞进普通对象再调用），已修并加了模拟浏览器 this 检查的回归测试 |
@@ -48,7 +48,7 @@
 | E05 花费页 | 已做（模拟接口数据截图，未连真实服务） | `/spend`：按日/服务商/模型汇总、月度上限、逐任务费用、导出 CSV；任务 3 后显示预估与实际（含回传用量：计费时长/字符/张数）、注明价目版本与日期 |
 | F05 背景音乐 | 已做（未跑 Electron） | 音乐库（用户导入 + 程序合成的示例配乐）、添加到音乐轨（可循环铺满）、音量/压低/响度写入时间线 JSON；render.plan 与 render.start 原本就支持音乐轨与压低 |
 | G04 AI 生成内容标识 | 部分 | 画面水印“AI生成”+ MP4 元数据 AIGC，默认开；字段、位置、大小、时长必须由法务确认，见 docs/aigc-marking.md |
-| G06 导出页 | 已做（Linux 真 lycore + ffmpeg 测过，页面用模拟接口截图） | `/episodes/:id/export`：分辨率/帧率/编码器/位置、进度轮询、取消、打开文件夹；本地服务经 `LYCORE_ENDPOINT` 连接 lycore，桌面主进程已启动 lycore 并设置该变量；Windows 打包版（unpacked 与 NSIS 安装包均已构建）经接口实测导出成功（h264+aac，含 AIGC 标识）；任务 4 在 Windows 打包版经接口实测 720p/1080p、中文 + 空格路径、取消、场景缓存（见 windows-test-results/2026-10-02.md），导出页能打开，点按钮走一遍仍待人眼 |
+| G06 导出页 | 已做（Linux 真 lycore + ffmpeg 测过，页面用模拟接口截图） | `/episodes/:id/export`：分辨率/帧率/编码器/位置、进度轮询、取消、打开文件夹；本地服务经 `LYCORE_ENDPOINT` 连接 lycore，桌面主进程已启动 lycore 并设置该变量；Windows 打包版（unpacked 与 NSIS 安装包均已构建）经接口实测导出成功（h264+aac，含 AIGC 标识）；任务 4 在 Windows 打包版经接口实测 720p/1080p、中文 + 空格路径、取消、场景缓存（见 windows-test-results/2026-10-02.md），导出页能打开，点按钮走一遍仍待人眼；合并后本地验证（2026-10-02）修了导出前编码器检测在机器忙时超时的问题（见 G01） |
 | 服务商开关 | 已做 | `providers.enabled` 统一控制注册表、队列、向导、AI 配置页、模型目录、获取 Key 链接和提示文案；默认 `['bailian']`；新增服务商步骤见 docs/provider-extension.md |
 | 百炼全流程覆盖审计 | 已做（文档） | docs/bailian-flow-coverage.md：逐步骤列真实验证 / 仅夹具 / 缺；顺手修了队列共享 Key、默认模型与请求形态、本地图内联三处接线 |
 | 百炼端到端脚本 | 已在 Windows 用真 Key 跑通 11/11 阶段（2026-10-01，估算 4.605 元） | scripts/bailian-e2e.mjs（3 镜、花费上限默认 5 元）；用本地模拟百炼（HTTP + WebSocket）和真 lycore 跑通过编排；手动工作流 bailian-live.yml 的 run_e2e 选项，真实运行待有 Key 的会话 |

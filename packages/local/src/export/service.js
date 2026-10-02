@@ -20,6 +20,9 @@ class ExportError extends Error {
 }
 
 const FINAL = new Set(['done', 'failed', 'cancelled']);
+// encoder.detect test-encodes up to 7 candidates one after another, each with lycore's own 15 s probe timeout,
+// so the RPC must be allowed far more than the client's 5 s default (seen as "timeout: encoder.detect" on a busy machine).
+const ENCODER_DETECT_TIMEOUT_MS = 120 * 1000;
 const ENCODER_RE = /^[a-z0-9_]{2,32}$/;
 const TRACKS = ['video', 'subtitle', 'narration', 'music'];
 
@@ -69,7 +72,7 @@ function createExportService(db, {
   async function detectEncoders({ refresh = false } = {}) {
     if (!refresh && encoderCache && now() - encoderCache.at < 5 * 60 * 1000) return encoderCache.value;
     const c = await core();
-    const r = await c.call('encoder.detect', {});
+    const r = await c.call('encoder.detect', {}, { timeoutMs: ENCODER_DETECT_TIMEOUT_MS });
     encoderCache = { at: now(), value: r };
     return r;
   }

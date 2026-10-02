@@ -156,6 +156,11 @@ before(async () => {
   r.post('/episodes/:id/redo', k.postRedo);
   app.use('/api/v1', r);
   await new Promise((ok) => { server = app.listen(0, '127.0.0.1', ok); });
+  // Client and server share this event loop, and the helpers below do long synchronous snapshot work between
+  // requests. Under a parallel full-package run the server's 5 s keep-alive timer can fire in the same turn
+  // in which undici reuses that idle socket, so the request lands on a socket the server is destroying
+  // (ECONNRESET). Keep-alive brings nothing here; disable it so every request gets a fresh socket.
+  server.keepAliveTimeout = 0;
   base = `http://127.0.0.1:${server.address().port}`;
 });
 after(() => server.close());
