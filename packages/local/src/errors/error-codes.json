@@ -554,6 +554,71 @@
       "scope": "local",
       "message": "快照校验失败，已拒绝恢复",
       "action": "下载的文件与清单里的 sha256 不一致，可能被改动或损坏；换一个快照恢复"
+    },
+    "invalid_code": {
+      "scope": "cloud",
+      "message": "验证码错误",
+      "action": "核对短信里的验证码后重新输入；错 5 次需重新获取"
+    },
+    "code_expired": {
+      "scope": "cloud",
+      "message": "验证码已过期或尚未发送",
+      "action": "点「获取验证码」重新发送"
+    },
+    "invite_required": {
+      "scope": "cloud",
+      "message": "首次登录需要邀请码",
+      "action": "填写邀请码后再登录；没有邀请码请向邀请人索取"
+    },
+    "qr_expired": {
+      "scope": "cloud",
+      "message": "二维码已过期或已使用",
+      "action": "点「刷新二维码」重新扫码"
+    },
+    "sms_unavailable": {
+      "scope": "cloud",
+      "message": "短信登录暂不可用",
+      "action": "改用邮箱密码登录，或稍后再试"
+    },
+    "wechat_unavailable": {
+      "scope": "cloud",
+      "message": "微信登录暂不可用",
+      "action": "改用邮箱密码登录，或稍后再试"
+    },
+    "INVALID_CODE": {
+      "scope": "local",
+      "message": "验证码错误",
+      "action": "核对短信里的验证码后重新输入；错 5 次需重新获取"
+    },
+    "CODE_EXPIRED": {
+      "scope": "local",
+      "message": "验证码已过期或尚未发送",
+      "action": "点「获取验证码」重新发送"
+    },
+    "INVITE_REQUIRED": {
+      "scope": "local",
+      "message": "首次登录需要邀请码",
+      "action": "填写邀请码后再登录；没有邀请码请向邀请人索取"
+    },
+    "QR_EXPIRED": {
+      "scope": "local",
+      "message": "二维码已过期或已使用",
+      "action": "点「刷新二维码」重新扫码"
+    },
+    "LOGIN_METHOD_UNAVAILABLE": {
+      "scope": "local",
+      "message": "该登录方式暂不可用",
+      "action": "改用邮箱密码登录，或稍后再试"
+    },
+    "CLOUD_RATE_LIMITED": {
+      "scope": "local",
+      "message": "操作过于频繁",
+      "action": "稍等一分钟再试"
+    },
+    "ACCOUNT_DISABLED": {
+      "scope": "local",
+      "message": "账号已停用",
+      "action": "联系管理员恢复账号"
     }
   }
 }
