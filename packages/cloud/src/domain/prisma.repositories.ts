@@ -1,11 +1,38 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import type {
   AdminAuditRecord, AdminRoleRecord, AnnouncementRecord, Entitlements, PlanVersion, ReleaseRecord, Repositories,
+  TemplateRecord, TemplateVersionRecord,
 } from './repositories';
 
 // Prisma 实现（需要真实 PostgreSQL 才能验证）。
 export function createPrismaRepositories(db: PrismaClient): Repositories {
   return {
+    templates: {
+      async create(t, now) { return toTemplate(await db.template.create({ data: { ...t, createdAt: now, updatedAt: now } })); },
+      async update(id, patch, now) {
+        const r = await db.template.updateMany({ where: { id }, data: { ...patch, updatedAt: now } });
+        return r.count === 1 ? toTemplate(await db.template.findUniqueOrThrow({ where: { id } })) : null;
+      },
+      async findById(id) { const r = await db.template.findUnique({ where: { id } }); return r ? toTemplate(r) : null; },
+      async list() { return (await db.template.findMany({ orderBy: { id: 'asc' } })).map(toTemplate); },
+      async delete(id) { return (await db.template.deleteMany({ where: { id } })).count === 1; },
+      async addVersion(v, now) {
+        return toTemplateVersion(await db.templateVersion.create({
+          data: { ...v, manifest: v.manifest as Prisma.InputJsonValue, createdAt: now, published: false, publishedAt: null },
+        }));
+      },
+      async findVersion(id) { const r = await db.templateVersion.findUnique({ where: { id } }); return r ? toTemplateVersion(r) : null; },
+      async listVersions(templateId) {
+        return (await db.templateVersion.findMany({ where: { templateId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] })).map(toTemplateVersion);
+      },
+      async setPublished(id, published, now) {
+        const r = await db.templateVersion.updateMany({ where: { id }, data: { published, publishedAt: published ? now : null } });
+        return r.count === 1 ? toTemplateVersion(await db.templateVersion.findUniqueOrThrow({ where: { id } })) : null;
+      },
+      async listPublished() {
+        return (await db.templateVersion.findMany({ where: { published: true }, orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }] })).map(toTemplateVersion);
+      },
+    },
     announcements: {
       async create(a, now) {
         return toAnnouncement(await db.announcement.create({ data: { ...a, createdAt: now, updatedAt: now } }));
@@ -420,4 +447,15 @@ function toAdminRole(r: { accountId: string; role: string; grantedBy: string | n
 
 function toAudit(r: { id: string; at: Date; actorId: string | null; actorEmail: string | null; actorRole: string | null; action: string; targetType: string | null; targetId: string | null; ok: boolean; status: number; detail: Prisma.JsonValue | null; ip: string | null }): AdminAuditRecord {
   return { ...r, actorRole: r.actorRole as AdminAuditRecord['actorRole'], detail: r.detail };
+}
+
+function toTemplate(r: { id: string; name: string; genre: string; tier: string; description: string; createdAt: Date; updatedAt: Date }): TemplateRecord {
+  return { ...r, tier: r.tier as TemplateRecord['tier'] };
+}
+
+function toTemplateVersion(r: {
+  id: string; templateId: string; version: string; manifest: Prisma.JsonValue; packageUrl: string | null; sha256: string; signature: string;
+  kid: string; tier: string; published: boolean; publishedAt: Date | null; createdAt: Date;
+}): TemplateVersionRecord {
+  return { ...r, manifest: r.manifest as unknown, tier: r.tier as TemplateVersionRecord['tier'] };
 }

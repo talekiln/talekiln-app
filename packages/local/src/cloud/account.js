@@ -144,6 +144,9 @@ function createAccountService({ db, http, log = {}, now = () => Date.now(), getS
       expires_at: new Date(exp).toISOString(),
       grace_until: new Date(exp + graceMs).toISOString(),
       days_left: Math.max(0, Math.ceil(((state === 'valid' ? exp : exp + graceMs) - seen) / DAY)),
+      // 订阅到期（unix 秒，null = 不限期）与套餐限制：付费模板等权益判断用（templates/entitlement.js）
+      sub_end: Number.isFinite(claims.subEnd) ? new Date(claims.subEnd * 1000).toISOString() : null,
+      limits: claims.limits && typeof claims.limits === 'object' ? { ...claims.limits } : null,
     };
   }
 

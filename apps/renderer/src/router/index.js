@@ -151,6 +151,13 @@ const router = createRouter({
       name: 'batch',
       component: () => import('@/views/BatchPage.vue'),
       meta: { title: '批量生成' }
+    },
+    // P3-T
+    {
+      path: '/templates',
+      name: 'templates',
+      component: () => import('@/views/TemplateMarket.vue'),
+      meta: { title: '模板市场' }
     }
   ]
 })

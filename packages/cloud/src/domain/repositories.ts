@@ -442,6 +442,62 @@ export interface AdminAuditRepository {
   list(f: AdminAuditFilter): Promise<AdminAuditRecord[]>;
 }
 
+// ---------------------------------------------------------------------------
+// 模板市场（P3-T）：模板 + 版本（清单 JSON、内容摘要、官方签名）。
+// ---------------------------------------------------------------------------
+export type TemplateTier = 'free' | 'pro';
+
+export interface TemplateRecord {
+  /** 即清单里的 id（slug）。 */
+  id: string;
+  name: string;
+  genre: string;
+  tier: TemplateTier;
+  description: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+export type TemplateInput = Omit<TemplateRecord, 'createdAt' | 'updatedAt'>;
+
+export interface TemplateVersionRecord {
+  id: string;
+  templateId: string;
+  version: string;
+  /** 已校验的清单（不含 signature）。 */
+  manifest: unknown;
+  packageUrl: string | null;
+  /** 清单摘要（canonicalJson 的 sha256，十六进制）。 */
+  sha256: string;
+  /** 对 'tpl-' + sha256 的 ES256 紧凑 JWS。 */
+  signature: string;
+  kid: string;
+  tier: TemplateTier;
+  published: boolean;
+  publishedAt: Date | null;
+  createdAt: Date;
+}
+export type TemplateVersionInput = Omit<TemplateVersionRecord, 'id' | 'published' | 'publishedAt' | 'createdAt'>;
+
+export interface TemplateRepository {
+  /** id 重复抛唯一键错误。 */
+  create(t: TemplateInput, now: Date): Promise<TemplateRecord>;
+  update(id: string, patch: Partial<Omit<TemplateInput, 'id'>>, now: Date): Promise<TemplateRecord | null>;
+  findById(id: string): Promise<TemplateRecord | null>;
+  /** 按 id 升序。 */
+  list(): Promise<TemplateRecord[]>;
+  /** 级联删除版本。 */
+  delete(id: string): Promise<boolean>;
+  /** (templateId, version) 重复抛唯一键错误；模板不存在抛错。 */
+  addVersion(v: TemplateVersionInput, now: Date): Promise<TemplateVersionRecord>;
+  findVersion(id: string): Promise<TemplateVersionRecord | null>;
+  /** 某模板的全部版本，新建的在前。 */
+  listVersions(templateId: string): Promise<TemplateVersionRecord[]>;
+  /** 发布 / 下架；发布时写 publishedAt。 */
+  setPublished(id: string, published: boolean, now: Date): Promise<TemplateVersionRecord | null>;
+  /** 全部已发布版本，publishedAt 新的在前。 */
+  listPublished(): Promise<TemplateVersionRecord[]>;
+}
+
 export const REPOS = Symbol('REPOS');
 export interface Repositories {
   accounts: AccountRepository;
@@ -463,4 +519,5 @@ export interface Repositories {
   releases: ReleaseRepository;
   adminRoles: AdminRoleRepository;
   adminAudit: AdminAuditRepository;
+  templates: TemplateRepository;
 }

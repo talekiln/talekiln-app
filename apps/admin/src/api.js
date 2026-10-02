@@ -110,6 +110,15 @@ export function createApi({ base = '/api', fetchImpl, getToken = () => null, onU
     updateAnnouncement: (id, patch) => json('PUT', `/admin/announcements/${enc(id)}`, patch),
     deleteAnnouncement: (id) => json('DELETE', `/admin/announcements/${enc(id)}`),
 
+    // 模板市场（P3-T）
+    listTemplates: () => json('GET', '/admin/templates'),
+    getTemplate: (id) => json('GET', `/admin/templates/${enc(id)}`),
+    createTemplate: (body) => json('POST', '/admin/templates', body),
+    updateTemplate: (id, patch) => json('PUT', `/admin/templates/${enc(id)}`, patch),
+    deleteTemplate: (id) => json('DELETE', `/admin/templates/${enc(id)}`),
+    addTemplateVersion: (id, body) => json('POST', `/admin/templates/${enc(id)}/versions`, body),
+    publishTemplateVersion: (id, vid, published = true) => json('POST', `/admin/templates/${enc(id)}/versions/${enc(vid)}/${published ? 'publish' : 'unpublish'}`, {}),
+
     // 管理员与审计
     listAdmins: () => json('GET', '/admin/admins'),
     grantAdmin: (body) => json('POST', '/admin/admins', body),
