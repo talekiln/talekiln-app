@@ -20,6 +20,9 @@ model Account {
   disabledAt    DateTime?
   plan          String         @default("test")
   createdAt     DateTime       @default(now())
+  // P2-C：手机号（短信登录）与微信 openid（扫码登录），都可空且唯一
+  phone         String?        @unique
+  wechatOpenId  String?        @unique
   devices       Device[]
   refreshTokens RefreshToken[]
   invitesUsed   InviteCode[]   @relation("InviteUsedBy")
@@ -428,4 +431,29 @@ model PluginReview {
   createdAt  DateTime      @default(now())
 
   @@index([versionId, createdAt])
+}
+
+// P2-C 登录：短信验证码（只存 HMAC，带过期与错误次数）与微信扫码票据（状态机 pending/scanned/confirmed/expired）。
+model SmsCode {
+  id         String    @id @default(uuid())
+  phone      String
+  scene      String    @default("login")
+  codeHash   String
+  attempts   Int       @default(0)
+  createdAt  DateTime
+  expiresAt  DateTime
+  consumedAt DateTime?
+
+  @@index([phone, scene, createdAt])
+}
+
+model WechatQrTicket {
+  ticket     String    @id
+  status     String    @default("pending")
+  openId     String?
+  createdAt  DateTime
+  expiresAt  DateTime
+  consumedAt DateTime?
+
+  @@index([expiresAt])
 }
