@@ -99,9 +99,14 @@ fn clips<'a>(t: Option<&'a Value>, kind: &str) -> Result<Vec<Clip<'a>>, String> 
             out.push(Clip { raw: c, start, dur });
         }
     }
-    // Stable order: start, then duration, then id (deterministic regardless of input order).
-    let id = |c: &Clip| c.raw.get("id").and_then(|x| x.as_str()).unwrap_or("").to_string();
-    out.sort_by(|a, b| (a.start, a.dur, id(a)).cmp(&(b.start, b.dur, id(b))));
+    // Stable order: start, then duration, then the clip's content (deterministic regardless of input order).
+    // Never the id: ids are generated per export (e.g. the AIGC watermark clips) and must not change scene keys.
+    let content = |c: &Clip| {
+        let mut m = c.raw.as_object().cloned().unwrap_or_default();
+        m.remove("id");
+        canonical_string(&Value::Object(m))
+    };
+    out.sort_by_cached_key(|c| (c.start, c.dur, content(c)));
     Ok(out)
 }
 
@@ -358,6 +363,26 @@ mod tests {
         // style as JSON string vs object is canonicalised
         tl["tracks"][1]["clips"][0]["style"] = json!({"size": 40});
         assert_eq!(a, keys(&run(&tl, &out, &d)));
+    }
+
+    #[test]
+    fn tie_breaking_ignores_clip_ids() {
+        // Two clips with identical start/duration on one track (e.g. the AIGC watermark laid over the first
+        // subtitle): their ids are random per export and must not influence the scene key.
+        let d = tmp("ties");
+        let (mut tl, out) = fixture(&d);
+        let p = |n: &str| d.join(n).to_string_lossy().to_string();
+        tl["tracks"][1]["clips"].as_array_mut().unwrap().push(json!({
+            "id": "a", "start_ms": 500, "duration_ms": 1000, "text": "AI生成", "style": {"size": 20} }));
+        tl["tracks"][2]["clips"].as_array_mut().unwrap().push(json!({
+            "id": "a", "start_ms": 5000, "duration_ms": 2000, "asset_ref": p("m.mp3"), "volume": 0.5 }));
+        let a = keys(&run(&tl, &out, &d));
+        tl["tracks"][1]["clips"][2]["id"] = json!("zz");
+        tl["tracks"][2]["clips"][1]["id"] = json!("zz");
+        assert_eq!(a, keys(&run(&tl, &out, &d)));
+        // ...but the content of the tied clip still matters
+        tl["tracks"][1]["clips"][2]["text"] = json!("changed");
+        assert_eq!(changed(&a, &keys(&run(&tl, &out, &d))), vec![0]);
     }
 
     #[test]

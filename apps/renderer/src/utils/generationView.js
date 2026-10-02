@@ -120,7 +120,10 @@ export function submittedText(result) {
 
 /** 任务中心里“对象”列：这个任务属于哪个镜头的什么产物。 */
 export function taskTarget(task) {
-  const g = task && task.params && task.params._gen
+  const p = task && task.params
+  if (!p) return ''
+  if (p._vo) return `镜头 #${p._vo.legacy_id ?? '?'} · 旁白配音`
+  const g = p._gen
   if (!g) return ''
   return `镜头 #${g.storyboard_id ?? '?'} · ${g.kind === 'video' ? '视频' : '首帧图'}`
 }
