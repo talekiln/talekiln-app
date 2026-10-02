@@ -4,7 +4,8 @@ use crate::ffmpeg::{self, FfError};
 use serde_json::{json, Value};
 use std::collections::HashSet;
 
-/// Candidate order = preference order (hardware first, software fallback last).
+/// Candidate order = preference order (hardware first, software fallbacks last).
+/// libopenh264 is what the pinned LGPL ffmpeg build ships instead of libx264 (scripts/ffmpeg-pin.json).
 pub const CANDIDATES: &[(&str, &str)] = &[
     ("h264_nvenc", "nvidia"),
     ("h264_qsv", "intel"),
@@ -12,7 +13,13 @@ pub const CANDIDATES: &[(&str, &str)] = &[
     ("h264_mf", "mediafoundation"),
     ("h264_videotoolbox", "apple"),
     ("libx264", "software"),
+    ("libopenh264", "software"),
 ];
+
+/// Software (CPU) encoders, in preference order; always tried after every hardware encoder.
+pub fn is_software(name: &str) -> bool {
+    CANDIDATES.iter().any(|(n, v)| *n == name && *v == "software")
+}
 
 /// Names of encoders listed by `ffmpeg -hide_banner -encoders`. Skips the legend/header.
 pub fn parse_encoders(text: &str) -> HashSet<String> {
@@ -86,7 +93,7 @@ pub fn build_result(listed: &HashSet<String>, tests: &[(String, Result<(), Strin
             recommended.push(*name);
         }
         items.push(json!({
-            "name": name, "vendor": vendor, "hardware": *name != "libx264",
+            "name": name, "vendor": vendor, "hardware": *vendor != "software",
             "listed": listed.contains(*name), "available": available, "reason": reason,
         }));
     }
@@ -173,7 +180,7 @@ mod tests {
         assert_eq!(r["recommended"], json!(["h264_qsv", "h264_mf", "libx264"]));
         assert_eq!(r["best"], "h264_qsv");
         let enc = r["encoders"].as_array().unwrap();
-        assert_eq!(enc.len(), 6);
+        assert_eq!(enc.len(), 7, "every CANDIDATES entry is reported");
         assert_eq!(enc[0]["name"], "h264_nvenc");
         assert_eq!(enc[0]["available"], false);
         assert_eq!(enc[0]["reason"], "Cannot load libcuda.so.1");
@@ -190,6 +197,25 @@ mod tests {
         let vt = r["encoders"].as_array().unwrap().iter().find(|e| e["name"] == "h264_videotoolbox").unwrap();
         assert_eq!(vt["vendor"], "apple");
         assert_eq!(vt["hardware"], true);
+    }
+
+    #[test]
+    fn openh264_is_the_software_fallback_when_libx264_is_absent() {
+        // The pinned LGPL ffmpeg build (scripts/ffmpeg-pin.json) ships libopenh264 and no libx264.
+        let listed = parse_encoders(include_str!("fixtures/ffmpeg_encoders_openh264.txt"));
+        assert!(listed.contains("libopenh264") && !listed.contains("libx264"));
+        let r = build_result(&listed, &[("libopenh264".to_string(), Ok(()))]);
+        assert_eq!(r["recommended"], json!(["libopenh264"]));
+        assert_eq!(r["best"], "libopenh264");
+        let enc = r["encoders"].as_array().unwrap();
+        let oh = enc.iter().find(|e| e["name"] == "libopenh264").expect("libopenh264 is a candidate");
+        assert_eq!(oh["hardware"], false);
+        assert_eq!(oh["vendor"], "software");
+        assert_eq!(enc.last().unwrap()["name"], "libopenh264", "software encoders come last");
+        // with both present, libx264 is still preferred over libopenh264
+        let both: HashSet<String> = ["libx264", "libopenh264"].iter().map(|s| s.to_string()).collect();
+        let r = build_result(&both, &[("libopenh264".to_string(), Ok(())), ("libx264".to_string(), Ok(()))]);
+        assert_eq!(r["recommended"], json!(["libx264", "libopenh264"]));
     }
 
     #[test]
