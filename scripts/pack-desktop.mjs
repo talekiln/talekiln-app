@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { defaultBuilderArgs, extraResources, applyMacBuildConfig } from './platform-lib.mjs';
+import { defaultBuilderArgs, extraResources, applyMacBuildConfig, builderTarget, onnxRuntimePrune } from './platform-lib.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const desktop = path.join(root, 'apps', 'desktop');
@@ -16,6 +16,9 @@ const sh = (cmd, args, cwd = root, env = {}) => {
   const r = spawnSync(cmd, args, { cwd, stdio: 'inherit', shell: process.platform === 'win32', env: { ...process.env, ...env } });
   if (r.status !== 0) throw new Error(`${cmd} ${args.join(' ')} exited ${r.status}`);
 };
+
+const args = process.argv.length > 2 ? process.argv.slice(2) : defaultBuilderArgs();
+const target = builderTarget(args);
 
 fs.rmSync(stage, { recursive: true, force: true });
 sh('pnpm', ['--filter', '@talekiln/desktop', 'deploy', '--legacy', '--prod', stage]);
@@ -27,6 +30,25 @@ for (const mod of fs.readdirSync(path.join(stage, 'node_modules'), { withFileTyp
   const meta = path.join(stage, 'node_modules', mod.name, 'build', 'Release', '.forge-meta');
   if (fs.existsSync(meta)) { fs.rmSync(meta); console.log(`removed stale ${path.relative(root, meta)}`); }
 }
+
+// onnxruntime-node（P3-C 人脸级一致性）的 npm 包带着所有平台的 CPU 二进制（win32 134 MB、darwin 86 MB、linux 69 MB）：
+// 只留目标平台 / 架构那一份。目标那份不存在（如 npm 包没发该架构）时照常打包，包里人脸评分报“不可用”。
+const ortBin = path.join(stage, 'node_modules', 'onnxruntime-node', 'bin', 'napi-v6');
+if (fs.existsSync(ortBin)) {
+  const entries = [];
+  for (const p of fs.readdirSync(ortBin, { withFileTypes: true })) {
+    if (!p.isDirectory()) continue;
+    for (const a of fs.readdirSync(path.join(ortBin, p.name), { withFileTypes: true })) if (a.isDirectory()) entries.push({ platform: p.name, arch: a.name });
+  }
+  for (const rel of onnxRuntimePrune(entries, target)) {
+    fs.rmSync(path.join(ortBin, ...rel.split('/')), { recursive: true, force: true });
+    console.log(`pruned onnxruntime-node ${rel}`);
+  }
+  if (!entries.some((e) => e.platform === target.platform && e.arch === target.arch)) {
+    console.warn(`warning: onnxruntime-node has no binary for ${target.platform}/${target.arch}; face scoring will be unavailable in this build`);
+  }
+}
+
 const pkgFile = path.join(stage, 'package.json');
 const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
 pkg.build.electronVersion = JSON.parse(fs.readFileSync(path.join(desktop, 'package.json'), 'utf8')).devDependencies.electron;
@@ -34,9 +56,10 @@ pkg.build.directories = { output: path.join(desktop, 'release') };
 pkg.build.files = [...pkg.build.files.filter((f) => !f.startsWith('!**/node_modules/@talekiln/core')), '!node_modules/.pnpm/**', '!node_modules/@talekiln/core/{target,src}/**'];
 // ffmpeg 目录可能为空（macOS 的固定清单仍是 TODO 时）：保证目录存在，打出来的包会在导出时提示“媒体工具缺失”
 fs.mkdirSync(path.join(desktop, 'resources', 'ffmpeg'), { recursive: true });
+// 人脸模型目录同理（没跑 scripts/fetch-face-models.mjs 时为空）：包里没有模型时人脸评分报“模型未安装”，其余评分照常
+fs.mkdirSync(path.join(desktop, 'resources', 'models', 'face'), { recursive: true });
 pkg.build.extraResources = extraResources({ root, desktop });
 pkg.build = applyMacBuildConfig(pkg.build, { desktop });
 fs.writeFileSync(pkgFile, JSON.stringify(pkg, null, 2));
 
-const args = process.argv.length > 2 ? process.argv.slice(2) : defaultBuilderArgs();
 sh('pnpm', ['exec', 'electron-builder', '--projectDir', stage, ...args], root);

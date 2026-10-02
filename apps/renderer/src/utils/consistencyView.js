@@ -33,6 +33,30 @@ function worstNodeLabel(shot) {
   return ''
 }
 
+/** 最差分那一行（最差节点 × 最差实体），人脸部分从这里取。 */
+function worstRow(shot) {
+  const node = worstNodeLabel(shot) === '视频' ? shot.video : shot.image
+  const rows = (node && Array.isArray(node.scores) && node.scores) || []
+  const e = shot.entity || {}
+  return rows.find((r) => r.entity_type === e.type && Number(r.entity_id) === Number(e.id)) || null
+}
+
+/**
+ * 人脸部分的文案（只对角色参考图）：行 parts.face 有相似度 → 「人脸 NN」；参考图有脸但目标里没有 → 「未检测到人脸」；
+ * 参考图本身没脸 → 「参考图未检测到人脸」；没算过且报告 face_available=false（模型 / onnxruntime 缺失）→ 「人脸模型未安装」；其余空串。
+ */
+export function faceText(row, report = null) {
+  if (!row || row.entity_type !== 'character') return ''
+  const face = row.parts && row.parts.face
+  if (face && typeof face === 'object' && !face.error) {
+    if (!face.ref_faces) return '参考图未检测到人脸'
+    if (!face.matched_frames || face.score == null) return '未检测到人脸'
+    return `人脸 ${fmtScore(face.score)}`
+  }
+  if (report && report.face_available === false && report.face_reason !== 'disabled') return '人脸模型未安装'
+  return ''
+}
+
 /** 按建议重做的估价文案；没有估价（都合格 / 估算失败）返回空串。 */
 export function regenerateCostText(regen) {
   if (!regen || !regen.kind) return ''
@@ -43,13 +67,14 @@ export function regenerateCostText(regen) {
   return t
 }
 
-/** 芯片的提示 / 工作台的建议行。 */
-export function consistencyHint(shot, minScore) {
+/** 芯片的提示 / 工作台的建议行；传入报告时括号里带人脸部分（「人脸 NN」/「未检测到人脸」/「人脸模型未安装」）。 */
+export function consistencyHint(shot, minScore, report = null) {
   const b = consistencyBadge(shot)
   if (!b) return ''
   const who = shot.entity && shot.entity.name ? `「${shot.entity.name}」的` : ''
   const base = `${worstNodeLabel(shot)}与${who}锁定参考图`
-  const low = `最低 ${fmtScore(shot.worst)} 分`
+  const face = faceText(worstRow(shot), report)
+  const low = `最低 ${fmtScore(shot.worst)} 分${face ? `，${face}` : ''}`
   if (b.suggestion === 'ok') return `${base}一致（${low}）`
   const th = minScore != null && Number.isFinite(Number(minScore)) ? `，阈值 ${fmtScore(minScore)}` : ''
   const cost = regenerateCostText(shot.regenerate)

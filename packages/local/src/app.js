@@ -142,9 +142,10 @@ function createApp(opts = {}) {
 
   const coreProvider = opts.getCore ? null : require('./export/coreProvider').createCoreProvider({ endpoint: process.env.LYCORE_ENDPOINT });
   const getCore = opts.getCore || (coreProvider && coreProvider.getCore);
-  // P3-C 角色一致性：生成结果写回内核后对锁定参考图评分（默认经 lycore；测试可注入 opts.consistencyScorer）
+  // P3-C 角色一致性：生成结果写回内核后对锁定参考图评分（默认经 lycore；测试可注入 opts.consistencyScorer）。
+  // 人脸部分（本地小模型）按配置自建；测试可注入 opts.faceEngine（null = 不用）；桌面端经 opts.faceModelsDir 传随包模型目录
   const consistency = opts.consistency || require('./consistency').createConsistencyService({
-    db, storageRoot, config, getCore, scorer: opts.consistencyScorer, generation: () => generation, log,
+    db, storageRoot, config, getCore, scorer: opts.consistencyScorer, face: opts.faceEngine, faceModelsDir: opts.faceModelsDir, generation: () => generation, log,
   });
   generation = opts.generation || createGenerationService({
     db, store: aiQueue.store, worker: aiQueue.worker, spend: aiQueue.spend, storageRoot, getCore, listConfigs: opts.listConfigs, log,
