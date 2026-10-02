@@ -26,6 +26,8 @@ export class AdminPluginController {
   constructor(@Inject(PluginRegistryService) private readonly plugins: PluginRegistryService) {}
 
   @Get() list(@Query() q: Record<string, unknown>) { return this.plugins.list(q); }
+  /** 当前插件签名密钥的公开信息（kid、是否独立、退役 kid）；只对能签名的 ADMIN 开放。须声明在 :id 之前。 */
+  @Get('signing-key') @Require('plugins:sign') signingKey() { return this.plugins.signingKey(); }
   @Get(':id') get(@Param('id') id: string) { return this.plugins.get(id); }
 
   @Post() submit(@Req() req: AdminRequest, @Body() b: unknown) { return this.plugins.submit(actor(req), b); }

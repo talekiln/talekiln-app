@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ServiceError } from './errors';
 import type { AppConfig } from './config';
 import { pluginHash, pluginSigningPayload, signPluginPayload } from './plugin-signing';
+import { pluginSigningKeyInfo } from './signing-keys';
 import type { PluginReviewRecord, PluginReviewStatus, PluginVersionRecord, Repositories } from '../domain/repositories';
 
 // ---------------------------------------------------------------------------
@@ -91,7 +92,7 @@ export function pluginVersionView(v: PluginVersionRecord, reviews?: PluginReview
   return {
     id: v.id, pluginId: v.pluginId, name: v.pluginName, version: v.version, label: m.label ?? v.pluginName,
     manifest: v.manifest, fileHashes: v.fileHashes, hash: v.hash, packageUrl: v.packageUrl, sha256: v.sha256,
-    signature: v.signature, signedAt: v.signedAt, signedBy: v.signedBy, signedManifest: signedManifest(v),
+    signature: v.signature, kid: v.signature?.kid ?? null, signedAt: v.signedAt, signedBy: v.signedBy, signedManifest: signedManifest(v),
     reviewStatus: v.reviewStatus, reviewedAt: v.reviewedAt, reviewedBy: v.reviewedBy, submittedBy: v.submittedBy,
     createdAt: v.createdAt, updatedAt: v.updatedAt,
     ...(reviews ? { reviews } : {}),
@@ -102,6 +103,7 @@ export function pluginVersionView(v: PluginVersionRecord, reviews?: PluginReview
  * 插件注册表：登记版本 -> 审核（通过/驳回）-> 用官方密钥签名 -> 进入公开目录。
  * 云端不下载也不执行插件包：审核员须按 packageUrl 取包、核对 sha256，并用 SDK 的 sign-plugin.mjs --inspect
  * 核对指纹（hash）与这里登记的一致后再通过。签名一旦发出不可撤回（只能换密钥），驳回已签名版本只是把它撤出目录。
+ * 签名用的是插件签名私钥（PLUGIN_SIGNING_PRIVATE_KEY_PEM，只保管在云端服务器；未配置时回退到许可证密钥）。
  */
 export class PluginRegistryService {
   constructor(
@@ -161,16 +163,16 @@ export class PluginRegistryService {
     return pluginVersionView(next);
   }
 
-  /** 用许可证/目录同一把 ES256 私钥签名；只签已通过审核的版本；同一密钥不重复签，换密钥后可再签。 */
+  /** 用插件签名私钥（ES256）签名；只签已通过审核的版本；同一密钥不重复签，换密钥后可再签。 */
   async sign(actor: PluginActor, id: string, input: unknown) {
     const { notes } = notesBody.parse(input ?? {});
     const v = await this.load(id);
     if (v.reviewStatus !== 'approved') throw new ServiceError('conflict', '只能给已通过审核的版本签名');
-    if (v.signature && v.signature.kid === this.cfg.licenceKeyId) throw new ServiceError('conflict', '该版本已用当前密钥签名');
+    if (v.signature && v.signature.kid === this.cfg.pluginSigningKeyId) throw new ServiceError('conflict', `该版本已用当前密钥（${this.cfg.pluginSigningKeyId}）签名`);
     const payload = pluginSigningPayload(v.manifest, v.fileHashes);
     if (pluginHash(payload) !== v.hash) throw new ServiceError('conflict', '登记的指纹与 manifest 不一致，请重新提交');
     const now = this.now();
-    const signature = signPluginPayload(payload, this.cfg.licencePrivateKey, this.cfg.licenceKeyId);
+    const signature = signPluginPayload(payload, this.cfg.pluginSigningPrivateKey, this.cfg.pluginSigningKeyId);
     const next = (await this.repos.plugins.setSignature(id, { signature, signedAt: now, signedBy: actor.accountId }, now))!;
     await this.review(id, 'sign', notes, actor, now);
     return pluginVersionView(next);
@@ -188,9 +190,14 @@ export class PluginRegistryService {
     }
     return {
       generated_at: this.now().toISOString(),
-      kid: this.cfg.licenceKeyId,
+      kid: this.cfg.pluginSigningKeyId,
       plugins: [...plugins.values()].sort((a, b) => a.name.localeCompare(b.name)),
     };
+  }
+
+  /** 后台展示：当前签名 kid、是否独立密钥、退役 kid。没有任何私钥材料。 */
+  signingKey() {
+    return pluginSigningKeyInfo(this.cfg);
   }
 
   private async load(id: string) {

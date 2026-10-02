@@ -15,6 +15,7 @@ import Releases from './views/Releases.vue'
 import Announcements from './views/Announcements.vue'
 import Admins from './views/Admins.vue'
 import Templates from './views/Templates.vue'
+import Plugins from './views/Plugins.vue'
 
 export const routes = [
   { path: '/login', name: 'login', component: Login, meta: M.login },
@@ -29,6 +30,7 @@ export const routes = [
   { path: '/users', name: 'users', component: Users, meta: M.users },
   { path: '/content', name: 'content', component: Content, meta: M.content },
   { path: '/templates', name: 'templates', component: Templates, meta: M.templates },
+  { path: '/plugins', name: 'plugins', component: Plugins, meta: M.plugins },
   { path: '/admins', name: 'admins', component: Admins, meta: M.admins },
   { path: '/:pathMatch(.*)*', redirect: '/overview' },
 ]

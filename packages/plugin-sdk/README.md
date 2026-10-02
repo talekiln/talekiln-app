@@ -69,8 +69,12 @@ registerContract(test, sdk.loadPlugin(__dirname + '/..'), require('./spec'));
 
 ## 签名
 
-签名证明"包来自登记的作者且没被改过"，不证明无害。宿主只把**官方 JWKS**（与云端目录、许可证同一把 ES256 密钥）验签通过的包当作 `official`；
+签名证明"包来自登记的作者且没被改过"，不证明无害。宿主只把**官方 JWKS**（云端 `GET /.well-known/licence-jwks.json`，里面是许可证密钥、插件签名密钥和已退役的插件签名公钥，都是 ES256）验签通过的包当作 `official`；
 没有签名的是 `unsigned`，其余一切（格式错、`kid` 未知、文件被改/缺失/多出、符号链接）是 `invalid`。`unsigned` / `invalid` 的包只有宿主打开"开发者模式"时才会加载。
+
+> **开发者自己的密钥签不出官方签名。** 官方插件签名私钥只保管在云端服务器上，不会分发给任何人；你用自己生成的密钥跑 `sign-plugin.mjs`，
+> 得到的签名在所有客户端上都是 `invalid（unknown kid）`，只在开发者模式下加载（适合本地联调：把你的公钥放进本机的 `cloud.jwks` 缓存即可）。
+> 要拿到官方签名，只有一条路：把 `--inspect` 的输出提交云端注册表登记 → 审核通过 → 云端 `sign` 返回 `signedManifest`，写回包里。
 
 签的是 `canonicalJson({ manifest: <去掉 signature 的清单>, files: { "<相对路径>": "<sha256>" } })`，ES256（P-256，IEEE P1363）+ base64url，
 `manifest.files` 列出覆盖的文件（不含 `manifest.json`，必须含 `entry`）。`sha256(载荷)` 是**包指纹**，宿主界面和云端注册表都显示它，签名前后不变。
@@ -78,11 +82,11 @@ registerContract(test, sdk.loadPlugin(__dirname + '/..'), require('./spec'));
 ```bash
 node scripts/sign-plugin.mjs ./my-plugin --inspect          # 不需要密钥：文件、哈希、指纹（提交云端登记用）
 TALEKILN_PLUGIN_SIGNING_KEY_FILE=/secure/key.pem \
-node scripts/sign-plugin.mjs ./my-plugin --kid lic-1        # 写回 manifest.json；--out <file> 写到别处；--dry-run 只算不写
+node scripts/sign-plugin.mjs ./my-plugin --kid dev-1        # 用自己的密钥本地测试：写回 manifest.json；--out <file> 写到别处；--dry-run 只算不写
 ```
 
 私钥只从 `TALEKILN_PLUGIN_SIGNING_KEY_FILE`（路径）或 `TALEKILN_PLUGIN_SIGNING_KEY_PEM`（内容，`\n` 转义）读，永远不要作为参数传、不要提交。
-一般作者不持有官方私钥：把 `--inspect` 的输出交给云端注册表登记、审核，由云端签名后把 `signedManifest` 写回包里即可（流程见 `docs/phase3-plugins.md`）。
+作者不持有官方私钥（它只在云端服务器上）：把 `--inspect` 的输出交给云端注册表登记、审核，由云端用插件签名密钥（kid 形如 `plg-1`）签名后把 `signedManifest` 写回包里即可（流程见 `docs/phase3-plugins.md`）。
 
 程序接口（只依赖 `node:crypto`）：`signManifest(manifest, dir, privateKey, { kid, files? })` → `{ manifest, hash, files }`；
 `verifySignature(manifest, dir, keys, { strict = true })` → `{ ok, status, reason, kid, hash, files }`，`keys` 可以是 JWKS `{keys:[]}`、JWK 数组、单个 JWK、
