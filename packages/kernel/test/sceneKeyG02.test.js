@@ -63,10 +63,13 @@ function findBinary() {
   const found = ['release', 'debug'].map((p) => path.join(CORE_ROOT, 'target', p, exe)).filter(fs.existsSync);
   return found.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0] || null;
 }
+let openSeq = 0;
 async function openCore() {
   const bin = findBinary();
   if (!bin) return null;
-  const id = `lycore-sk-${process.pid}`;
+  // 每次打开都用新的管道名：上一个测试 kill 掉的 lycore 在 Windows 上可能还没退出，
+  // 同名管道会让新连接落到正在关闭的旧服务上（CI 偶发 "connection closed"）
+  const id = `lycore-sk-${process.pid}-${++openSeq}-${Math.random().toString(16).slice(2, 8)}`;
   const endpoint = process.platform === 'win32' ? `\\\\.\\pipe\\${id}` : path.join(os.tmpdir(), `${id}.sock`);
   const logDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lycore-sk-log-'));
   const child = spawn(bin, ['--pipe', endpoint, '--log-dir', logDir], { stdio: 'ignore' });

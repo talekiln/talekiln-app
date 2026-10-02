@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, session, shell, dialog, safeStorage, Tray, Notification, nativeImage, powerMonitor } = require('electron');
+const { app, BrowserWindow, Menu, session, shell, dialog, safeStorage, Tray, Notification, nativeImage, powerMonitor, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const net = require('net');
@@ -96,6 +96,63 @@ function setupUpdater() {
   }
 }
 
+// 云端更新检查与公告（P2-H 遗留）：延迟 30 秒首次、之后每 6 小时；结果经 IPC `cloud:status` 推给渲染端。
+// base URL 沿用本机服务的 cloud.base_url（configs/config.yaml，可用 TALEKILN_CLOUD_URL 覆盖）；占位域名 / 离线一律静默。
+let cloudCheck = null;
+const DEVICE_ID_FILE = path.join(USERDATA_DIR, 'device-id');
+/** 设备 ID：首次生成后固定存在 userData（灰度分档要求同一台机器始终传同一个）。 */
+function loadDeviceId() {
+  const { normalizeDeviceId } = require('./cloud-check-logic');
+  try { const id = normalizeDeviceId(fs.readFileSync(DEVICE_ID_FILE, 'utf8')); if (id) return id; } catch (_) {}
+  const id = crypto.randomBytes(16).toString('hex');
+  try { fs.writeFileSync(DEVICE_ID_FILE, id, 'utf8'); } catch (e) { writeMainLog(`device-id write failed: ${e && e.message}`); }
+  return id;
+}
+function broadcastCloudStatus(payload) {
+  for (const w of BrowserWindow.getAllWindows()) {
+    try { if (!w.isDestroyed()) w.webContents.send('cloud:status', payload); } catch (_) {}
+  }
+}
+function setupCloudCheck() {
+  try {
+    const { createCloudHttp, resolveBaseUrl } = require(path.join(LOCAL_DIR, 'src', 'cloud', 'http.js'));
+    const { loadConfig } = require(path.join(LOCAL_DIR, 'src', 'config'));
+    const getBaseUrl = () => { let cfg = null; try { cfg = loadConfig(); } catch (_) {} return resolveBaseUrl(cfg); };
+    const http = createCloudHttp({ getBaseUrl });
+    const { resolveConfig } = require('./updater-logic');
+    let file = {};
+    try { file = JSON.parse(fs.readFileSync(path.join(__dirname, 'update-config.json'), 'utf8')); } catch (_) {}
+    const channel = resolveConfig({ file, env: process.env, isPackaged: app.isPackaged }).channel;
+    const { createCloudCheck } = require('./cloud-check');
+    cloudCheck = createCloudCheck({
+      http, currentVersion: app.getVersion(), channel, deviceId: loadDeviceId(), platform: process.platform, arch: process.arch,
+      onStatus: broadcastCloudStatus, log: (m) => writeMainLog(m),
+    });
+    cloudCheck.start();
+  } catch (e) {
+    writeMainLog(`cloud-check setup failed: ${e && e.stack ? e.stack : e}`);
+    cloudCheck = null;
+  }
+}
+ipcMain.handle('cloud:status', () => (cloudCheck ? cloudCheck.getStatus() : null));
+ipcMain.handle('cloud:check-now', async () => { try { return cloudCheck ? await cloudCheck.check() : null; } catch (_) { return cloudCheck ? cloudCheck.getStatus() : null; } });
+// 「去下载」：安装包仍走 electron-updater（有结果弹窗、下载后经用户确认安装）；更新未启用时退而打开 update-config.json 里的下载页
+ipcMain.handle('cloud:download', async () => {
+  if (updater && updater.getState().status !== 'disabled') {
+    updater.check({ manual: true });
+    return { ok: true, mode: 'updater' };
+  }
+  try {
+    const { validateFeedUrl } = require('./updater-logic');
+    const file = JSON.parse(fs.readFileSync(path.join(__dirname, 'update-config.json'), 'utf8'));
+    const page = validateFeedUrl(file.downloadPageUrl);
+    if (page.ok) { await shell.openExternal(page.url); return { ok: true, mode: 'browser' }; }
+    return { ok: false, reason: page.reason };
+  } catch (e) {
+    return { ok: false, reason: (e && e.message) || 'unknown' };
+  }
+});
+
 function freePort() {
   return new Promise((resolve, reject) => {
     const s = net.createServer();
@@ -132,7 +189,9 @@ async function startLocalService() {
     filePath: path.join(DATA_DIR, 'data', 'secrets.enc.json'),
   });
   if (!secretStore.isAvailable()) writeMainLog('safeStorage encryption unavailable: API keys cannot be saved');
-  const { app: expressApp, aiQueue } = createApp({ secretStore, onTaskFinished: (t) => lifecycle.onTaskFinished(t) });
+  // 人脸模型（P3-C 人脸级一致性）随包放在 <resources>/models/face；开发时本机服务按仓库目录 apps/desktop/resources/models/face 自己找
+  const faceModelsDir = app.isPackaged ? path.join(process.resourcesPath, 'models', 'face') : null;
+  const { app: expressApp, aiQueue } = createApp({ secretStore, onTaskFinished: (t) => lifecycle.onTaskFinished(t), faceModelsDir });
   aiWorker = aiQueue.worker;
   // 启动对账（恢复未完成任务，不会重复提交）后开始调度；失败不阻止应用启动
   aiWorker.start().catch((e) => writeMainLog(`ai worker start failed: ${e && e.stack ? e.stack : e}`));
@@ -184,6 +243,7 @@ function createWindow(port) {
     height: 800,
     show: false,
     webPreferences: {
+      preload: path.join(__dirname, 'preload.js'), // 只暴露云端更新 / 公告状态的只读桥接（见 preload.js）
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
@@ -228,6 +288,7 @@ app.whenReady().then(async () => {
     createWindow(port);
     lifecycle.bindPower();
     setupUpdater();
+    setupCloudCheck();
   } catch (err) {
     const stack = err && err.stack ? err.stack : String(err);
     writeMainLog(`startup failed\n${stack}`);
@@ -246,6 +307,7 @@ app.on('before-quit', (e) => {
     coreRuntime.stop().finally(() => app.quit());
     return;
   }
+  if (cloudCheck) { cloudCheck.stop(); cloudCheck = null; }
   if (aiWorker) { aiWorker.stop().catch(() => {}); aiWorker = null; }
   if (serverInstance) {
     serverInstance.close();

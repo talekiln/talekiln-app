@@ -1,0 +1,175 @@
+{
+  "id": "official-revenge-god-of-war",
+  "name": "逆袭打脸 · 战神归来",
+  "version": "1.0.0",
+  "genre": "revenge",
+  "tier": "pro",
+  "description": "赘婿 / 战神归来类短剧的完整第一集：机场归来、五年前的屈辱闪回、寿宴羞辱、泼酒、一个电话、十二卫进门、全场下跪。十二个镜头约 65 秒，四个槽位（男主、女主、家主、纨绔），段落齐全，直接可拍，付费示例。",
+  "cover": null,
+  "music_hint": "低沉的鼓点与弦乐铺底，羞辱段落只留环境音，门开那一刻鼓点全开，结尾戛然而止",
+  "style": {
+    "name": "热血写实",
+    "preset": "cinematic",
+    "prompt": "现代都市动作剧电影感画面，高对比硬光，宴会厅暖金色与夜景冷蓝色对撞，低角度构图突出人物气势，轻微胶片颗粒，面部细节清晰",
+    "aspect_ratio": "9:16"
+  },
+  "character_slots": [
+    { "id": "hero", "name": "叶辰", "role": "男主", "description": "五年前被林家扫地出门的赘婿，如今是北境战神「龙首」，隐瞒身份回家还债", "appearance": "三十岁男性，刀削般的下颌线，眼神沉静，寸头，左眉有一道旧疤，黑色冲锋衣内搭白色T恤，手腕戴一串磨得发亮的檀木珠" },
+    { "id": "wife", "name": "林知夏", "role": "女主", "description": "林家二小姐，被家族当弃子，五年独自撑着一间小画室", "appearance": "二十七岁女性，清瘦，高马尾，素色衬衫扎进牛仔裤，围着一条沾着颜料的帆布围裙，眼下有淡淡的青色" },
+    { "id": "antagonist", "name": "林国栋", "role": "反派", "description": "林家家主、林知夏的大伯，势利凉薄，一心攀附贵人", "appearance": "五十五岁男性，发福，头发梳得油亮，暗红色唐装，手里盘着两枚油亮的文玩核桃" },
+    { "id": "lackey", "name": "赵公子", "role": "反派帮凶", "description": "本市富二代，林家想巴结的「贵人」，嚣张跋扈", "appearance": "二十八岁男性，染金色短发，花衬衫敞开两颗扣子，脖子上一条粗金链，墨镜挂在领口" }
+  ],
+  "shots": [
+    {
+      "title": "归来",
+      "group": "归来",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{hero}}单手拎着一个旧帆布包走出机场出口，身后一排黑色轿车整齐停靠，车门同时打开却无人下车",
+      "character_slots": ["hero"],
+      "scene_slot": "机场到达口外，雨后深夜，地面倒映着灯光",
+      "camera": "低机位全景缓推",
+      "lines": [
+        { "kind": "narration", "text": "五年前，他被扫地出门。五年后，北境七十万大军，只认他一人。" },
+        { "kind": "dialogue", "speaker": "hero", "text": "回家。" }
+      ]
+    },
+    {
+      "title": "跪着的尊严",
+      "group": "归来",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{antagonist}}把一叠离婚协议甩在地上，{{hero}}跪在雨水里一言不发，{{wife}}扑过去挡在他身前",
+      "character_slots": ["antagonist", "hero", "wife"],
+      "scene_slot": "五年前的林家大宅门前，暴雨夜，门廊灯昏黄",
+      "camera": "手持晃动俯拍",
+      "lines": [
+        { "kind": "dialogue", "speaker": "antagonist", "text": "林家不养废物。签字，滚。" },
+        { "kind": "dialogue", "speaker": "wife", "text": "他走，我也走。" }
+      ]
+    },
+    {
+      "title": "画室门口",
+      "group": "归来",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{hero}}站在小画室的玻璃门外，{{wife}}正在给画框上钉，抬头看见他，手里的锤子停在半空",
+      "character_slots": ["hero", "wife"],
+      "scene_slot": "老城区街角小画室，黄昏，橱窗里亮着暖黄的灯",
+      "camera": "中景隔着玻璃正反打",
+      "lines": [
+        { "kind": "dialogue", "speaker": "wife", "text": "……你还活着？" },
+        { "kind": "dialogue", "speaker": "hero", "text": "欠你的，我回来还。" }
+      ]
+    },
+    {
+      "title": "寿宴请柬",
+      "group": "羞辱",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{wife}}坐在画室的小板凳上看手机，屏幕上是家族群里的消息，{{hero}}站在她身后沉默地看着",
+      "character_slots": ["wife", "hero"],
+      "scene_slot": "画室里间，夜，一盏吊着的白炽灯泡",
+      "camera": "近景俯拍手机",
+      "lines": [
+        { "kind": "action", "text": "群消息：明天老爷子寿宴，带着你那个废物来，赵公子要见见。" },
+        { "kind": "dialogue", "speaker": "wife", "text": "他们从来没把我当人。" },
+        { "kind": "dialogue", "speaker": "hero", "text": "去。这次换我们看他们。" }
+      ]
+    },
+    {
+      "title": "宴会入场",
+      "group": "羞辱",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{lackey}}张开手臂拦在宴会厅正门，身后两个保安，{{hero}}牵着{{wife}}的手停下脚步，神色平静",
+      "character_slots": ["lackey", "hero", "wife"],
+      "scene_slot": "酒店宴会厅门口，金色大门，红毯",
+      "camera": "跟拍侧移停至中景",
+      "lines": [
+        { "kind": "dialogue", "speaker": "lackey", "text": "赘婿走后门。" },
+        { "kind": "dialogue", "speaker": "hero", "text": "行。我记住了。" }
+      ]
+    },
+    {
+      "title": "敬酒羞辱",
+      "group": "羞辱",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{antagonist}}站在主桌举杯，满堂宾客看向角落的{{wife}}，她握着筷子的手微微发抖，{{hero}}缓缓站起身",
+      "character_slots": ["antagonist", "wife", "hero"],
+      "scene_slot": "宴会厅主桌与角落桌，水晶吊灯，暖金色灯光",
+      "camera": "中景环绕",
+      "lines": [
+        { "kind": "dialogue", "speaker": "antagonist", "text": "知夏，赵公子愿意收你，是你的福气。当着大家的面，把婚离了。" },
+        { "kind": "dialogue", "speaker": "wife", "text": "大伯，我不离。" }
+      ]
+    },
+    {
+      "title": "泼酒",
+      "group": "羞辱",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{lackey}}把一整杯红酒泼在{{hero}}脸上，酒液在空中拉出慢动作的弧线，{{hero}}闭眼承受，再睁开时嘴角带笑",
+      "character_slots": ["lackey", "hero"],
+      "scene_slot": "宴会厅中央，灯光聚焦",
+      "camera": "特写慢动作",
+      "lines": [
+        { "kind": "dialogue", "speaker": "lackey", "text": "跪下给我擦鞋，我就当你今天没来。" },
+        { "kind": "action", "text": "叶辰慢慢抹去脸上的酒，笑了。" }
+      ]
+    },
+    {
+      "title": "一个电话",
+      "group": "亮身份",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{hero}}掏出一部老旧手机拨号，只说了一句话，{{antagonist}}在主桌上笑得前仰后合",
+      "character_slots": ["hero", "antagonist"],
+      "scene_slot": "宴会厅中央与主桌，暖光",
+      "camera": "近景正反打",
+      "lines": [
+        { "kind": "dialogue", "speaker": "hero", "text": "我在明都酒店。来接我。" },
+        { "kind": "dialogue", "speaker": "antagonist", "text": "哟，叫外卖呢？" }
+      ]
+    },
+    {
+      "title": "门开",
+      "group": "亮身份",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，宴会厅大门被从外推开，一列身着黑色制服的军人齐步而入，为首者在{{hero}}面前单膝跪地",
+      "character_slots": ["hero"],
+      "scene_slot": "宴会厅正门到中央，门外是走廊的冷白光",
+      "camera": "低机位全景慢推",
+      "lines": [{ "kind": "action", "text": "为首者单膝跪地：「龙首，北境十二卫，前来迎接！」" }]
+    },
+    {
+      "title": "全场死寂",
+      "group": "亮身份",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{lackey}}手里的酒杯滑落摔碎，{{antagonist}}手中的两枚核桃滚落到地上，宾客们的脸一张张僵住",
+      "character_slots": ["lackey", "antagonist"],
+      "scene_slot": "宴会厅主桌，灯光骤然显得刺眼",
+      "camera": "特写快切",
+      "lines": [{ "kind": "narration", "text": "那一刻，全场只听得见两枚核桃滚落的声音。" }]
+    },
+    {
+      "title": "跪下的人换了",
+      "group": "亮身份",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{hero}}低头俯视瘫软在地的{{lackey}}，{{wife}}从角落走到他身侧，满堂宾客无人敢出声",
+      "character_slots": ["hero", "lackey", "wife"],
+      "scene_slot": "宴会厅中央，军人列队两侧",
+      "camera": "俯拍缓降至平视",
+      "lines": [
+        { "kind": "dialogue", "speaker": "hero", "text": "现在，谁跪？" },
+        { "kind": "dialogue", "speaker": "lackey", "text": "叶、叶爷……我错了……" }
+      ]
+    },
+    {
+      "title": "第一夜未完",
+      "group": "钩子",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{hero}}转身握住{{wife}}的手，{{wife}}口袋里的手机亮起，一条陌生号码的消息映在她惊愕的脸上",
+      "character_slots": ["hero", "wife"],
+      "scene_slot": "宴会厅侧门，走廊灯光冷白",
+      "camera": "近景推至手机屏幕",
+      "lines": [
+        { "kind": "action", "text": "消息：五年前把他赶出林家的，不止你大伯一个人。" },
+        { "kind": "narration", "text": "战神归来的第一夜，还没有结束。" }
+      ]
+    }
+  ]
+}

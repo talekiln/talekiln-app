@@ -385,6 +385,7 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
       exporter = extras.exporter || createExportService(db, {
         getCore: extras.getCore, storageRoot: extras.storageRoot,
         ffmpegPath: require('../utils/ffmpegPath').getFfmpegPath(), ffmpegDir: extras.ffmpegDir || null,
+        onFinished: extras.onExportFinished || null,
       });
     }
     const mediaExporter = extras.storageRoot
@@ -462,6 +463,112 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
     });
     r.get('/diagnostics/bundle', diag.exportBundle);
     r.post('/diagnostics/feedback', diag.sendFeedback);
+  }
+
+  // P3-B
+  if (extras.batch) {
+    const batches = require('./batches')(extras.batch, log);
+    r.post('/batches', batches.create);
+    r.get('/batches', batches.list);
+    r.get('/batches/:id', batches.get);
+    r.post('/batches/:id/retry-failed', batches.retryFailed);
+    r.post('/batches/:id/cancel', batches.cancel);
+    r.post('/batches/:id/pause', batches.pause);
+    r.post('/batches/:id/resume', batches.resume);
+  }
+  // P3-T 模板市场
+  if (extras && extras.templates) {
+    const t = require('./templates')(extras.templates, log);
+    r.get('/templates', t.list);
+    r.get('/templates/cloud', t.cloud);
+    r.post('/templates/install', t.install);
+    r.get('/templates/:id', t.get);
+    r.post('/templates/:id/estimate', t.estimate);
+    r.post('/templates/:id/apply', t.apply);
+    r.delete('/templates/:id', t.remove);
+  }
+  // P3-D
+  // ---------- director mode: natural-language edit -> validated plan -> one undoable kernel transaction ----------
+  {
+    const { createDirectorService } = require('../director');
+    const directorService = extras.director || createDirectorService({
+      db, log, spend: aiQueue && aiQueue.spend, generation: extras.generation, config: cfg, listConfigs: extras.listConfigs,
+      ...(extras.directorDeps || {}), // 假厂商模式注入 resolveProvider / createProviders（见 providers/fakeVendor.js）
+    });
+    const director = require('./director')(directorService, log);
+    r.post('/episodes/:id/director/plan', director.plan);
+    r.get('/episodes/:id/director/turns', director.turns);
+    r.post('/episodes/:id/director/turns/:turnId/apply', director.apply);
+    r.post('/episodes/:id/director/turns/:turnId/undo', director.undo);
+  }
+  // P3-C 角色一致性：评分报告 / 重评 / 参考图自动挑选
+  if (extras.consistency) {
+    const consistency = require('./consistency')(extras.consistency, log);
+    r.get('/episodes/:id/consistency', consistency.episodeReport);
+    r.post('/shots/:id/consistency/rescore', consistency.rescore);
+    r.post('/characters/:id/references/auto-pick', consistency.autoPick);
+  }
+  // P3-P
+  if (extras.pluginHost) {
+    const plugins = require('./plugins')(extras.pluginHost, log);
+    r.get('/plugins', plugins.list);
+    r.post('/plugins/install', plugins.install);
+    r.get('/plugins/:id', plugins.get);
+    r.post('/plugins/:id/enable', plugins.enable);
+    r.post('/plugins/:id/disable', plugins.disable);
+    r.delete('/plugins/:id', plugins.remove);
+    r.get('/settings/developer-mode', plugins.getDeveloperMode);
+    r.put('/settings/developer-mode', plugins.putDeveloperMode);
+  }
+  // P3-R
+  // ---------- region edit (选镜改片): estimate / confirm -> queue -> ffmpeg splice -> new kernel version; adopt via adoptShotVersion ----------
+  if (extras.regionEdit) {
+    const re = require('./regionEdit')(extras.regionEdit, log);
+    r.post('/shots/:id/edit-region', re.editRegion);
+    r.get('/shots/:id/edit-regions', re.listRegions);
+    r.post('/shots/:id/adopt-version', re.adoptVersion);
+  }
+  // P3-K 可选云备份（S3 兼容，MinIO 为参考目标）
+  if (extras.backup) {
+    const bk = require('./backup')(extras.backup, log);
+    r.get('/backup/settings', bk.getSettings);
+    r.put('/backup/settings', bk.putSettings);
+    r.post('/backup/test', bk.test);
+    r.post('/backup/dramas/:id', bk.backupDrama);
+    r.get('/backup/snapshots', bk.snapshots);
+    r.post('/backup/restore', bk.restore);
+    r.delete('/backup/snapshots', bk.deleteSnapshot);
+    r.get('/backup/status', bk.status);
+    r.get('/backup/runs', bk.runs);
+  }
+  // P2-C 登录：短信验证码 / 微信扫码（透传云端，见 routes/cloud.js）
+  if (cloud) {
+    const c = require('./cloud')(cloud, log);
+    r.post('/account/sms/send', c.smsSend);
+    r.post('/account/sms/login', c.smsLogin);
+    r.post('/account/wechat/qr', c.wechatQr);
+    r.get('/account/wechat/qr/:ticket', c.wechatQrStatus);
+    r.post('/account/wechat/qr/:ticket/confirm', c.wechatConfirm);
+    r.post('/account/wechat/login', c.wechatLogin);
+  }
+  // P3-S 工作室版基础：身份 / 成员管理转发云端，共享角色库与模板在对象存储 shared/<studio_id>/ 下
+  if (extras.studio) {
+    const st = require('./studio')(extras.studio, log);
+    r.get('/studio/identity', st.identity);
+    r.put('/studio/current', st.setCurrent);
+    r.post('/studio/studios', st.createStudio);
+    r.get('/studio/studios/:id', st.detail);
+    r.post('/studio/studios/:id/invites', st.invite);
+    r.delete('/studio/studios/:id/invites/:inviteId', st.revokeInvite);
+    r.post('/studio/accept', st.accept);
+    r.delete('/studio/studios/:id/members/:accountId', st.removeMember);
+    r.put('/studio/studios/:id/members/:accountId/role', st.setRole);
+    r.get('/studio/shared/:kind', st.listShared);
+    r.post('/studio/shared/characters/publish', st.publishCharacter);
+    r.post('/studio/shared/characters/pull', st.pullCharacter);
+    r.post('/studio/shared/templates/publish', st.publishTemplate);
+    r.post('/studio/shared/templates/pull', st.pullTemplate);
+    r.get('/studio/records', st.records);
   }
 
   return r;

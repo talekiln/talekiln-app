@@ -62,9 +62,31 @@ function configureEnabled(cfgOrList) {
   return getEnabled();
 }
 
-function resetEnabled() { enabled = [...DEFAULT_ENABLED]; }
+function resetEnabled() { enabled = [...DEFAULT_ENABLED]; pluginIds = () => []; }
 function getEnabled() { return [...enabled]; }
 function isEnabled(id) { return enabled.includes(id); }
+
+/**
+ * P3-P: installed plugins extend the provider set. The plugin host (src/plugins) registers a function returning the
+ * ids of plugins that are loaded and switched on. Everything that asks "may this provider be used" (registry,
+ * queue providers, /ai-tasks validation, generation provider choice) reads availableProviders() / isProviderAvailable();
+ * the onboarding wizard, vendor console links and the catalog keep using the built-in set (getEnabled / isEnabled).
+ * A plugin can never shadow a built-in id.
+ */
+let pluginIds = () => [];
+function registerPluginProviders(fn) { pluginIds = typeof fn === 'function' ? fn : () => []; }
+function activePluginIds() {
+  let ids = [];
+  try { ids = pluginIds() || []; } catch (_) { ids = []; }
+  return ids.filter((id) => typeof id === 'string' && !Object.prototype.hasOwnProperty.call(KNOWN_PROVIDERS, id));
+}
+function availableProviders() {
+  const out = [...enabled];
+  for (const id of activePluginIds()) if (!out.includes(id)) out.push(id);
+  return out;
+}
+function isProviderAvailable(id) { return enabled.includes(id) || activePluginIds().includes(id); }
+function isBuiltin(id) { return Object.prototype.hasOwnProperty.call(KNOWN_PROVIDERS, id); }
 
 /** Meta of enabled providers, in configured order. */
 function listEnabledMeta() { return enabled.map((id) => KNOWN_PROVIDERS[id]); }
@@ -85,4 +107,5 @@ function enabledLabels(joiner = '或') { return listEnabledMeta().map((m) => m.l
 module.exports = {
   KNOWN_PROVIDERS, DEFAULT_ENABLED, normalizeEnabled, configureEnabled, resetEnabled,
   getEnabled, isEnabled, listEnabledMeta, providerForAlias, enabledAliases, enabledLabels,
+  registerPluginProviders, activePluginIds, availableProviders, isProviderAvailable, isBuiltin,
 };

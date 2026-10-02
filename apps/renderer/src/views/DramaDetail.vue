@@ -22,6 +22,7 @@
           <el-button type="primary" plain @click="goCanvasMode">
             <el-icon><Grid /></el-icon>画布模式
           </el-button>
+          <el-button plain data-test="open-batch" @click="router.push(`/project/${route.params.id}/batch`)">批量生成</el-button>
         </div>
       </div>
     </header>

@@ -110,6 +110,30 @@ export function createApi({ base = '/api', fetchImpl, getToken = () => null, onU
     updateAnnouncement: (id, patch) => json('PUT', `/admin/announcements/${enc(id)}`, patch),
     deleteAnnouncement: (id) => json('DELETE', `/admin/announcements/${enc(id)}`),
 
+    // 模板市场（P3-T）
+    listTemplates: () => json('GET', '/admin/templates'),
+    getTemplate: (id) => json('GET', `/admin/templates/${enc(id)}`),
+    createTemplate: (body) => json('POST', '/admin/templates', body),
+    updateTemplate: (id, patch) => json('PUT', `/admin/templates/${enc(id)}`, patch),
+    deleteTemplate: (id) => json('DELETE', `/admin/templates/${enc(id)}`),
+    addTemplateVersion: (id, body) => json('POST', `/admin/templates/${enc(id)}/versions`, body),
+    publishTemplateVersion: (id, vid, published = true) => json('POST', `/admin/templates/${enc(id)}/versions/${enc(vid)}/${published ? 'publish' : 'unpublish'}`, {}),
+
+    // 插件审核与官方签名（P3-P）；签名私钥只在云端服务器上，后台只发指令
+    listPlugins: (f = {}) => json('GET', '/admin/plugins' + qs({ status: f.status, limit: f.limit })),
+    getPlugin: (id) => json('GET', `/admin/plugins/${enc(id)}`),
+    submitPlugin: (body) => json('POST', '/admin/plugins', body),
+    approvePlugin: (id, notes) => json('POST', `/admin/plugins/${enc(id)}/approve`, { notes: notes || '' }),
+    rejectPlugin: (id, notes) => json('POST', `/admin/plugins/${enc(id)}/reject`, { notes: notes || '' }),
+    signPlugin: (id, notes) => json('POST', `/admin/plugins/${enc(id)}/sign`, { notes: notes || '' }),
+    pluginSigningKey: () => json('GET', '/admin/plugins/signing-key'),
+
+    // 工作室（P3-S）：只读列表 + 调整席位数 / 状态（席位定价待定）
+    listStudios: () => json('GET', '/admin/studios'),
+    getStudio: (id) => json('GET', `/admin/studios/${enc(id)}`),
+    setStudioSeats: (id, body) => json('PUT', `/admin/studios/${enc(id)}/seats`, body),
+    setStudioStatus: (id, status) => json('PUT', `/admin/studios/${enc(id)}/status`, { status }),
+
     // 管理员与审计
     listAdmins: () => json('GET', '/admin/admins'),
     grantAdmin: (body) => json('POST', '/admin/admins', body),

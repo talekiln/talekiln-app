@@ -34,7 +34,7 @@ Node { id, type, params, legacy_id? }
 | `script_line` | 剧本里的一行（旁白、对白、动作、场景标题） | `kind`, `speaker`, `text` | — |
 | `shot` | 一个镜头（分镜行） | `title, description, location, time, shot_type, angle, movement, image_prompt, video_prompt, characters[], duration_ms` | 来自若干 `script_line` 的 `derives` 边 |
 | `image` | 首帧图生成 | `model, seed`；生成输入 `reference_hashes[]`（可选，锁定参考图哈希，有序） | 来自 `shot` |
-| `video` | 视频生成 | `model, seed`；生成输入 `tail_frame_hash`（可选） | 来自 `image` 和 `shot` |
+| `video` | 视频生成 | `model, seed`；生成输入 `reference_hashes[]`（可选，视频请求直接带的锁定参考图，P3-C）、`tail_frame_hash`（可选） | 来自 `image` 和 `shot` |
 | `narration` | 配音 | `voice, speed` | 来自 `script_line` |
 | `compose` | 合成（每集一个） | `segments[]`, `music[]`, `fps`, `size`, `aigc_label` | 来自各镜头的 `video`、`narration` |
 
@@ -53,7 +53,7 @@ Node { id, type, params, legacy_id? }
 - 校验：端口类型、环检测、节点存在、`layout` 坐标为有限数、`children` 无重复、每个 shot 在且仅在一个 group 里、compose 的 segments 引用的 shot 必须存在、片段区间合法。
 - 意图层（每个视图一组，只产出事务，不直接改图）：
   - 剧本：`rewriteLine, insertLine, deleteLine, splitLine, mergeLines, reorderLines`
-  - 分镜：`setShotField, splitShot, mergeShots, reorderShots, moveShotToGroup, addShot, deleteShot, regenerateShot`
+  - 分镜：`setShotField, splitShot, mergeShots, reorderShots, moveShotToGroup, addShot, deleteShot, regenerateShot`；P3-R 选镜改片：`editShotRegion`（把 `{base, mode, t0_ms, t1_ms, rect, prompt}` 写进 video 节点的 `edit` 参数，进 cacheKey）、`adoptShotVersion`（采用某个视频版本并让 `edit` 参数跟随该版本的 `metadata.edit`，采用改片结果与切回原版本都保持新鲜），见 docs/phase3-region-edit.md
   - 时间线：`trimSegment, moveSegment（跨镜头边界 = 改镜头顺序，同镜头内 = 改 gap）, splitSegment, deleteSegment, setTransition, addMusic`
   - 画布：`moveNode（只改 layout）, setNodeParam（属性面板改参数）, connectNodes, disconnectNodes, addNodeAt, deleteNode`
   - 生成输入（服务内部用，不对 REST 放行）：`setShotReferences`，见 §13
@@ -160,7 +160,7 @@ Node { id, type, params, legacy_id? }
 | `GET /episodes/:id/graph` | 全图 + `stale` 集合 + `seq` + `can_undo/can_redo` |
 | `GET /episodes/:id/views/{script,shots,timeline,canvas}` | 四个视图（`shot` 同 `shots`） |
 | `POST /episodes/:id/tx` | `{tx_id, label, ops}` 原始 op 事务 |
-| `POST /episodes/:id/intent` | `{view, name, args, tx_id?}`；只放行规格 §3 的 26 个意图（K4 起含 `canvas.setNodeParam`），`setVoice`/`recordGeneration`/`setShotReferences`/`moveNodes` 等未放行 |
+| `POST /episodes/:id/intent` | `{view, name, args, tx_id?}`；只放行规格 §3 的 27 个意图（K4 起含 `canvas.setNodeParam`，P3-R 起含 `shot.editShotRegion`），`setVoice`/`recordGeneration`/`setShotReferences`/`adoptShotVersion`（经 `POST /shots/:id/adopt-version`）/`moveNodes` 等未放行 |
 | `POST /episodes/:id/undo`、`/redo` | `{tx_id?}` |
 | `POST /episodes/:id/import-legacy` | 首次 201，已存在 200 |
 | `GET /episodes/:id/versions` | 只读（P2-D）：每个生成类节点的版本列表，含采用标记、是否匹配当前输入（`current`）、产生时间（取自加入该版本的日志，导入版本为 null）、资产与元数据摘要 |
@@ -280,8 +280,8 @@ Node { id, type, params, legacy_id? }
 代码：`packages/kernel/src/{graph,projections}.js`、`intents/{canvas,shot,util}.js`、`packages/local/src/kernel/inputs.js`、`generation/service.js`；测试：一致性套件新增 4 个场景、`kernel/test/sceneKeyG02.test.js`、`local/test/generation.test.js` 新增一组。
 
 ### 14.1 生成输入是节点参数
-- 以前锁定的参考图、尾帧、所选模型只进队列幂等键，不进 cacheKey，改了它们新鲜的节点仍显示“新鲜”。现在是节点自己的参数：`image.model`、`image.reference_hashes[]`、`video.model`、`video.tail_frame_hash`（后两个可选参数，空 = 参数不存在，所以与旧图的 cacheKey 完全兼容，设置再清除回到原 key）。**不是特例**：和 `seed`、`voice` 一样走 `params -> cacheKey`，预言机（嵌套签名里本来就含 params）自动覆盖。
-- 意图 `shot.setShotReferences(shot, { image_model, video_model, reference_hashes, tail_frame_hash })`：没给的字段不动，空数组 / null / 空串 = 清除，值没变不产生 op。校验表 `NODE_PARAM_RULES`（graph.js）与画布共用。
+- 以前锁定的参考图、尾帧、所选模型只进队列幂等键，不进 cacheKey，改了它们新鲜的节点仍显示“新鲜”。现在是节点自己的参数：`image.model`、`image.reference_hashes[]`、`video.model`、`video.reference_hashes[]`（P3-C 起视频请求也直接带锁定参考图）、`video.tail_frame_hash`（哈希类参数均可选，空 = 参数不存在，所以与旧图的 cacheKey 完全兼容，设置再清除回到原 key）。**不是特例**：和 `seed`、`voice` 一样走 `params -> cacheKey`，预言机（嵌套签名里本来就含 params）自动覆盖。
+- 意图 `shot.setShotReferences(shot, { image_model, video_model, reference_hashes, video_reference_hashes, tail_frame_hash })`：没给的字段不动，空数组 / null / 空串 = 清除，值没变不产生 op。校验表 `NODE_PARAM_RULES`（graph.js）与画布共用。
 - 效果（一致性场景 `change_references / change_tail_frame / change_image_model / change_video_model`，分镜入口 `setShotReferences`、画布入口 `setNodeParam`，两入口终态必须相同）：改参考图或出图模型 -> 该镜头 image + video + 合成过期；改尾帧或视频模型 -> video + 合成过期；其余镜头、配音不动；生成一次后改回去，cacheKey 回到最初的值，最初的版本 v_1 直接重新采用（不新增版本 = 零成本）。
 - 写入方：生成服务在估算/建任务前同步（估算只在副本上演算，建任务前提交一个事务）：先写参考图哈希与出图模型，在这张图上做计划得到首帧形态（决定尾帧是否生效、选哪种视频模型），再写尾帧与视频模型。参考图锁定/解除（`PUT/DELETE /reference-locks/:type/:id`）和尾帧绑定（`bindStoryboardFrameImage` 的尾帧分支）在改完旧表后调 `syncReferences`，所以界面上的“过期”立刻出现（只写参考图与尾帧，不碰模型）。其余直接写 `last_frame_*` 列的入口（见 12.5）不同步，由下次估算/建任务前的同步兜底。
 - 任务 `_gen.inputs` 记录建任务时的输入，写回时进版本的 `metadata.inputs`。
@@ -289,7 +289,7 @@ Node { id, type, params, legacy_id? }
 - 顺带修了 I1 的一个字段名错误：生成服务写版本元数据用的是 `meta`，内核（真实片长投影）读的是 `metadata`，所以生成视频的真实时长一直没进时间线；现统一为 `metadata`。
 
 ### 14.2 `canvas.setNodeParam(g, nodeId, path, value)`
-- 只允许该节点类型白名单里的顶层参数（`NODE_PARAM_RULES`：script_line 的 kind/speaker/text；shot 的各文字字段、characters、duration_ms；image 的 model/seed/reference_hashes；video 的 model/seed/tail_frame_hash；narration 的 voice/speed；compose 的 fps/size/aigc_label）并校验取值；`segments / music / subtitle_overrides` 拒绝（有时间线意图）。可选参数用 `null` 清除，必填参数清除或类型不对 -> `INTENT`（REST 400）。值没变 = 空事务。镜头 `duration_ms` 委托给 `setShotField`（片段联动）。事务标签 `setNodeParam`。
+- 只允许该节点类型白名单里的顶层参数（`NODE_PARAM_RULES`：script_line 的 kind/speaker/text；shot 的各文字字段、characters、duration_ms；image 的 model/seed/reference_hashes；video 的 model/seed/reference_hashes/tail_frame_hash；narration 的 voice/speed；compose 的 fps/size/aigc_label）并校验取值；`segments / music / subtitle_overrides` 拒绝（有时间线意图）。可选参数用 `null` 清除，必填参数清除或类型不对 -> `INTENT`（REST 400）。值没变 = 空事务。镜头 `duration_ms` 委托给 `setShotField`（片段联动）。事务标签 `setNodeParam`。
 - REST `POST /episodes/:id/intent` 白名单加入 `canvas.setNodeParam`（args：`node_id, path, value`），错误码沿用 `INTENT`，错误码表无需新增。一致性套件的 `canvasEdit` 已改为调用它（原来是一条裸 `setParam` 事务）。
 
 ### 14.2b `canvas.renameGroup(g, groupId, title)`

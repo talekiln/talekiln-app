@@ -59,6 +59,13 @@
 - 分档：`bucket = sha256("talekiln-rollout|<通道>|<版本>|<deviceId>")` 前 4 字节 `mod 100`，命中条件 `bucket < rolloutPercent`。结果只取决于输入，**与时间、请求次数、服务器实例无关**，可复现。盐里带通道与版本，所以同一设备在不同发布里的档位互相独立（不会总是第一批）；调高百分比只会纳入更多设备，已命中的设备不会丢。算法改动会让全网设备重新分档，测试里锁定了这一点。
 - `forced = 发布的 forced 标记，或当前版本低于该发布的 minVersion`。注意 `minVersion` 只在设备被灰度命中该发布时才生效，所以“强制低版本升级”要配合 100% 全量。
 
+#### 1.4.1 桌面端接入（P3-C 补）
+
+- `apps/desktop/cloud-check.js`（副作用）+ `cloud-check-logic.js`（纯函数，`node:test`）：主进程启动后 **30 秒**首次、之后**每 6 小时**各调一次 `GET /updates/check?version=&channel=&deviceId=&platform=&arch=` 与 `GET /public/announcements?channel=`。`channel` 由 electron-updater 的渠道映射（`latest → stable`、`beta → beta`）；`deviceId` 首次生成后存 `<userData>/device-id`，同一台机器始终相同；`platform / arch` 云端目前忽略（zod 剥掉未知键），先带上。base URL 沿用本机服务的 `cloud.base_url`（`configs/config.yaml`，`TALEKILN_CLOUD_URL` 可覆盖），HTTP 层直接复用 `packages/local/src/cloud/http.js`；占位域名、离线、云端不可达一律静默（只写 `main.log`，保留上一次结果）。
+- 结果经 IPC `cloud:status` 推给渲染端；`preload.js`（sandbox + contextIsolation）只暴露 `window.talekilnDesktop.{getCloudStatus, checkCloudNow, downloadUpdate, onCloudStatus}`，不暴露 `ipcRenderer`。渲染端：`utils/updatesView.js`（纯函数，`node:test`）、`composables/useDesktopCloud.js`；「关于」页显示“有新版本 x.y.z，去下载”（强制更新加说明）或“已是最新 / 尚未检查 / 检查失败”；首页顶部 `AnnouncementBar.vue` 显示公告（按级别 critical > warn > info，最多 5 条），可关闭，关闭按公告 `id` 记在 `localStorage`（`talekiln.announcements.dismissed`，上限 200 条）。
+- “去下载”不含下载地址（接口本来就不给）：已启用 electron-updater 时触发它的手动检查（有结果弹窗、下载后经用户确认安装）；未启用时打开 `update-config.json` 的 `downloadPageUrl`（https、非占位），都没有则提示去官网下载页。
+- **未验证**：没有在打包后的 Electron 里点过（沙箱无图形环境）；只有主进程控制器（假 http + 假计时器）与渲染端纯函数的单元测试；`/public/announcements` 的时间窗与渠道在客户端又兜底过滤了一次，和云端口径一致但没有做联调。
+
 ### 1.5 推广漏斗
 
 `GET /admin/stats/funnel?days=14`（1–90）。**这是按时间窗的汇总，不是逐人追踪**：
@@ -133,7 +140,7 @@ pnpm --filter @talekiln/cloud test:pg
 
 - 后台界面未在真实浏览器里点过；订单抽屉里的“登记发票”用了一个输入框按 `抬头 | 税号 | 邮箱` 解析，是权宜写法。
 - 订单列表只显示账号 ID，没有联表显示邮箱和套餐代码（接口没改）。
-- 桌面端没有接 `/updates/check`；公告也没有接到桌面端展示。
+- ~~桌面端没有接 `/updates/check`；公告也没有接到桌面端展示。~~ 已在三期 P3-C 接入（见 1.4.1），但未在真机点过。
 - 审计是尽力而为，不与业务同事务，也没做防篡改。
 - 推广漏斗不是逐人归因（见 1.5）。
 - 管理员无法自助改口令，也没有口令重置流程（授予时给初始口令，之后只能运维处理）。

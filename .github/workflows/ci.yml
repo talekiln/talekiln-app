@@ -3,6 +3,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   test:
@@ -15,8 +16,13 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # 人脸模型（P3-C 人脸级一致性，约 10 MB，固定哈希）：没有它们 face 集成测试会跳过，这里取来让它真的跑
+      - run: node scripts/fetch-face-models.mjs
       - run: pnpm secrets:scan
+      # spec 报告器会在末尾单独列出失败用例和错误；TAP 输出夹在几万行迁移日志里，日志尾部看不到失败的是谁
       - run: pnpm test
+        env:
+          NODE_OPTIONS: --test-reporter=spec
       - run: pnpm build
       - run: pnpm --filter @talekiln/admin build
 
@@ -53,8 +59,44 @@ jobs:
       - run: pnpm --filter @talekiln/cloud exec prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
       - run: pnpm --filter @talekiln/cloud test:pg
 
+  # 云备份（P3-K）：对一次性的 MinIO 容器跑一遍 S3 兼容客户端与「备份 -> 列表 -> 恢复 -> 清理」链路（需要 Linux runner 跑 Docker）。
+  # 下面的账号口令仅用于该一次性容器，不是任何真实环境的凭据；桶由客户端自己创建，不另装 mc。
+  backup-minio:
+    runs-on: ubuntu-latest
+    env:
+      TALEKILN_TEST_S3_ENDPOINT: http://127.0.0.1:9000
+      TALEKILN_TEST_S3_BUCKET: talekiln-ci
+      TALEKILN_TEST_S3_ACCESS_KEY: ci
+      TALEKILN_TEST_S3_SECRET_KEY: ci-throwaway-minio
+      TALEKILN_TEST_S3_CREATE_BUCKET: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm native:node
+      - name: Start a throwaway S3 server (MinIO first, SeaweedFS fallback)
+        run: bash scripts/ci-s3-server.sh
+      - name: Create the test bucket with the client itself
+        working-directory: packages/local
+        run: |
+          node -e "const { createS3Client } = require('./src/backup/s3'); const e = process.env;
+            createS3Client({ endpoint: e.TALEKILN_TEST_S3_ENDPOINT, bucket: e.TALEKILN_TEST_S3_BUCKET, accessKey: e.TALEKILN_TEST_S3_ACCESS_KEY, secretKey: e.TALEKILN_TEST_S3_SECRET_KEY })
+              .createBucket().then((r) => console.log('bucket', JSON.stringify(r)))"
+      - name: Live backup test against MinIO
+        working-directory: packages/local
+        run: node --test --test-reporter=spec test/backup.live.test.js
+      - if: always()
+        run: docker logs minio --tail 50 2>/dev/null || tail -n 50 "$RUNNER_TEMP"/s3-server/*.log || true
+
   package:
     needs: test
+    # 私有仓库的 Actions 分钟有限（Windows 计 2 倍、macOS 计 10 倍）。安装包只在 main、手动触发和非草稿 PR 上构建；
+    # 草稿 PR 每次推送只跑测试。2026-10-02 一天内 Actions 分钟被用光，所有作业 3 秒内无日志失败。
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,6 +106,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # 人脸模型（固定哈希）随安装包内置：resources/models/face
+      - run: node scripts/fetch-face-models.mjs
       - run: pnpm build
 
       # 渲染核心 lycore 与 ffmpeg（LGPL，固定哈希）随安装包内置：resources/lycore/
@@ -125,6 +169,8 @@ jobs:
   # runner 标签随 GitHub 调整（Intel 镜像尤其会下线），改标签前先查 GitHub 当前文档。整个作业从未在真实 runner 上跑过。
   package-macos:
     needs: test
+    # macOS runner 每分钟计 10 分钟：只在 main、手动触发或带 ci:macos 标签的 PR 上跑
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci:macos')
     strategy:
       fail-fast: false
       matrix:
@@ -141,6 +187,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # 人脸模型（固定哈希）随安装包内置：resources/models/face
+      - run: node scripts/fetch-face-models.mjs
       - run: pnpm secrets:scan
       - run: pnpm test:scripts
       - run: pnpm build

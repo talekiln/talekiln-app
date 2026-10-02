@@ -45,6 +45,10 @@ test('capabilities: known, unique, video pair together', () => {
   assert.match(errs({ ...good(), capabilities: ['llm.chat', 'llm.chat'] }), /duplicate/);
   assert.match(errs({ ...good(), capabilities: ['video.submit'] }), /declared together/);
   assert.equal(sdk.validateManifest({ ...good(), capabilities: ['video.submit', 'video.poll'] }).ok, true);
+  // SDK 1.1：video.edit 的任务同样经 video.poll 轮询，所以必须一起声明
+  assert.match(errs({ ...good(), capabilities: ['video.edit'] }), /video\.edit requires video\.poll/);
+  assert.equal(sdk.validateManifest({ ...good(), capabilities: ['video.edit', 'video.poll', 'video.submit'] }).ok, true);
+  assert.ok(sdk.CAPABILITIES.includes('video.edit'));
 });
 
 test('permissions: network hosts must be plain hostnames; wildcard-all, schemes, ports rejected', () => {

@@ -120,6 +120,7 @@ test('预言机会抓到：内核的 cacheKey 漏掉生成输入参数（参考�
   const c = O.chain(g, T);
   const edits = {
     'image.reference_hashes': K.intents.shot.setShotReferences(g, T, { reference_hashes: ['ref:a'] }),
+    'video.reference_hashes': K.intents.shot.setShotReferences(g, T, { video_reference_hashes: ['ref:a'] }),
     'video.tail_frame_hash': K.intents.shot.setShotReferences(g, T, { tail_frame_hash: 'tail:a' }),
     'image.model': K.intents.shot.setShotReferences(g, T, { image_model: 'm-a' }),
     'video.model': K.intents.shot.setShotReferences(g, T, { video_model: 'm-b' }),
@@ -160,10 +161,14 @@ test('setNodeParam / setShotReferences：校验与空事务', () => {
   assert.equal(canvas.setNodeParam(g, c.image, ['seed'], g.nodes[c.image].params.seed).ops.length, 0, 'same value = empty tx');
   assert.equal(canvas.setNodeParam(g, c.image, ['seed'], 5, { tx_id: 'x' }).label, 'setNodeParam');
   // 设置再清除：回到与从未设置过完全相同的图（cacheKey 也相同）
-  const set = K.applyTx(g, shot.setShotReferences(g, T, { reference_hashes: ['r'], tail_frame_hash: 't' })).graph;
-  const back = K.applyTx(set, shot.setShotReferences(set, T, { reference_hashes: [], tail_frame_hash: null })).graph;
+  const set = K.applyTx(g, shot.setShotReferences(g, T, { reference_hashes: ['r'], video_reference_hashes: ['r'], tail_frame_hash: 't' })).graph;
+  assert.deepEqual(set.nodes[c.video].params.reference_hashes, ['r'], 'video node records its own reference hashes');
+  const back = K.applyTx(set, shot.setShotReferences(set, T, { reference_hashes: [], video_reference_hashes: [], tail_frame_hash: null })).graph;
   assert.equal(K.toJSON(back), K.toJSON(g));
   assert.deepEqual(K.staleSet(back), []);
+  // 只改视频的参考图：首帧图保持新鲜，视频与合成过期
+  const onlyVideo = K.applyTx(g, shot.setShotReferences(g, T, { video_reference_hashes: ['r'] })).graph;
+  assert.ok(!K.staleSet(onlyVideo).includes(c.image) && K.staleSet(onlyVideo).includes(c.video));
   // 镜头时长经 setNodeParam 与 setShotField 一致（片段联动）
   const d = g.nodes[T].params.duration_ms + 500;
   assert.equal(K.toJSON(K.applyTx(g, canvas.setNodeParam(g, T, ['duration_ms'], d, { tx_id: 'a' })).graph), K.toJSON(K.applyTx(g, shot.setShotField(g, T, { duration_ms: d }, { tx_id: 'a' })).graph));

@@ -77,7 +77,13 @@ function parseSbChars(raw) {
  * 导出一个剧集为 ZIP Buffer
  * @returns {Buffer}
  */
-function exportDrama(db, cfg, log, dramaId) {
+/**
+ * 导出项目 ZIP。
+ * @param {object} [opts]
+ * @param {string} [opts.outFile] 给出时把 ZIP 写到这个文件并返回 { file, size, title, version }（云备份用：不把整包 Buffer 交出去）；
+ *                                缺省返回 { buffer, title, version }（导出下载接口沿用）。
+ */
+function exportDrama(db, cfg, log, dramaId, opts = {}) {
   const storagePath = getStoragePath(cfg);
 
   // ---- 1. 读取 drama 基本信息 ----
@@ -444,7 +450,12 @@ function exportDrama(db, cfg, log, dramaId) {
   }
 
   log.info('Drama exported', { drama_id: dramaId, title: drama.title });
-  return { buffer: zip.toBuffer(), title: drama.title };
+  if (opts && opts.outFile) {
+    fs.mkdirSync(path.dirname(opts.outFile), { recursive: true });
+    zip.writeZip(opts.outFile);
+    return { file: opts.outFile, size: fs.statSync(opts.outFile).size, title: drama.title, version: EXPORT_VERSION };
+  }
+  return { buffer: zip.toBuffer(), title: drama.title, version: EXPORT_VERSION };
 }
 
-module.exports = { exportDrama };
+module.exports = { exportDrama, EXPORT_VERSION };

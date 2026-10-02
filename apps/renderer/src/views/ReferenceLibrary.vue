@@ -43,6 +43,12 @@
             <el-button type="warning" plain @click="unlock">解除锁定</el-button>
           </template>
           <div v-else class="hint">尚未锁定。生成候选图后选择一张锁定。</div>
+          <!-- P3-C 自动挑选：按清晰度、分辨率与四视图相似度给本机候选图排序（主图、额外图、已生成的图） -->
+          <div v-if="kind === 'character'" class="auto-pick">
+            <el-button :loading="picking" :disabled="generating" data-test="auto-pick" @click="autoPick">自动挑选参考图</el-button>
+            <el-checkbox v-model="autoLock" data-test="auto-pick-lock">挑完自动锁定第一名</el-checkbox>
+            <span class="hint">按清晰度、分辨率与四视图相似度给本机候选图排序，排好的候选显示在下方。</span>
+          </div>
         </div>
 
         <div class="gen-bar">
@@ -53,7 +59,8 @@
         <div class="cands">
           <div v-for="c in cands" :key="c.key" class="cand" :class="{ locked: isLockedCandidate(c.rec, currentLock) }">
             <el-image v-if="imgSrc(c.rec)" :src="imgSrc(c.rec)" fit="cover" class="cand-img" :preview-src-list="[imgSrc(c.rec)]" />
-            <div v-else class="cand-img cand-wait">
+            <div v-if="c.rec?.sourceLabel" class="hint cand-rank">{{ c.rec.sourceLabel }} · {{ Math.round(c.rec.score) }} 分</div>
+            <div v-if="!imgSrc(c.rec)" class="cand-img cand-wait">
               <span v-if="c.rec?.status === 'failed'">失败：{{ c.rec.error_msg || '未知错误' }}</span>
               <span v-else>生成中…</span>
             </div>
@@ -79,7 +86,9 @@ import { dramaAPI } from '@/api/drama'
 import { aiAPI } from '@/api/ai'
 import { imagesAPI } from '@/api/images'
 import { referenceLocksAPI } from '@/api/referenceLocks'
+import { consistencyAPI } from '@/api/consistency'
 import { getSelectableModels } from '@/utils/modelSelection'
+import { autoPickSummary, rankedToCandidates } from '@/utils/consistencyView'
 import {
   CANDIDATE_COUNT, buildCandidateRequest, candidateImageSrc, indexLocks, isLockable, isLockedCandidate, lockBody,
 } from '@/utils/referenceLibrary'
@@ -95,6 +104,8 @@ const selectedId = ref(null)
 const models = ref([])
 const model = ref('')
 const generating = ref(false)
+const picking = ref(false)
+const autoLock = ref(true)
 const cands = ref([])
 let timer = null
 let keySeq = 0
@@ -182,6 +193,23 @@ async function lock(rec) {
   }
 }
 
+/** P3-C：内核给本机候选图排序，排好的显示为候选（可手动锁定其它张）；勾选时第一名已在后端锁定并同步进内核。 */
+async function autoPick() {
+  if (!current.value || kind.value !== 'character') return
+  picking.value = true
+  try {
+    const r = await consistencyAPI.autoPick(current.value.id, { lock: autoLock.value })
+    stopPolling()
+    cands.value = rankedToCandidates(r).map((rec) => ({ key: ++keySeq, rec }))
+    if (r.lock) locks.value = { ...locks.value, [`character:${current.value.id}`]: r.lock }
+    ElMessage.success(autoPickSummary(r))
+  } catch (e) {
+    ElMessage.error(e.message || '自动挑选失败')
+  } finally {
+    picking.value = false
+  }
+}
+
 async function unlock() {
   await referenceLocksAPI.unlock(kind.value, current.value.id)
   const next = { ...locks.value }
@@ -211,6 +239,8 @@ onBeforeUnmount(stopPolling)
 .lock-box { border: 1px dashed var(--el-border-color); border-radius: 6px; padding: 12px; margin: 12px 0; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .lock-title { font-weight: 600; }
 .lock-img { width: 200px; height: 200px; border-radius: 4px; }
+.auto-pick { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+.cand-rank { font-size: 12px; }
 .gen-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .cands { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
 .cand { display: flex; flex-direction: column; gap: 6px; padding: 6px; border: 2px solid transparent; border-radius: 6px; }

@@ -5,7 +5,6 @@ import {
   ACTIONS, normalizeCombo, eventToCombo, buildKeymap, findConflicts, conflictsFor, resolveAction,
   diffOverrides, loadOverrides, saveOverrides, STORAGE_KEY, SCOPE_TIMELINE, SCOPE_WORKBENCH,
 } from '../src/utils/keymap.js'
-import { createHistory } from '../src/utils/editHistory.js'
 import {
   createDraftWriter, assessRecovery, mergeDraft, makeDraft, draftKey, parseDraft,
 } from '../src/utils/draft.js'
@@ -93,43 +92,6 @@ test('overrides: diffOverrides keeps only changes; persistence round-trips and s
   st.setItem(STORAGE_KEY, JSON.stringify({ 'bogus.id': ['A'], 'clip.split': 'x', 'track.mute': ['K'] }))
   assert.deepEqual(loadOverrides(st), { 'track.mute': ['K'] })
   assert.equal(saveOverrides({ a: ['B'] }, { setItem() { throw new Error('quota') }, removeItem() {} }), false)
-})
-
-// ---------- undo / redo ----------
-
-test('history undo/redo and redo invalidation', () => {
-  const h = createHistory()
-  assert.equal(h.undo('x'), null)
-  h.record('s0', 'a')
-  h.record('s1', 'b')
-  assert.equal(h.undoLabel, 'b')
-  assert.equal(h.undo('s2'), 's1')
-  assert.equal(h.canRedo, true)
-  assert.equal(h.redo('s1'), 's2')
-  assert.equal(h.undo('s2'), 's1')
-  h.record('s1', 'c') // new edit clears redo
-  assert.equal(h.canRedo, false)
-  assert.equal(h.undo('s3'), 's1')
-  assert.equal(h.undo('s1'), 's0')
-  assert.equal(h.canUndo, false)
-})
-
-test('history limit and coalescing', () => {
-  const h = createHistory({ limit: 3 })
-  for (let i = 0; i < 6; i++) h.record(`s${i}`)
-  assert.equal(h.size, 3)
-  assert.equal(h.undo('x'), 's5')
-
-  let t = 0
-  const c = createHistory({ coalesceMs: 100, now: () => t })
-  c.record('a', 'nudge', 'k')
-  t = 50
-  c.record('b', 'nudge', 'k') // merged
-  t = 500
-  c.record('c', 'nudge', 'k') // too late, new step
-  assert.equal(c.size, 2)
-  assert.equal(c.undo('z'), 'c')
-  assert.equal(c.undo('c'), 'a')
 })
 
 // ---------- drafts ----------

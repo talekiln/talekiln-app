@@ -1,0 +1,164 @@
+{
+  "id": "official-suspense-seventh-visitor",
+  "name": "悬疑反转 · 第七个访客",
+  "version": "1.0.0",
+  "genre": "suspense",
+  "tier": "pro",
+  "description": "一集密室悬疑短剧：监控里的最后访客是女主自己、反锁的门、两只茶杯、一把新配的钥匙、放大后的创可贴。十一个镜头约 59 秒，四个槽位（记者、刑警、房东太太、侄子），每两镜一个信息点，结尾双重嫌疑留钩，付费示例。",
+  "cover": null,
+  "music_hint": "低频脉冲加单音钢琴，每出现一个线索敲一下钟，反转镜头前留两秒静音",
+  "style": {
+    "name": "冷调悬疑",
+    "preset": "cinematic",
+    "prompt": "悬疑剧电影感画面，低饱和青蓝色调，监控蓝光与白炽灯暖黄对比，硬光与深阴影，雨夜反光，浅景深突出线索物件，轻微胶片颗粒",
+    "aspect_ratio": "9:16"
+  },
+  "character_slots": [
+    { "id": "lead", "name": "许昭", "role": "女主", "description": "社会新闻记者，敏锐、嘴硬，被监控指认为死者的最后访客", "appearance": "二十八岁女性，齐耳短发，细金属框眼镜，深灰色风衣，斜挎帆布包外袋插着一支录音笔" },
+    { "id": "detective", "name": "老秦", "role": "刑警队长", "description": "话少，眼毒，思考时总在指间转一枚硬币", "appearance": "四十五岁男性，平头夹杂白发，法令纹深，黑色皮夹克，右手拇指和食指间转着一枚旧硬币" },
+    { "id": "neighbor", "name": "周婶", "role": "房东太太", "description": "楼下房东，热心过头，什么都知道一点", "appearance": "五十八岁女性，烫着小卷发，碎花围裙，腰间挂着一大串钥匙，手里拿着抹布" },
+    { "id": "suspect", "name": "陈默", "role": "死者侄子", "description": "温和腼腆，总在不该出现的时候出现", "appearance": "三十岁男性，瘦高，略长的刘海遮住眉毛，浅蓝衬衫扣到最上面一颗，右手食指缠着创可贴" }
+  ],
+  "shots": [
+    {
+      "title": "最后一个访客",
+      "group": "开场",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{detective}}用硬币敲了敲监控定格画面，画面里一个穿风衣的身影站在七楼门口，{{lead}}站在他身后，脸被屏幕的蓝光照亮",
+      "character_slots": ["detective", "lead"],
+      "scene_slot": "公寓楼管理室，深夜，监控屏幕的蓝光是唯一光源",
+      "camera": "特写屏幕拉开到中景",
+      "lines": [
+        { "kind": "dialogue", "speaker": "detective", "text": "死者门口最后一个访客，是你。" },
+        { "kind": "dialogue", "speaker": "lead", "text": "我昨晚十一点才到家。" },
+        { "kind": "dialogue", "speaker": "detective", "text": "监控说，十点零七分。" }
+      ]
+    },
+    {
+      "title": "暴雨夜",
+      "group": "开场",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{lead}}拎着湿透的帆布包走上楼梯，声控灯忽明忽暗，七楼那扇门的门缝下透出一线灯光",
+      "character_slots": ["lead"],
+      "scene_slot": "老式公寓楼道，暴雨夜，墙皮斑驳",
+      "camera": "手持跟拍上楼",
+      "lines": [{ "kind": "narration", "text": "七楼的门，从来不开灯。那天晚上，它亮着。" }]
+    },
+    {
+      "title": "反锁的门",
+      "group": "调查",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{neighbor}}用一串钥匙试开七楼的门，门只开了一道缝，链条锁绷紧，{{detective}}蹲下去看门锁",
+      "character_slots": ["neighbor", "detective"],
+      "scene_slot": "七楼门口，白天，走廊尽头的窗透进灰白天光",
+      "camera": "俯拍门缝特写",
+      "lines": [
+        { "kind": "dialogue", "speaker": "neighbor", "text": "门从里面反锁的，我这把钥匙只能开一道。" },
+        { "kind": "dialogue", "speaker": "detective", "text": "那另一道，是谁关的。" }
+      ]
+    },
+    {
+      "title": "两只茶杯",
+      "group": "调查",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{detective}}戴着手套俯身查看桌面，桌上两只茶杯，一只见底，一只还满着，水面映出天花板的灯",
+      "character_slots": ["detective"],
+      "scene_slot": "死者家客厅，旧式木桌，窗帘半掩",
+      "camera": "特写茶杯缓推",
+      "lines": [
+        { "kind": "action", "text": "桌上两只茶杯，一只喝干了，一只还是满的。" },
+        { "kind": "dialogue", "speaker": "detective", "text": "死者招待了客人。客人没喝。" }
+      ]
+    },
+    {
+      "title": "侄子出现",
+      "group": "调查",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{suspect}}收起滴水的雨伞站在楼梯转角，{{lead}}的目光落在他缠着创可贴的右手食指上",
+      "character_slots": ["suspect", "lead"],
+      "scene_slot": "公寓楼梯转角，雨天，窗外雨声",
+      "camera": "中景过肩",
+      "lines": [
+        { "kind": "dialogue", "speaker": "suspect", "text": "我叔……真的走了？" },
+        { "kind": "dialogue", "speaker": "lead", "text": "你手怎么了。" },
+        { "kind": "dialogue", "speaker": "suspect", "text": "切菜切的。" }
+      ]
+    },
+    {
+      "title": "周婶的话",
+      "group": "调查",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{neighbor}}一边擦灶台一边说话，头也不回，{{lead}}站在厨房门口，手里的笔记本停住了",
+      "character_slots": ["neighbor", "lead"],
+      "scene_slot": "一楼房东家厨房，傍晚，油烟机的灯",
+      "camera": "近景正面，背景虚化",
+      "lines": [
+        { "kind": "dialogue", "speaker": "neighbor", "text": "那老头啊，这半年每周三都有人来，穿风衣，跟你一样瘦。" },
+        { "kind": "dialogue", "speaker": "lead", "text": "……每周三？" }
+      ]
+    },
+    {
+      "title": "录音笔",
+      "group": "反转",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{lead}}把录音笔接上电脑，屏幕上的音频波形在某一段突然变成一条直线",
+      "character_slots": ["lead"],
+      "scene_slot": "许昭的出租屋书桌，深夜，台灯",
+      "camera": "特写波形推进",
+      "lines": [{ "kind": "narration", "text": "录音笔里，昨晚十点到十点十一分，一片空白。" }]
+    },
+    {
+      "title": "硬币",
+      "group": "反转",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{detective}}背对窗户把硬币抛起又接住，{{lead}}坐在对面的椅子上盯着他",
+      "character_slots": ["detective", "lead"],
+      "scene_slot": "派出所小会议室，上午，百叶窗侧光",
+      "camera": "中景侧光",
+      "lines": [
+        { "kind": "dialogue", "speaker": "detective", "text": "监控能改，钥匙能配。只有一样东西改不了。" },
+        { "kind": "dialogue", "speaker": "lead", "text": "什么？" },
+        { "kind": "dialogue", "speaker": "detective", "text": "习惯。" }
+      ]
+    },
+    {
+      "title": "第二把钥匙",
+      "group": "反转",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{detective}}拎起{{neighbor}}腰间那串钥匙，其中一把崭新发亮，{{neighbor}}脸上的笑一点点褪去",
+      "character_slots": ["detective", "neighbor"],
+      "scene_slot": "一楼楼道，白天，门口透进的天光",
+      "camera": "特写钥匙摇到脸部",
+      "lines": [
+        { "kind": "dialogue", "speaker": "detective", "text": "周婶，这把新配的钥匙，开哪扇门？" },
+        { "kind": "dialogue", "speaker": "neighbor", "text": "……我、我忘了。" }
+      ]
+    },
+    {
+      "title": "放大",
+      "group": "反转",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{lead}}把监控截图一点点放大，门把手上的那只手越来越清楚，食指上缠着一圈创可贴",
+      "character_slots": ["lead"],
+      "scene_slot": "管理室监控屏幕前，深夜，蓝光",
+      "camera": "特写屏幕逐级放大",
+      "lines": [
+        { "kind": "action", "text": "画面放大：门把手上的那只手，食指缠着创可贴。" },
+        { "kind": "dialogue", "speaker": "lead", "text": "监控里那个人，不是我。" }
+      ]
+    },
+    {
+      "title": "敲门",
+      "group": "钩子",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{suspect}}撑着伞站在门外，雨水顺着伞骨往下淌，他抬起缠着创可贴的手，轻轻敲了三下门，微笑",
+      "character_slots": ["suspect"],
+      "scene_slot": "许昭出租屋门外走廊，深夜大雨，声控灯刚好亮起",
+      "camera": "低角度仰拍",
+      "lines": [
+        { "kind": "dialogue", "speaker": "suspect", "text": "许记者，我叔叔留了样东西给你。" },
+        { "kind": "narration", "text": "第七个访客，刚刚敲响了门。" }
+      ]
+    }
+  ]
+}

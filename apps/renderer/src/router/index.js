@@ -144,6 +144,41 @@ const router = createRouter({
       name: 'media-library',
       component: () => import('@/views/MediaLibrary.vue'),
       meta: { title: '媒体素材库' }
+    },
+    // P3-B
+    {
+      path: '/project/:dramaId/batch',
+      name: 'batch',
+      component: () => import('@/views/BatchPage.vue'),
+      meta: { title: '批量生成' }
+    },
+    // P3-T
+    {
+      path: '/templates',
+      name: 'templates',
+      component: () => import('@/views/TemplateMarket.vue'),
+      meta: { title: '模板市场' }
+    },
+    // P3-P
+    {
+      path: '/settings/plugins',
+      name: 'plugins',
+      component: () => import('@/views/PluginsPage.vue'),
+      meta: { title: '插件与服务商' }
+    },
+    // P3-K
+    {
+      path: '/settings/backup',
+      name: 'backup',
+      component: () => import('@/views/BackupPage.vue'),
+      meta: { title: '云备份' }
+    },
+    // P3-S
+    {
+      path: '/settings/studio',
+      name: 'studio',
+      component: () => import('@/views/StudioPage.vue'),
+      meta: { title: '工作室' }
     }
   ]
 })

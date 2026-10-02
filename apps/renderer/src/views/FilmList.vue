@@ -1,5 +1,7 @@
 <template>
   <div class="film-list">
+    <!-- 云端公告（桌面端由主进程推送；可关闭，按公告 id 记在 localStorage） -->
+    <AnnouncementBar />
     <header class="header">
       <div class="header-inner">
         <h1 class="logo">
@@ -27,11 +29,17 @@
           <el-button class="btn-library" title="媒体素材库" @click="$router.push('/media-library')">
             <el-icon><Files /></el-icon>素材库
           </el-button> -->
+          <el-button class="btn-library" title="模板市场：一键套用分镜模板" data-test="to-templates" @click="$router.push('/templates')">
+            模板
+          </el-button>
           <el-button class="btn-library" title="AI 任务中心" @click="$router.push('/task-center')">
             任务中心
           </el-button>
           <el-button class="btn-library" title="AI 花费统计" @click="$router.push('/spend')">
             花费统计
+          </el-button>
+          <el-button class="btn-library" title="云备份：把项目备份到自己的对象存储（MinIO / S3 兼容）" data-test="to-backup" @click="$router.push('/settings/backup')">
+            云备份
           </el-button>
           <el-button class="btn-library" title="关于、隐私政策、用户协议与举报" data-test="to-about" @click="$router.push('/settings/about')">
             关于
@@ -385,6 +393,7 @@ import { characterLibraryAPI } from '@/api/characterLibrary'
 import { sceneLibraryAPI } from '@/api/sceneLibrary'
 import { propLibraryAPI } from '@/api/propLibrary'
 import AIConfigContent from '@/components/AIConfigContent.vue'
+import AnnouncementBar from '@/components/AnnouncementBar.vue'
 import { uploadAPI } from '@/api/upload'
 import { aiAPI } from '@/api/ai'
 import { seedSampleLocation } from '@/utils/sample'

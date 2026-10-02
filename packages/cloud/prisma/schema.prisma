@@ -20,6 +20,9 @@ model Account {
   disabledAt    DateTime?
   plan          String         @default("test")
   createdAt     DateTime       @default(now())
+  // P2-C：手机号（短信登录）与微信 openid（扫码登录），都可空且唯一
+  phone         String?        @unique
+  wechatOpenId  String?        @unique
   devices       Device[]
   refreshTokens RefreshToken[]
   invitesUsed   InviteCode[]   @relation("InviteUsedBy")
@@ -344,4 +347,164 @@ model AdminAudit {
   @@index([at])
   @@index([actorId, at])
   @@index([targetType, targetId])
+}
+
+// P3-T 模板市场：模板（id 即清单里的 id）与它的版本（清单 JSON + 官方 ES256 签名）。只有 published 的版本进公开目录。
+model Template {
+  id          String            @id
+  name        String
+  genre       String
+  tier        String            @default("free") // free | pro
+  description String            @default("")
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  versions    TemplateVersion[]
+}
+
+model TemplateVersion {
+  id          String    @id @default(uuid())
+  templateId  String
+  template    Template  @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  version     String
+  manifest    Json
+  packageUrl  String?
+  sha256      String
+  signature   String
+  kid         String
+  tier        String    @default("free") // free | pro
+  published   Boolean   @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([templateId, version])
+  @@index([published, publishedAt])
+}
+// ---- P3-P：插件注册表（登记、版本、审核、官方签名） ----
+// 云端不保存插件包本身：只记 manifest、每个文件的 sha256、包的下载地址与包哈希。
+// 签名覆盖 canonicalJson({ manifest, files }) —— 与 @talekiln/plugin-sdk verifySignature 的算法一致。
+
+model Plugin {
+  id        String          @id @default(uuid())
+  name      String          @unique // manifest.name，即本地的服务商 id
+  label     String
+  homepage  String?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  versions  PluginVersion[]
+}
+
+model PluginVersion {
+  id           String         @id @default(uuid())
+  pluginId     String
+  plugin       Plugin         @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  version      String
+  manifest     Json // 提交时的 manifest（含 files，不含 signature）
+  fileHashes   Json // { "<相对路径>": "<sha256 hex>" }
+  hash         String // sha256(签名载荷)，与本地插件页展示的指纹一致
+  packageUrl   String
+  sha256       String // 插件包（zip）的 sha256
+  signature    Json? // { alg, kid, value }，签名后才有
+  signedAt     DateTime?
+  signedBy     String?
+  reviewStatus String         @default("pending") // pending | approved | rejected
+  reviewedAt   DateTime?
+  reviewedBy   String?
+  submittedBy  String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  reviews      PluginReview[]
+
+  @@unique([pluginId, version])
+  @@index([reviewStatus, createdAt])
+  @@index([hash])
+}
+
+// 审核记录：只增不改。
+model PluginReview {
+  id         String        @id @default(uuid())
+  versionId  String
+  version    PluginVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  action     String // submit | approve | reject | sign
+  notes      String        @default("")
+  actorId    String?
+  actorEmail String?
+  createdAt  DateTime      @default(now())
+
+  @@index([versionId, createdAt])
+}
+
+// P2-C 登录：短信验证码（只存 HMAC，带过期与错误次数）与微信扫码票据（状态机 pending/scanned/confirmed/expired）。
+model SmsCode {
+  id         String    @id @default(uuid())
+  phone      String
+  scene      String    @default("login")
+  codeHash   String
+  attempts   Int       @default(0)
+  createdAt  DateTime
+  expiresAt  DateTime
+  consumedAt DateTime?
+
+  @@index([phone, scene, createdAt])
+}
+
+model WechatQrTicket {
+  ticket     String    @id
+  status     String    @default("pending")
+  openId     String?
+  createdAt  DateTime
+  expiresAt  DateTime
+  consumedAt DateTime?
+
+  @@index([expiresAt])
+}
+
+// ---- P3-S：工作室版基础（工作室、成员、席位、邀请） ----
+// 云端只管「谁在哪个工作室、什么角色、席位用了多少」；共享素材本身在对象存储（MinIO）的 shared/<studio_id>/ 前缀下，
+// 由本机服务读写。seatLimit 由后台管理员设置（将来由订阅驱动）；席位定价待定，这里不含任何价格字段。
+
+model Studio {
+  id        String         @id @default(uuid())
+  name      String
+  ownerId   String
+  seatLimit Int            @default(3)
+  status    String         @default("active") // active | suspended
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  members   StudioMember[]
+  invites   StudioInvite[]
+
+  @@index([ownerId])
+}
+
+model StudioMember {
+  id        String    @id @default(uuid())
+  studioId  String
+  studio    Studio    @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  accountId String
+  role      String    @default("member") // owner | admin | member
+  status    String    @default("active") // invited | active | removed
+  joinedAt  DateTime?
+  removedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([studioId, accountId])
+  @@index([accountId, status])
+}
+
+model StudioInvite {
+  id        String    @id @default(uuid())
+  studioId  String
+  studio    Studio    @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  code      String    @unique
+  email     String?
+  role      String    @default("member") // admin | member
+  createdBy String?
+  expiresAt DateTime
+  usedAt    DateTime?
+  usedById  String?
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([studioId, usedAt, revokedAt])
 }

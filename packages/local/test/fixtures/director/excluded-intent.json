@@ -1,0 +1,9 @@
+{
+  "id": "excluded-intent",
+  "note": "canvas.moveNode 在 REST 白名单里但不对导演模式开放（只改画布坐标）。",
+  "message": "把第一镜的节点挪到画布右边",
+  "replies": [
+    "{\"summary\": \"移动画布节点\", \"steps\": [{\"view\": \"canvas\", \"name\": \"moveNode\", \"args\": {\"node_id\": \"shot_1\", \"x\": 900, \"y\": 100}, \"reason\": \"按要求移动\"}], \"untouched\": []}",
+    "{\"summary\": \"移动画布节点\", \"steps\": [{\"view\": \"canvas\", \"name\": \"moveNode\", \"args\": {\"node_id\": \"shot_1\", \"x\": 900, \"y\": 100}, \"reason\": \"按要求移动\"}], \"untouched\": []}"
+  ]
+}

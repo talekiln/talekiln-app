@@ -12,6 +12,8 @@ export const TX_LABEL = {
   moveNode: '移动节点', setNodeParam: '改节点参数', connectNodes: '连线', disconnectNodes: '断开连线', addNodeAt: '新增节点', deleteNode: '删除节点',
   recordGeneration: '记录生成结果', adoptVersion: '采用版本', tx: '修改', moveNodes: '移动节点', assemble: '装配时间线', 'generation inputs': '同步生成输入', 'reference inputs': '同步参考图', 'generation cache hit': '命中缓存（沿用旧素材）',
   'import assets': '导入素材', 'import timeline': '导入时间线', 'reassemble timeline': '重新装配时间线', regenerate: '重新生成',
+  // P3-R 选镜改片
+  editShotRegion: '选镜改片', adoptShotVersion: '采用版本（参数跟随）', 'region edit': '改片结果入库',
 }
 
 const OP_LABEL = {
@@ -30,6 +32,7 @@ export function sourceLabel(source) {
   if (!source) return '未知来源'
   if (SOURCE_LABEL[source]) return SOURCE_LABEL[source]
   if (String(source).startsWith('ai-task:')) return 'AI 生成'
+  if (String(source).startsWith('region-edit:')) return '选镜改片' // P3-R
   return String(source)
 }
 

@@ -6,11 +6,12 @@ const { ProviderError, ERROR_CODES } = require('./errors');
 /**
  * Adapter shape: { id, label, capabilities: { 'text.stream': fn, ... }, probes?: { 'text.stream': fn, ... } }.
  * Adapters of providers that are not enabled (providers/enablement.js) may be registered but are never listed
- * or resolvable. `enabledIds` pins a fixed set; by default the live process-wide setting is read on every call.
+ * or resolvable. `enabledIds` pins a fixed set; by default the live process-wide setting is read on every call
+ * (built-in providers.enabled plus active plugins, see enablement.availableProviders).
  */
 function createRegistry(enabledIds) {
   const adapters = new Map();
-  const phase1 = { includes: (id) => (enabledIds ? enabledIds.includes(id) : enablement.isEnabled(id)) };
+  const phase1 = { includes: (id) => (enabledIds ? enabledIds.includes(id) : enablement.isProviderAvailable(id)) };
   return {
     register(adapter) {
       if (!adapter || !adapter.id || !adapter.capabilities || typeof adapter.capabilities !== 'object') {

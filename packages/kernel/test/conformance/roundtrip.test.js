@@ -192,6 +192,14 @@ test('意图足迹：每个意图只写它声明的路径；内核导出的每�
       deleteShot: [() => shot.deleteShot(g, s0), P(`^nodes\\.(${s0}|${c0.image}|${c0.video}|${c0.narration})\\.`, '^edges\\.', '^edges#order$', '^groups\\.', '^layout\\.', '^versions\\.', '^adopted\\.', `^nodes\\.${cid}\\.params\\.segments$`)],
       setShotReferences: [() => shot.setShotReferences(g, s0, { image_model: 'm-i', video_model: 'm-v', reference_hashes: ['r1'], tail_frame_hash: 't1' }), P(`^nodes\\.(${c0.image}|${c0.video})\\.params\\.(model|reference_hashes|tail_frame_hash)$`)],
       regenerateShot: [() => shot.regenerateShot(g, s0, { seed: 5 }), P(`^nodes\\.(${c0.image}|${c0.video})\\.params\\.seed$`)],
+      // P3-R：选镜改片只写 video.edit；采用版本时参数跟随版本配方（这里先在同一事务里补一个带配方的版本再采用）
+      editShotRegion: [() => shot.editShotRegion(g, s0, { t0_ms: 0, t1_ms: 1000, rect: { x: 0.1, y: 0.1, w: 0.5, h: 0.5 }, prompt: '改一下' }), P(`^nodes\\.${c0.video}\\.params\\.edit\\.`)],
+      adoptShotVersion: [() => {
+        const edit = { base: g.adopted[c0.video], mode: 'segment', t0_ms: 0, t1_ms: 1000, rect: { x: 0, y: 0, w: 1, h: 1 }, prompt: '整段重做' };
+        const add = { op: 'addVersion', node: c0.video, version: { id: 'edit_x', cache_key: 'k', asset: { ref: 'a.mp4', hash: 'h', kind: 'video' }, metadata: { edit } } };
+        const a = shot.adoptShotVersion(K.applyTx(g, { tx_id: 'tmp', ops: [add] }).graph, s0, { version_id: 'edit_x' });
+        return { ...a, ops: [add, ...a.ops] };
+      }, P(`^versions\\.${c0.video}$`, `^adopted\\.${c0.video}$`, `^nodes\\.${c0.video}\\.params\\.edit\\.`)],
       setVoice: [() => shot.setVoice(g, s0, { voice: 'v', speed: 1.5 }), P(`^nodes\\.${c0.narration}\\.params\\.(voice|speed)$`)],
       recordGeneration: [() => S.generateTx(g, [c0.image]), P(`^versions\\.${c0.image}$`, `^adopted\\.${c0.image}$`)],
     },

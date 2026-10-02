@@ -36,6 +36,9 @@
       "startup-error.js",
       "updater.js",
       "updater-logic.js",
+      "cloud-check.js",
+      "cloud-check-logic.js",
+      "preload.js",
       "update-config.json",
       "package.json",
       "node_modules/**/*"
@@ -52,6 +55,13 @@
       {
         "from": "resources/ffmpeg",
         "to": "lycore/ffmpeg",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "resources/models",
+        "to": "models",
         "filter": [
           "**/*"
         ]
@@ -77,7 +87,8 @@
     "asarUnpack": [
       "**/node_modules/better-sqlite3/**",
       "**/node_modules/sharp/**",
-      "**/node_modules/@img/**"
+      "**/node_modules/@img/**",
+      "**/node_modules/onnxruntime-node/**"
     ],
     "mac": {
       "category": "public.app-category.video",

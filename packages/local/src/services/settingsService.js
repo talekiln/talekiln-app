@@ -67,10 +67,23 @@ function setGlobalSetting(db, key, value) {
   ).run(key, str, now);
 }
 
+/** 开发者模式（P3-P）：开启后未签名 / 签名无效的插件也会加载。默认关闭。 */
+const DEVELOPER_MODE_KEY = 'developer_mode';
+function getDeveloperMode(db) {
+  return getGlobalSetting(db, DEVELOPER_MODE_KEY, false) === true;
+}
+function setDeveloperMode(db, on) {
+  setGlobalSetting(db, DEVELOPER_MODE_KEY, on === true);
+  return getDeveloperMode(db);
+}
+
 module.exports = {
   setConfigPath,
   getLanguage,
   updateLanguage,
   getGlobalSetting,
   setGlobalSetting,
+  DEVELOPER_MODE_KEY,
+  getDeveloperMode,
+  setDeveloperMode,
 };
