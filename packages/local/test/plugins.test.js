@@ -178,6 +178,27 @@ describe('plugin host', () => {
     assert.equal(again.scan()[0].signature.status, 'official');
   });
 
+  it('official JWKS with several keys (licence, dedicated plugin key, retired plugin key): any listed kid verifies, unlisted ones stay invalid', () => {
+    // The cloud publishes the licence key plus the dedicated plugin signing key (and retired plugin keys) in one JWKS.
+    const lic = keyPair('lic-1');
+    const plg = keyPair('plg-1');
+    const old = keyPair('plg-0');
+    const gone = keyPair('plg-gone'); // rotated out AND removed from the JWKS: its signatures are no longer trusted
+    const t = setup({ keys: [lic.jwk, plg.jwk, old.jwk] });
+    makePlugin(t.pluginsDir, { name: 'acme', sign: plg.privateKey, kid: 'plg-1' });
+    makePlugin(t.pluginsDir, { name: 'beta', sign: old.privateKey, kid: 'plg-0' });
+    makePlugin(t.pluginsDir, { name: 'gamma', sign: lic.privateKey, kid: 'lic-1' });
+    makePlugin(t.pluginsDir, { name: 'delta', sign: gone.privateKey, kid: 'plg-gone' });
+    makePlugin(t.pluginsDir, { name: 'epsilon', sign: gone.privateKey, kid: 'plg-1' }); // claims the new kid but was not signed by it
+    const byName = Object.fromEntries(t.host.scan().map((p) => [p.name, p]));
+    assert.deepEqual([byName.acme.signature.status, byName.acme.signature.kid, byName.acme.active], ['official', 'plg-1', true]);
+    assert.deepEqual([byName.beta.signature.status, byName.beta.signature.kid, byName.beta.active], ['official', 'plg-0', true]);
+    assert.deepEqual([byName.gamma.signature.status, byName.gamma.signature.kid, byName.gamma.active], ['official', 'lic-1', true]);
+    assert.deepEqual([byName.delta.signature.status, byName.delta.signature.reason, byName.delta.active], ['invalid', 'unknown kid', false]);
+    assert.deepEqual([byName.epsilon.signature.status, byName.epsilon.signature.reason, byName.epsilon.active], ['invalid', 'bad signature', false]);
+    assert.deepEqual(en.availableProviders().filter((id) => ['acme', 'beta', 'gamma', 'delta', 'epsilon'].includes(id)).sort(), ['acme', 'beta', 'gamma']);
+  });
+
   it('catalogue sync: the review date of a matching fingerprint is stamped on the installed plugin; nothing else changes', async () => {
     const k = keyPair('k1');
     const calls = [];
