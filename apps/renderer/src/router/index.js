@@ -144,6 +144,13 @@ const router = createRouter({
       name: 'media-library',
       component: () => import('@/views/MediaLibrary.vue'),
       meta: { title: '媒体素材库' }
+    },
+    // P3-B
+    {
+      path: '/project/:dramaId/batch',
+      name: 'batch',
+      component: () => import('@/views/BatchPage.vue'),
+      meta: { title: '批量生成' }
     }
   ]
 })
