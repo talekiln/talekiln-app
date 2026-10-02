@@ -146,6 +146,9 @@ importers:
       '@talekiln/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@talekiln/plugin-sdk':
+        specifier: workspace:*
+        version: link:../plugin-sdk
       '@volcengine/openapi':
         specifier: ^1.36.1
         version: 1.36.2

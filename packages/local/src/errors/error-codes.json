@@ -375,6 +375,26 @@
       "message": "写入导出文件失败",
       "action": "检查目标磁盘空间和写入权限，或换一个文件夹"
     },
+    "PLUGIN_INVALID": {
+      "scope": "local",
+      "message": "插件包不合法：缺少 manifest.json 或清单不符合 SDK 规范",
+      "action": "检查插件文件夹里的 manifest.json（名称、版本、sdkVersion、能力、权限、入口），或联系插件作者"
+    },
+    "PLUGIN_SIGNATURE": {
+      "scope": "local",
+      "message": "插件未经官方签名或签名无效，默认不会加载",
+      "action": "只安装来自官方插件目录的插件；若是自己开发的插件，可在插件页打开开发者模式"
+    },
+    "PLUGIN_LOAD_FAILED": {
+      "scope": "local",
+      "message": "插件代码加载失败",
+      "action": "查看插件页里的错误信息，或联系插件作者；加载失败的插件不会参与生成"
+    },
+    "PLUGIN_NAME_CONFLICT": {
+      "scope": "local",
+      "message": "插件名称与内置服务商或已安装插件冲突",
+      "action": "先删除同名插件再安装，或让插件作者改名"
+    },
     "device_limit": {
       "scope": "cloud",
       "message": "设备数已达套餐上限",

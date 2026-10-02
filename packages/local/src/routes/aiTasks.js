@@ -2,12 +2,12 @@
 const response = require('../response');
 const { toView, isUncertain } = require('../queue/taskView');
 
-const { getEnabled } = require('../providers/enablement');
+const { availableProviders } = require('../providers/enablement');
 const KINDS = ['image', 'video', 'tts'];
 
-/** Shared by enqueue and spend estimate. Returns an error string or null. */
+/** Shared by enqueue and spend estimate. Returns an error string or null. Providers = built-ins enabled + active plugins. */
 function validateSpec(b) {
-  const PROVIDERS = getEnabled();
+  const PROVIDERS = availableProviders();
   if (!PROVIDERS.includes(b.provider)) return `provider 必须是 ${PROVIDERS.join(' / ')}`;
   if (!KINDS.includes(b.kind)) return `kind 必须是 ${KINDS.join(' / ')}`;
   if (!b.params || typeof b.params !== 'object' || Array.isArray(b.params)) return 'params 必须是对象';

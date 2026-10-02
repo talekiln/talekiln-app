@@ -1,0 +1,11 @@
+{
+  "name": "acme",
+  "version": "0.1.0",
+  "sdkVersion": "1.0.0",
+  "label": "Acme（测试夹具）",
+  "description": "Standalone copy of the SDK example plugin against a fictional vendor; signed per test run.",
+  "homepage": "https://plugins.acme.example/",
+  "capabilities": ["llm.chat", "image.generate", "video.submit", "video.poll", "tts.synthesize"],
+  "permissions": ["network:api.acme.example", "secret:apiKey"],
+  "entry": "index.js"
+}
