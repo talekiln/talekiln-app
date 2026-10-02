@@ -3,6 +3,8 @@ import { PrismaClient } from '@prisma/client';
 import { AuthController, CatalogController, DeviceController, HealthController, LicenceController, ReferralController } from './http/controllers';
 import { AdminAuthController, AdminController, AdminOpsController, PublicController } from './http/admin.controllers';
 import { AdminBillingController, OrderController, PaymentNotifyController, PlanController, SubscriptionController } from './http/billing.controllers';
+import { AdminPluginController, PluginCatalogController } from './http/plugin.controllers';
+import { PluginRegistryService } from './services/plugin-registry.service';
 import { AuditInterceptor } from './http/audit.interceptor';
 import { AccessGuard, AdminGuard } from './http/guard';
 import { createProviders } from './payments/registry';
@@ -66,6 +68,7 @@ export function createAppModule(opts: ModuleOptions = {}) {
       HealthController, AuthController, DeviceController, LicenceController,
       AdminAuthController, AdminController, AdminOpsController, PublicController, CatalogController, ReferralController,
       PlanController, OrderController, SubscriptionController, PaymentNotifyController, AdminBillingController,
+      PluginCatalogController, AdminPluginController,
     ],
     providers: [
       ...infra,
@@ -93,6 +96,7 @@ export function createAppModule(opts: ModuleOptions = {}) {
       { provide: AnnouncementService, useFactory: (r: Repositories) => new AnnouncementService(r), inject: [REPOS] },
       { provide: ReleaseService, useFactory: (r: Repositories) => new ReleaseService(r), inject: [REPOS] },
       { provide: FunnelService, useFactory: (r: Repositories) => new FunnelService(r), inject: [REPOS] },
+      { provide: PluginRegistryService, useFactory: (r: Repositories, c: AppConfig) => new PluginRegistryService(r, c), inject: [REPOS, CONFIG] },
       AuditInterceptor,
       AccessGuard,
       AdminGuard,
