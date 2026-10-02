@@ -1,6 +1,8 @@
 import { Module, type OnApplicationShutdown, Inject, Injectable, type Provider } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
-import { AuthController, CatalogController, DeviceController, HealthController, LicenceController, ReferralController } from './http/controllers';
+import { AuthController, CatalogController, DeviceController, HealthController, LicenceController, LoginController, ReferralController } from './http/controllers';
+import { LoginService } from './services/login.service';
+import { createLoginProviders, type LoginProviders } from './login/registry';
 import { AdminAuthController, AdminController, AdminOpsController, PublicController } from './http/admin.controllers';
 import { AdminBillingController, OrderController, PaymentNotifyController, PlanController, SubscriptionController } from './http/billing.controllers';
 import { AdminTemplateController, TemplateCatalogController } from './http/template.controllers';
@@ -38,6 +40,7 @@ import { TokenService } from './services/token.service';
 export { CONFIG };
 const PRISMA = Symbol('PRISMA');
 const PAYMENT_PROVIDERS = Symbol('PAYMENT_PROVIDERS');
+export const LOGIN_PROVIDERS = Symbol('LOGIN_PROVIDERS');
 
 @Injectable()
 class PrismaShutdown implements OnApplicationShutdown {
@@ -49,6 +52,8 @@ export interface ModuleOptions {
   /** 测试注入：传入内存仓储则不创建 PrismaClient。 */
   repos?: Repositories;
   config?: AppConfig;
+  /** 测试注入：登录适配器（短信 / 微信）；缺省按配置装配。 */
+  loginProviders?: LoginProviders;
 }
 
 /** 业务服务是无装饰器的普通类，这里用工厂提供者装配。 */
@@ -67,7 +72,7 @@ export function createAppModule(opts: ModuleOptions = {}) {
   }
   @Module({
     controllers: [
-      HealthController, AuthController, DeviceController, LicenceController,
+      HealthController, AuthController, LoginController, DeviceController, LicenceController,
       AdminAuthController, AdminController, AdminOpsController, PublicController, CatalogController, ReferralController,
       PlanController, OrderController, SubscriptionController, PaymentNotifyController, AdminBillingController,
       TemplateCatalogController, AdminTemplateController,
@@ -101,6 +106,13 @@ export function createAppModule(opts: ModuleOptions = {}) {
       { provide: FunnelService, useFactory: (r: Repositories) => new FunnelService(r), inject: [REPOS] },
       { provide: TemplateService, useFactory: (r: Repositories, c: AppConfig) => new TemplateService(r, c), inject: [REPOS, CONFIG] },
       { provide: PluginRegistryService, useFactory: (r: Repositories, c: AppConfig) => new PluginRegistryService(r, c), inject: [REPOS, CONFIG] },
+      // P2-C 登录：短信 / 微信适配器按配置装配；LoginService 复用 AuthService 的设备登记与令牌签发
+      { provide: LOGIN_PROVIDERS, useFactory: (c: AppConfig) => opts.loginProviders ?? createLoginProviders(c), inject: [CONFIG] },
+      {
+        provide: LoginService,
+        useFactory: (r: Repositories, a: AuthService, p: LoginProviders, c: AppConfig, l: RateLimiter, au: AuditService) => new LoginService(r, a, p, c, l, au),
+        inject: [REPOS, AuthService, LOGIN_PROVIDERS, CONFIG, RateLimiter, AuditService],
+      },
       AuditInterceptor,
       AccessGuard,
       AdminGuard,

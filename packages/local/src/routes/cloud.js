@@ -17,6 +17,16 @@ const MAP = {
   invalid_token: [401, 'SESSION_EXPIRED', '登录已失效，请重新登录'],
   token_reuse: [401, 'SESSION_EXPIRED', '登录已失效，请重新登录'],
   SECRET_STORE_UNAVAILABLE: [500, 'SECRET_STORE_UNAVAILABLE', '系统密钥加密不可用，无法安全保存登录状态'],
+  // P2-C 短信 / 微信登录
+  invalid_code: [401, 'INVALID_CODE', '验证码错误'],
+  code_expired: [400, 'CODE_EXPIRED', '验证码已过期或尚未发送，请重新获取'],
+  invite_required: [400, 'INVITE_REQUIRED', '首次登录需要邀请码'],
+  qr_expired: [410, 'QR_EXPIRED', '二维码已过期或已使用，请刷新'],
+  sms_unavailable: [503, 'LOGIN_METHOD_UNAVAILABLE', '短信登录暂不可用，请改用邮箱密码登录'],
+  wechat_unavailable: [503, 'LOGIN_METHOD_UNAVAILABLE', '微信登录暂不可用，请改用邮箱密码登录'],
+  rate_limited: [429, 'CLOUD_RATE_LIMITED', '操作过于频繁，请稍后再试'],
+  account_disabled: [403, 'ACCOUNT_DISABLED', '账号已停用，请联系管理员'],
+  not_found: [404, 'NOT_FOUND', '二维码不存在或已失效'],
 };
 
 function sendError(res, err, log, name) {
@@ -47,6 +57,35 @@ function cloudRoutes(cloud, log) {
       response.success(res, view(await cloud.account.login({ email: b.email, password: b.password })));
     }),
     logout: wrap('logout', async (req, res) => response.success(res, view(await cloud.account.logout()))),
+
+    // ---- P2-C 短信验证码 / 微信扫码（本地只做参数检查与透传，限频、验证码、票据状态机都在云端）
+    smsSend: wrap('smsSend', async (req, res) => {
+      const b = req.body || {};
+      if (!str(b.phone, 20)) return response.badRequest(res, '请输入手机号');
+      response.success(res, await cloud.account.smsSend({ phone: b.phone }));
+    }),
+    smsLogin: wrap('smsLogin', async (req, res) => {
+      const b = req.body || {};
+      if (!str(b.phone, 20) || !str(b.code, 10)) return response.badRequest(res, '手机号和验证码均为必填');
+      if (b.invite_code !== undefined && b.invite_code !== '' && !str(b.invite_code, 100)) return response.badRequest(res, '邀请码格式不正确');
+      response.success(res, view(await cloud.account.smsLogin({ phone: b.phone, code: b.code, inviteCode: b.invite_code || undefined })));
+    }),
+    wechatQr: wrap('wechatQr', async (req, res) => response.success(res, await cloud.account.wechatQr())),
+    wechatQrStatus: wrap('wechatQrStatus', async (req, res) => {
+      if (!str(req.params.ticket, 64)) return response.badRequest(res, '票据不合法');
+      response.success(res, await cloud.account.wechatQrStatus(req.params.ticket));
+    }),
+    wechatConfirm: wrap('wechatConfirm', async (req, res) => {
+      if (!str(req.params.ticket, 64)) return response.badRequest(res, '票据不合法');
+      const b = req.body || {};
+      response.success(res, await cloud.account.wechatConfirm(req.params.ticket, { openId: str(b.open_id, 100) ? b.open_id : undefined, scanOnly: b.scan_only === true }));
+    }),
+    wechatLogin: wrap('wechatLogin', async (req, res) => {
+      const b = req.body || {};
+      if (!str(b.ticket, 64)) return response.badRequest(res, '票据不合法');
+      if (b.invite_code !== undefined && b.invite_code !== '' && !str(b.invite_code, 100)) return response.badRequest(res, '邀请码格式不正确');
+      response.success(res, view(await cloud.account.wechatLogin({ ticket: b.ticket, inviteCode: b.invite_code || undefined })));
+    }),
     /** GET /account/status[?sync=1]：sync=1 时按需续期许可证；POST /account/refresh 强制续期。 */
     status: wrap('status', async (req, res) => response.success(res, view(await cloud.account.status({ sync: req.query.sync === '1' })))),
     refresh: wrap('refresh', async (req, res) => response.success(res, view(await cloud.account.status({ force: true })))),

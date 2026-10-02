@@ -9,6 +9,10 @@ export interface Account {
   plan: string;
   disabledAt: Date | null;
   createdAt: Date;
+  /** 手机号（P2-C 短信登录），11 位大陆号码，唯一；邮箱密码账号为空。 */
+  phone: string | null;
+  /** 微信 openid（P2-C 扫码登录），唯一。 */
+  wechatOpenId: string | null;
 }
 
 export interface InviteCode {
@@ -46,7 +50,9 @@ export interface RefreshTokenRecord {
 }
 
 export interface AccountRepository {
-  create(a: Omit<Account, 'id' | 'createdAt' | 'disabledAt'> & { disabledAt?: Date | null }): Promise<Account>;
+  create(a: Omit<Account, 'id' | 'createdAt' | 'disabledAt' | 'phone' | 'wechatOpenId'> & { disabledAt?: Date | null; phone?: string | null; wechatOpenId?: string | null }): Promise<Account>;
+  findByPhone(phone: string): Promise<Account | null>;
+  findByWechatOpenId(openId: string): Promise<Account | null>;
   list(): Promise<Account[]>;
   setDisabled(id: string, at: Date | null): Promise<void>;
   findById(id: string): Promise<Account | null>;
@@ -575,6 +581,59 @@ export interface PluginRepository {
   listReviews(versionId: string): Promise<PluginReviewRecord[]>;
 }
 
+// ---------------------------------------------------------------------------
+// 登录（P2-C）：短信验证码与微信扫码票据。验证码只存 HMAC，票据带过期。
+// ---------------------------------------------------------------------------
+export type SmsScene = 'login';
+
+export interface SmsCodeRecord {
+  id: string;
+  phone: string;
+  scene: SmsScene;
+  /** HMAC(accessSecret, phone:code)，不存明文。 */
+  codeHash: string;
+  attempts: number;
+  createdAt: Date;
+  expiresAt: Date;
+  /** 用掉（登录成功）或作废（错 5 次 / 被新码顶掉）的时间。 */
+  consumedAt: Date | null;
+}
+
+export interface SmsCodeRepository {
+  create(c: { phone: string; scene: SmsScene; codeHash: string; createdAt: Date; expiresAt: Date }): Promise<SmsCodeRecord>;
+  /** 该手机号 + 场景下最新一条未消费、未过期的验证码。 */
+  findActive(phone: string, scene: SmsScene, now: Date): Promise<SmsCodeRecord | null>;
+  /** 作废该手机号 + 场景下所有未消费的验证码（发新码时调用）。 */
+  voidActive(phone: string, scene: SmsScene, now: Date): Promise<void>;
+  /** 错误次数 +1，返回新的次数。 */
+  incrementAttempts(id: string): Promise<number>;
+  /** 原子地标记消费：仅当 consumedAt 为空时成功。 */
+  consume(id: string, now: Date): Promise<boolean>;
+}
+
+export type WechatQrStatus = 'pending' | 'scanned' | 'confirmed' | 'expired';
+
+export interface WechatQrTicketRecord {
+  /** 票据即主键（随机、不可猜测）。 */
+  ticket: string;
+  status: WechatQrStatus;
+  /** 确认后由适配器给出的 openid。 */
+  openId: string | null;
+  createdAt: Date;
+  expiresAt: Date;
+  /** 用票据换到令牌的时间（一票一用）。 */
+  consumedAt: Date | null;
+}
+
+export interface WechatQrRepository {
+  create(t: { ticket: string; createdAt: Date; expiresAt: Date }): Promise<WechatQrTicketRecord>;
+  findByTicket(ticket: string): Promise<WechatQrTicketRecord | null>;
+  /** 状态机推进：仅当当前状态在 from 之内时改为 to，返回是否成功。 */
+  transition(ticket: string, from: WechatQrStatus[], to: WechatQrStatus, openId: string | null): Promise<boolean>;
+  /** 原子地标记消费：仅当 status=confirmed 且 consumedAt 为空时成功。 */
+  consume(ticket: string, now: Date): Promise<boolean>;
+}
+
 export const REPOS = Symbol('REPOS');
 export interface Repositories {
   accounts: AccountRepository;
@@ -598,4 +657,6 @@ export interface Repositories {
   adminAudit: AdminAuditRepository;
   templates: TemplateRepository;
   plugins: PluginRepository;
+  smsCodes: SmsCodeRepository;
+  wechatQr: WechatQrRepository;
 }

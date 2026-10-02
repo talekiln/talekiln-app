@@ -196,7 +196,12 @@ function createAccountService({ db, http, log = {}, now = () => Date.now(), getS
     return {
       logged_in: true,
       session: 'active',
-      account: { email: session.account.email, plan: session.account.plan, role: session.account.role },
+      account: {
+        email: session.account.email, plan: session.account.plan, role: session.account.role,
+        // P2-C：短信登录的账号带手机号；login_method 记录这次会话是怎么登录的（password / sms / wechat）
+        phone: session.account.phone || null,
+        login_method: session.login_method || 'password',
+      },
       entitled: licence.state === 'valid' || licence.state === 'grace',
       offline: offline || !!session.last_sync_error,
       licence,
@@ -204,7 +209,7 @@ function createAccountService({ db, http, log = {}, now = () => Date.now(), getS
     };
   }
 
-  async function startSession(path, body) {
+  async function startSession(path, body, method = 'password') {
     const store = getStore();
     const r = await http.request('POST', path, { body: { ...body, device: deviceInfo() } });
     clearSession(null); // 换号登录时清掉上一个账号的许可证
@@ -217,7 +222,7 @@ function createAccountService({ db, http, log = {}, now = () => Date.now(), getS
     }
     setAccess(r);
     endedReason = null;
-    saveSession({ account: r.account, device_id: r.device ? r.device.id : null, last_sync_at: null, last_sync_error: null, max_seen_ms: now() });
+    saveSession({ account: r.account, device_id: r.device ? r.device.id : null, login_method: method, last_sync_at: null, last_sync_error: null, max_seen_ms: now() });
     try {
       await syncLicence();
     } catch (e) {
@@ -231,6 +236,17 @@ function createAccountService({ db, http, log = {}, now = () => Date.now(), getS
   const register = ({ inviteCode, email, password }) => startSession('/auth/activate', { inviteCode, email, password });
   const login = ({ email, password }) => startSession('/auth/login', { email, password });
 
+  // ---- P2-C：短信验证码 / 微信扫码。云端未接入适配器时抛 CloudError(sms_unavailable / wechat_unavailable)。
+  const strip = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== ''));
+  /** 发验证码；非生产云端会带 debug_code，原样透传给界面（只在开发时显示）。 */
+  const smsSend = ({ phone }) => http.request('POST', '/auth/sms/send', { body: { phone } });
+  const smsLogin = ({ phone, code, inviteCode }) => startSession('/auth/sms/login', strip({ phone, code, inviteCode }), 'sms');
+  const wechatQr = () => http.request('POST', '/auth/wechat/qr', { body: {} });
+  const wechatQrStatus = (ticket) => http.request('GET', `/auth/wechat/qr/${encodeURIComponent(ticket)}`);
+  /** 模拟确认（只在云端用模拟适配器时存在，否则 404）。 */
+  const wechatConfirm = (ticket, body = {}) => http.request('POST', `/auth/wechat/qr/${encodeURIComponent(ticket)}/confirm`, { body: strip(body) });
+  const wechatLogin = ({ ticket, inviteCode }) => startSession('/auth/wechat/login', strip({ ticket, inviteCode }), 'wechat');
+
   async function logout() {
     const rt = getStore().get(REF_RT);
     if (rt) {
@@ -240,7 +256,7 @@ function createAccountService({ db, http, log = {}, now = () => Date.now(), getS
     return status();
   }
 
-  return { register, login, logout, status, authed, ensureAccess };
+  return { register, login, logout, status, authed, ensureAccess, smsSend, smsLogin, wechatQr, wechatQrStatus, wechatConfirm, wechatLogin };
 }
 
 module.exports = { createAccountService, AccountError, REF_RT, REF_LIC };

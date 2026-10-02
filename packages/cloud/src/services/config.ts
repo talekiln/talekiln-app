@@ -27,6 +27,23 @@ export interface AppConfig {
   maxDiagnosticBytes: number;
   /** 每 IP 每 10 分钟允许的反馈条数。 */
   feedbackRateLimit: number;
+  /**
+   * P2-C 登录适配器开关：mock = 模拟实现（验证码写日志、二维码靠“模拟确认”接口），none = 未接入（相关接口 503）。
+   * 开发 / 测试环境默认 mock，生产环境默认 none；真实厂商（阿里云短信 / 微信开放平台）只留接口与文档。
+   */
+  smsProvider: LoginProviderKind;
+  wechatProvider: LoginProviderKind;
+  /** 非生产环境：/auth/sms/send 返回 debug_code，便于测试与联调。 */
+  loginDebug: boolean;
+}
+
+export type LoginProviderKind = 'mock' | 'none';
+
+function parseLoginProvider(raw: string | undefined, name: string, production: boolean): LoginProviderKind {
+  const v = (raw ?? '').trim().toLowerCase();
+  if (!v) return production ? 'none' : 'mock';
+  if (v === 'mock' || v === 'none') return v;
+  throw new Error(`${name} 只能是 mock 或 none（真实厂商尚未接入，见 docs/phase2-login.md）`);
 }
 
 export const CONFIG = Symbol('CONFIG');
@@ -141,5 +158,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     pluginSigningPrivateKey: pluginKey,
     pluginSigningDedicated,
     pluginRetiredKeys,
+    smsProvider: parseLoginProvider(env.SMS_PROVIDER, 'SMS_PROVIDER', production),
+    wechatProvider: parseLoginProvider(env.WECHAT_PROVIDER, 'WECHAT_PROVIDER', production),
+    loginDebug: !production,
   };
 }
