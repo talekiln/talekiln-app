@@ -6,6 +6,10 @@
       <span class="spacer" />
       <el-tag v-if="genChip" :type="genChip.type" data-test="gen-chip">{{ genChip.label }}</el-tag>
       <span v-if="genFailureText" class="gen-fail">{{ genFailureText }}</span>
+      <!-- P3-C 一致性：与锁定参考图的评分（只读；没有锁定参考图或没有内核时不显示） -->
+      <el-tooltip v-if="consBadge" :content="consHint" placement="bottom">
+        <el-tag :type="consBadge.type" data-test="consistency-chip">{{ consBadge.label }}</el-tag>
+      </el-tooltip>
       <el-button text @click="$router.push('/task-center')">任务中心</el-button>
       <el-button :disabled="!episodeId || genBusy" data-test="gen-frame" @click="askGenerate('image')">生成首帧图</el-button>
       <el-button :disabled="!episodeId || genBusy" data-test="gen-both" @click="askGenerate('both')">首帧图 + 视频</el-button>
@@ -25,6 +29,7 @@
         <el-image v-if="firstFrame" :src="firstFrame" fit="contain" class="frame" :preview-src-list="[firstFrame]" />
         <div v-else class="frame empty">该镜头尚无首帧图</div>
         <p class="prompt">{{ shot?.video_prompt || shot?.description || '（无提示词）' }}</p>
+        <p v-if="consHint" class="cons-hint" :class="`is-${consBadge.type}`" data-test="consistency-hint">{{ consHint }}</p>
       </section>
 
       <section class="panel main">
@@ -81,11 +86,13 @@ import { storyboardsAPI } from '@/api/storyboards'
 import { aiAPI } from '@/api/ai'
 import { videosAPI } from '@/api/videos'
 import { shotCandidatesAPI } from '@/api/referenceLocks'
+import { consistencyAPI } from '@/api/consistency'
 import { dramaAPI } from '@/api/drama'
 import { useKeymap } from '@/composables/useKeymap'
 import GenerateDialog from '@/components/GenerateDialog.vue'
 import { useGeneration } from '@/composables/useGeneration'
 import { failureText, isBusy } from '@/utils/generationView'
+import { consistencyBadge, consistencyHint, consistencyShotMap, shouldRefreshConsistency } from '@/utils/consistencyView'
 import { SCOPE_WORKBENCH } from '@/utils/keymap'
 import { assetImageUrl } from '@/utils/mediaUrl'
 import { getSelectableModels } from '@/utils/modelSelection'
@@ -122,10 +129,23 @@ const genStatus = computed(() => gen.shotStatus(shotId))
 const genChip = computed(() => gen.chip(shotId))
 const genBusy = computed(() => isBusy(genStatus.value))
 const genFailureText = computed(() => failureText(genStatus.value))
+// P3-C 一致性评分（只读）：结果写回后内核在后台评分，所以任务结束时拉一次、稍后再拉一次
+const consistency = ref(null)
+const consShot = computed(() => consistencyShotMap(consistency.value).get(Number(shotId)) || null)
+const consBadge = computed(() => consistencyBadge(consShot.value))
+const consHint = computed(() => consistencyHint(consShot.value, consistency.value?.min_score))
+let consTimer = null
+async function loadConsistency() {
+  if (!episodeId.value) return
+  try { consistency.value = await consistencyAPI.episodeReport(episodeId.value) } catch (_) { /* request.js 已提示 */ }
+}
 // 任务结束并写回后，重新读一次镜头（video_url / 首帧已由内核物化到旧列）
 watch(() => genStatus.value && genStatus.value.state, (now, before) => {
-  if ((before === 'queued' || before === 'running') && now !== before) {
+  if (shouldRefreshConsistency(before, now)) {
     storyboardsAPI.get(shotId).then((s) => { shot.value = s }).catch(() => {})
+    loadConsistency()
+    clearTimeout(consTimer)
+    consTimer = setTimeout(loadConsistency, 4000)
   }
 })
 
@@ -154,6 +174,7 @@ async function load() {
   try {
     shot.value = await storyboardsAPI.get(shotId)
     gen.refresh()
+    loadConsistency()
     await refreshCandidates(true)
     dramaAPI.get(route.params.dramaId).then((d) => {
       try { aspectRatio.value = (typeof d.metadata === 'string' ? JSON.parse(d.metadata) : d.metadata)?.aspect_ratio || '' } catch (_) { /* 忽略 */ }
@@ -226,6 +247,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
   if (timer) clearInterval(timer)
+  clearTimeout(consTimer)
 })
 </script>
 
@@ -239,6 +261,9 @@ onBeforeUnmount(() => {
 .panel h4 { margin: 0 0 8px; }
 .frame { width: 100%; aspect-ratio: 16 / 9; background: var(--el-fill-color); border-radius: 6px; }
 .prompt { color: var(--el-text-color-secondary); font-size: 13px; white-space: pre-wrap; }
+.cons-hint { font-size: 12px; margin: 4px 0 0; color: var(--el-text-color-secondary); }
+.cons-hint.is-warning { color: var(--el-color-warning); }
+.cons-hint.is-danger { color: var(--el-color-danger); }
 .player { width: 100%; max-height: 420px; background: #000; border-radius: 6px; }
 .empty { display: flex; align-items: center; justify-content: center; color: var(--el-text-color-secondary); background: var(--el-fill-color); min-height: 160px; font-size: 13px; text-align: center; padding: 8px; }
 .ab-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
