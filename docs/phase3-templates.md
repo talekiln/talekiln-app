@@ -1,6 +1,6 @@
 # 三期 P3-T：模板市场
 
-状态：本地服务（模板包格式、安装与验签、逐镜估价、一键套用）、云端模板模块（版本、签名、公开目录、后台接口）、后台页面、渲染进程「模板市场」页与单元测试已完成。**界面没有在真实浏览器里点过**（只做了 `vite build` 通过和纯函数 / 接口调用单测）。本文不含任何密钥或真实地址。
+状态：本地服务（模板包格式、安装与验签、逐镜估价、一键套用）、云端模板模块（版本、签名、公开目录、后台接口）、后台页面、渲染进程「模板市场」页与单元测试已完成；八个官方短剧包的文案已填充（§1.1 文案规范）。**界面没有在真实浏览器里点过**（只做了 `vite build` 通过和纯函数 / 接口调用单测）。本文不含任何密钥或真实地址。
 
 ## 1. 模板包格式
 
@@ -42,13 +42,36 @@
 
 「套用后会得到」由 `summaryOf(manifest)` 从清单推出：镜头数与总时长、段落、角色槽位（含每个槽位被几个镜头用到）、风格、台词行数、配乐提示、运镜集合；不需要数据库。
 
-内置官方模板在 `packages/local/templates/<id>/manifest.json`：
+内置官方模板在 `packages/local/templates/<id>/manifest.json`，共 11 个（8 个竖屏短剧 + 3 个非剧情类）；`genre` 的中文名在渲染进程 `utils/templateMarket.js` 的 `GENRE_LABEL`，后台页按原值显示：
 
-| id | 名称 | 类型 | 档位 | 镜头 |
+| id | 名称 | 类型（中文名） | 档位 | 镜头 |
 | --- | --- | --- | --- | --- |
-| `official-guofeng-drama` | 国风短剧 · 错嫁 | guofeng | free | 8 镜，3 个槽位，3 个段落 |
-| `official-product-seeding` | 产品种草 · 30 秒 | ecommerce | free | 6 镜，1 个槽位 |
-| `official-knowledge-explainer` | 知识讲解 · 一分钟看懂 | knowledge | **pro**（付费示例） | 7 镜，1 个槽位 |
+| `official-urban-sweet-contract` | 都市甜宠 · 契约婚姻 | urban-sweet（都市甜宠） | free | 10 镜 54 秒，4 个槽位，段落 开场 / 契约 / 误会 / 钩子 |
+| `official-revenge-god-of-war` | 逆袭打脸 · 战神归来 | revenge（逆袭打脸） | **pro** | 12 镜 65 秒，4 个槽位，段落 归来 / 羞辱 / 亮身份 / 钩子 |
+| `official-suspense-seventh-visitor` | 悬疑反转 · 第七个访客 | suspense（悬疑反转） | **pro** | 11 镜 59 秒，4 个槽位，段落 开场 / 调查 / 反转 / 钩子 |
+| `official-rebirth-noble-daughter` | 穿越重生 · 嫡女归来 | rebirth（穿越重生） | free | 10 镜 55 秒，4 个槽位，段落 重生 / 试探 / 反击 / 钩子 |
+| `official-campus-evening-study` | 校园青春 · 第三十八张画 | campus（校园青春） | free | 9 镜 48 秒，3 个槽位，段落 开场 / 靠近 / 波澜 / 钩子 |
+| `official-family-bowl-of-soup` | 家庭伦理 · 一碗热汤 | family（家庭伦理） | free | 10 镜 53 秒，4 个槽位，段落 开场 / 冲突 / 和解 / 钩子 |
+| `official-workplace-second-day` | 职场逆袭 · 被开除的第二天 | workplace（职场逆袭） | free | 10 镜 54 秒，4 个槽位，段落 开场 / 低谷 / 反击 / 钩子 |
+| `official-healing-corgi-days` | 萌宠治愈 · 包子的一天 | healing（萌宠治愈） | free | 9 镜 46 秒，3 个槽位，段落 清晨 / 日常 / 低谷 / 治愈 |
+| `official-guofeng-drama` | 国风短剧 · 错嫁 | guofeng（国风短剧） | free | 8 镜 45 秒，3 个槽位，段落 开场 / 冲突 / 反转 |
+| `official-product-seeding` | 产品种草 · 30 秒 | ecommerce（产品种草） | free | 6 镜 30 秒，1 个槽位 |
+| `official-knowledge-explainer` | 知识讲解 · 一分钟看懂 | knowledge（知识讲解） | **pro** | 7 镜 44 秒，1 个槽位 |
+
+三个 pro 包是付费权益的示例（§3.4）；其中 `revenge` 与 `suspense` 是八个短剧包里篇幅最长、段落最完整的两个。`test/templates.test.js` 按目录枚举内置包并断言：全部通过校验、6–14 镜、总时长 30–90 秒、每条提示词含中文、`style.preset` 在 `generationStylePresets` 的取值表里、每个槽位至少被一个镜头用到且镜头声明的槽位都出现在提示词里、每句台词的 `speaker` 在该镜头的槽位里、free 与 pro 都有；云端 `test/templates.test.ts` 用同一批包跑 zod 校验与摘要互验。
+
+### 1.1 文案规范（官方短剧包）
+
+八个短剧包按下面的规矩写，自制模板照着来就能在模板市场里「看起来像官方的」：
+
+- **黄金三秒**：第 1 镜必须是钩子，不铺垫。要么一句反差台词（「嫁给我，你的债今晚清零。」），要么一句把前情说完的旁白加一个动作（「五年前，他被扫地出门……」+「回家。」），要么一个悬念物件（监控定格、保温桶）。第 1 镜 4–5 秒，台词不超过两句。
+- **段落**：用 `group` 分 3–4 段，段名用两个字的短剧行话：开场 / 冲突 / 反转 / 钩子，或按剧种换成 归来 / 羞辱 / 亮身份、重生 / 试探 / 反击、低谷 / 和解 等。同一段的镜头写在一起；最后一段固定叫「钩子」（治愈类可叫「治愈」），且最后一镜必须停在一句悬念上（一条短信、一句反转台词、一只伸出纸箱的猫）。
+- **镜头长度**：8–12 镜，每镜 4–7 秒，整集 45–70 秒；有两句以上对白的镜头给 6 秒，纯画面或一句旁白给 5 秒。
+- **台词**：`dialogue` 一句话一行，短、硬、有反问或反差（「契约没写我要做饭。」「也没写你可以烧厨房。」），不写长句解释；`narration` 负责交代时间跨度与心理（「她以为，这只是一场谁也不吃亏的交易。」）；屏幕上的文字（短信、群消息、纸条、账本）写成 `action` 行并以「短信：」「纸条上写着：」开头，不要用没在画面里的人当 speaker。每个有 `dialogue` 的镜头，其 `speaker` 必须出现在该镜头的 `character_slots` 里（否则套用后该镜头的参考图不包含说话的人）。
+- **角色槽位**：2–4 个，`name` 是可直接用的剧中名，`role` 用 女主 / 男主 / 反派 / 女配 / 特助 这类一眼能懂的词，`description` 一句话写人设与动机。`appearance` 是**图像提示词素材**，不是小说描写：按「年龄性别 + 脸部特征 + 发型 + 服装 + 一件辨识物件」写，例如「二十九岁男性，眉骨高挺，薄唇，黑色短发一丝不苟，深灰三件套西装，袖口银质袖扣，左腕一块黑色机械表」；辨识物件（红绳、硬币、创可贴、核桃、缺耳朵的布兔子）要在剧情里用到，方便跨镜一致。
+- **提示词模板**：每镜以 `{{scene}}` 开头，再写槽位的位置、动作、表情与关键物件，一镜只写一个动作；`scene_slot` 写具体的「地点 + 时间 + 光」（「老式公寓楼道，暴雨夜，墙皮斑驳」）；`camera` 用国内分镜习惯用语（全景缓推、中景过肩、近景正反打、特写慢动作、跟拍侧移、俯拍、手持晃动、低机位仰拍、镜面反打）。
+- **风格**：`style.preset` 必须是 `generationStylePresets.js` 里的取值；`style.prompt` 写电影化的布光、镜头、色调（「35mm 镜头浅景深，夜景以城市霓虹与暖色室内光对比，高级灰加琥珀色调」），不重复 preset 已经包含的词；`aspect_ratio` 一律 `9:16`；`music_hint` 写乐器、情绪与转折点（「门开那一刻鼓点全开，结尾戛然而止」）。
+- **边界**：不出现真实品牌、真实人物与可对号入座的机构；暴力停留在电视剧尺度（泼酒、下跪、推搡，不见血）；没有成人内容；不引用受版权保护的歌词或台词。`description` 用一两句话告诉创作者「套用后得到什么、适合什么账号」。
 
 本地服务每次启动把它们按磁盘内容重写进 `installed_templates`（`source = 'builtin'`、`signature_status = 'official'`，保留 `use_count`）；磁盘上不存在的内置行会被删掉。内置模板不能被覆盖或删除（409 `TEMPLATE_BUILTIN_READONLY`）。
 
@@ -183,4 +206,4 @@ pnpm --filter ./apps/renderer test       # 含 test/templateMarket.test.js
 pnpm --filter ./apps/admin test          # 含 test/templates.test.js
 ```
 
-手工验证：启动本地服务后 `GET /api/v1/templates` 应看到三个内置模板；`POST /api/v1/templates/official-guofeng-drama/apply` 带 `{ "mode": "new" }` 会建一个 8 镜的新项目，再 `GET /api/v1/episodes/<episode_id>/graph` 可看到 3 个段落与每镜的 image / video 节点。
+手工验证：启动本地服务后 `GET /api/v1/templates` 应看到十一个内置模板；`POST /api/v1/templates/official-guofeng-drama/apply` 带 `{ "mode": "new" }` 会建一个 8 镜的新项目，再 `GET /api/v1/episodes/<episode_id>/graph` 可看到 3 个段落与每镜的 image / video 节点。
