@@ -17,6 +17,7 @@ function setup({ now = () => T0 } = {}) {
   const db = new Database(path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'spend-')), 't.db'));
   db.exec(mig('23_ai_tasks.sql'));
   db.exec(mig('25_spend_log.sql'));
+  db.exec(mig('28_spend_log_usage.sql'));
   db.exec(`CREATE TABLE global_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT '')`);
   const store = createAiTaskStore(db, { now });
   const spend = createSpendService(db, { now });
@@ -26,11 +27,18 @@ function setup({ now = () => T0 } = {}) {
 const VIDEO = { provider: 'bailian', kind: 'video', params: { prompt: 'p', model: 'wan2.6-t2v', duration: 10, resolution: '720P' } };
 
 describe('price table and estimates', () => {
-  it('ships clearly marked sample prices', () => {
+  it('ships the public 百炼 list prices with their date; unverified entries are flagged', () => {
     const p = loadPrices();
-    assert.equal(p.sample, true);
-    assert.match(p._notice, /SAMPLE PRICES/);
-    assert.match(p._notice, /remote config/);
+    assert.equal(p.sample, false);
+    assert.match(p.price_date, /^\d{4}-\d{2}-\d{2}$/);
+    assert.match(p.version, /bailian-public-/);
+    assert.match(p._notice, /百炼/);
+    assert.equal(p.providers.bailian.video['wan2.6-t2v'].verified, true);
+    assert.equal(p.providers.bailian.tts['cosyvoice-v2'].verified, true);
+    const { estimate } = createEstimator();
+    assert.equal(estimate({ provider: 'bailian', kind: 'video', params: { model: 'wan2.6-t2v' } }).sample, false);
+    assert.equal(estimate({ provider: 'bailian', kind: 'video', params: { model: 'wan2.2-kf2v-flash' } }).sample, true, 'placeholder price shows as sample');
+    assert.equal(estimate({ provider: 'bailian', kind: 'video', params: { model: 'wan2.6-t2v' } }).price_date, p.price_date);
   });
 
   it('estimates per image / second / char with a max above the estimate', () => {
@@ -39,12 +47,30 @@ describe('price table and estimates', () => {
     assert.equal(v.estimate, 6); // 10s x 0.6
     assert.equal(v.max, 7.2);
     assert.equal(estimate({ provider: 'bailian', kind: 'image', params: { model: 'z-image-turbo', n: 3 } }).estimate, 0.3);
-    assert.equal(estimate({ provider: 'bailian', kind: 'tts', params: { text: '你好世界' } }).estimate, 0.0008);
-    assert.equal(estimate({ provider: 'bailian', kind: 'video', params: { model: 'wan2.6-t2v', duration: 10, resolution: '480P' } }).estimate, 3);
+    assert.equal(estimate({ provider: 'bailian', kind: 'tts', params: { text: '你好世界' } }).estimate, 0.0016); // 汉字计 2 字符
+    assert.equal(estimate({ provider: 'bailian', kind: 'tts', params: { text: 'ab, 你' } }).estimate, 0.0012); // 4 + 2
+    assert.equal(estimate({ provider: 'bailian', kind: 'video', params: { model: 'wan2.6-t2v', duration: 10, resolution: '1080P' } }).estimate, 10);
+    assert.equal(estimate({ provider: 'bailian', kind: 'video', params: { model: 'wan2.6-t2v', duration: 10, resolution: '1080p' } }).estimate, 10, 'tier match ignores case');
     assert.equal(estimate({ provider: 'bailian', kind: 'image', params: { model: 'unlisted' } }).estimate, 0.2); // _default
     const unknown = estimate({ provider: 'nope', kind: 'image', params: {} });
     assert.equal(unknown.known, false);
     assert.equal(unknown.estimate, 0);
+  });
+
+  it('actual cost from reported usage: video seconds x billed tier, tts characters, image count; null when nothing usable', () => {
+    const { actual } = createEstimator();
+    // 视频：按回传的计费秒数和分辨率，不按请求里的 duration
+    assert.deepEqual(actual(VIDEO, { duration: 5, SR: 1080 }), { actual: 5, units: 5, unit: 'second', unit_price: 1, basis: '5 second x 1', resolution: '1080P' });
+    assert.equal(actual(VIDEO, { video_duration: 5 }).actual, 3); // 档位取请求里的 720P
+    assert.equal(actual(VIDEO, {}), null);
+    assert.equal(actual(VIDEO, { duration: 0 }), null);
+    // 配音：服务商计的字符数
+    assert.equal(actual({ provider: 'bailian', kind: 'tts', params: { model: 'cosyvoice-v2', text: '你好' } }, { characters: 10 }).actual, 0.002);
+    assert.equal(actual({ provider: 'bailian', kind: 'tts', params: { text: '你好' } }, {}), null);
+    // 图片：usage.images，否则数结果 urls
+    assert.equal(actual({ provider: 'bailian', kind: 'image', params: { model: 'wan2.6-t2i', n: 4 } }, { images: 2 }).actual, 0.4);
+    assert.equal(actual({ provider: 'bailian', kind: 'image', params: { model: 'wan2.6-t2i' } }, null, { urls: ['a', 'b', 'c'] }).actual, 0.6);
+    assert.equal(actual({ provider: 'nope', kind: 'image', params: {} }, { images: 1 }), null);
   });
 });
 
@@ -123,7 +149,7 @@ describe('cap enforcement', () => {
 describe('spend_log and aggregation', () => {
   it('records finished tasks once and aggregates by provider, project and day', () => {
     let clock = T0;
-    const { spend, store } = setup({ now: () => clock });
+    const { spend, store, db } = setup({ now: () => clock });
     const mk = (key, spec, project, day) => {
       clock = new Date(2026, 9, day, 10).getTime();
       const t = store.enqueue({ idempotencyKey: key, provider: spec.provider, kind: spec.kind, params: { ...spec.params, ...(project ? { _project: project } : {}) } }).task;
@@ -132,7 +158,7 @@ describe('spend_log and aggregation', () => {
       store.succeed(t.id, {});
       return store.get(t.id);
     };
-    const a = mk('a', VIDEO, 'p1', 3); // 6
+    const a = mk('a', VIDEO, 'p1', 3); // 6（无用量回传 -> actual 空，计入预估）
     const b = mk('b', { provider: 'ark', kind: 'image', params: { n: 2 } }, 'p1', 3); // 0.5
     const c = mk('c', { provider: 'ark', kind: 'image', params: {} }, null, 4); // 0.25
     assert.equal(spend.recordFinished(a), true);
@@ -140,11 +166,19 @@ describe('spend_log and aggregation', () => {
     spend.recordFinished(b);
     spend.recordFinished(c, { actual: 0.3 });
     assert.equal(spend.recordFinished({ ...c, id: 'x', state: 'failed' }), false);
+    const logA = db.prepare('SELECT * FROM spend_log WHERE task_id = ?').get(a.id);
+    assert.equal(logA.actual, null);
+    assert.equal(logA.usage, null);
 
     clock = T0;
     const s = spend.summary();
     assert.equal(s.total.count, 3);
     assert.equal(s.total.cost, 6.8); // 6 + 0.5 + actual 0.3
+    assert.equal(s.total.estimated, 6.75);
+    assert.equal(s.total.actual, 0.3);
+    assert.equal(s.total.actual_count, 1);
+    assert.equal(s.prices.sample, false);
+    assert.ok(s.prices.date);
     const prov = Object.fromEntries(s.by_provider.map((r) => [r.provider, r]));
     assert.equal(prov.bailian.cost, 6);
     assert.equal(prov.ark.cost, 0.8);
@@ -158,6 +192,32 @@ describe('spend_log and aggregation', () => {
     assert.equal(s.month.spent, 6.8);
     spend.setLimits({ monthly_cap: 10 });
     assert.equal(spend.summary().month.remaining, 3.2);
+  });
+
+  it('recordFinished writes actual from the task result usage (billed seconds and tier beat the request)', () => {
+    const { spend, store, db } = setup();
+    const t = store.enqueue({ idempotencyKey: 'u', provider: 'bailian', kind: 'video', params: { ...VIDEO.params, _project: 'p9' } }).task;
+    store.claim(t.id);
+    store.recordVendorId(t.id, 'v');
+    store.succeed(t.id, { url: 'https://x.invalid/a.mp4', usage: { duration: 8, SR: 1080 } });
+    assert.equal(spend.recordFinished(store.get(t.id)), true);
+    const row = db.prepare('SELECT * FROM spend_log WHERE task_id = ?').get(t.id);
+    assert.equal(row.estimated, 6); // 10s x 0.6 (720P 请求)
+    assert.equal(row.actual, 8); // 8s x 1.0 (1080P 实际)
+    const u = JSON.parse(row.usage);
+    assert.equal(u.units, 8);
+    assert.equal(u.resolution, '1080P');
+    assert.deepEqual(u.reported, { duration: 8, SR: 1080 });
+    assert.equal(spend.listTasks().items[0].usage.units, 8);
+    assert.equal(spend.summary().total.cost, 8);
+    // tts：计费字符数
+    const t2 = store.enqueue({ idempotencyKey: 'u2', provider: 'bailian', kind: 'tts', params: { model: 'cosyvoice-v2', text: '你好' } }).task;
+    store.claim(t2.id);
+    store.recordVendorId(t2.id, 'v');
+    store.succeed(t2.id, { format: 'mp3', sha256: 'x', size: 1, path: 'blobs/x', usage: { characters: 4 } });
+    spend.recordFinished(store.get(t2.id));
+    assert.equal(db.prepare('SELECT actual FROM spend_log WHERE task_id = ?').get(t2.id).actual, 0.0008);
+    assert.equal(spend.actualOf(store.get(t2.id)).units, 4);
   });
 });
 
@@ -223,7 +283,7 @@ describe('REST', () => {
       assert.equal(r.body.data.estimate, 6);
       assert.equal(r.body.data.max, 7.2);
       assert.equal(r.body.data.allowed, true);
-      assert.equal(r.body.data.sample, true);
+      assert.equal(r.body.data.sample, false);
       assert.equal((await call('POST', '/spend/estimate', { provider: 'x' })).status, 400);
 
       r = await call('PUT', '/spend/limits', { per_run_cap: 5, monthly_cap: 100 });

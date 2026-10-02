@@ -174,3 +174,9 @@ test('mediaResultText', () => {
   assert.equal(mediaResultText({ written: true, output_dir: 'D:\\x', stats: { video_segments: 4, subtitle_segments: 6 } }), '已导出：D:\\x · 视频 4 段 · 字幕 6 条')
   assert.match(mediaResultText({ written: false, output_dir: 'x', stats: { video_clips: 2, subtitle_cues: 1 } }), /未写文件.*视频 2 段 · 字幕 1 条/)
 })
+
+test('libopenh264（LGPL 构建的软件编码）有中文标签，并可作为推荐项', () => {
+  const o = encoderOptions([{ name: 'libopenh264', listed: true, available: true }], 'libopenh264')
+  assert.equal(o[0].label, '自动（推荐：软件编码 (libopenh264)）')
+  assert.equal(o[1].label, '软件编码 (libopenh264)')
+})

@@ -32,7 +32,7 @@ function fakeFacadeFactory(calls) {
           return { status: 'succeeded', videoUrl: 'http://vid.example/v.mp4' };
         },
       },
-      tts: { synthesize: async (p, req) => { calls.tts.push({ p, req }); return { audio: Buffer.from('AUDIO'), format: 'mp3', words: [{ text: 'a', startMs: 0, endMs: 5 }] }; } },
+      tts: { synthesize: async (p, req) => { calls.tts.push({ p, req }); return { audio: Buffer.from('AUDIO'), format: 'mp3', words: [{ text: 'a', startMs: 0, endMs: 5 }], usage: { characters: 4 } }; } },
     };
   };
 }
@@ -87,6 +87,7 @@ describe('queue provider adapter', () => {
     assert.equal(calls.image.length, 1);
     assert.equal(calls.image[0].req.model, 'wan2.6-t2i');
     assert.equal(JSON.parse(row.result).files[0].path, 'blobs/xx/a.png');
+    assert.deepEqual(JSON.parse(row.result).usage, { images: 1 }); // 花费回写按实际张数
   });
 
   it('tts: audio is written to the content-addressed store, not into the DB', async () => {
@@ -98,6 +99,7 @@ describe('queue provider adapter', () => {
     assert.equal(fs.readFileSync(path.join(storageDir, res.path), 'utf8'), 'AUDIO');
     assert.equal(res.format, 'mp3');
     assert.equal(JSON.parse(fs.readFileSync(path.join(storageDir, res.words.path), 'utf8'))[0].endMs, 5);
+    assert.deepEqual(res.usage, { characters: 4 }); // 服务商计费字符数随结果走
   });
 
   it('missing config or key fails readably and the key never appears in task rows or views', async () => {

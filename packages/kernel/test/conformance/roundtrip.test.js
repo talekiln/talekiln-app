@@ -218,6 +218,7 @@ test('意图足迹：每个意图只写它声明的路径；内核导出的每�
       connectNodes: [() => canvas.connectNodes(g, lines[1], s1, { port: 'lines' }), P('^edges\\.', '^edges#order$')],
       disconnectNodes: [() => canvas.disconnectNodes(g, { edge_id: line0Edge.id }), P('^edges\\.', '^edges#order$')],
       addNodeAt: [() => canvas.addNodeAt(g, 'image', { x: 1, y: 2 }), P('^nodes\\.img_\\d+\\.', '^layout\\.img_\\d+$')],
+      renameGroup: [() => canvas.renameGroup(g, grp, '改名后的场景'), P(`^groups\\.${grp}\\.title$`)],
       deleteNode: [() => canvas.deleteNode(g, c0.image), P(`^nodes\\.${c0.image}\\.`, '^edges\\.', '^edges#order$', `^layout\\.${c0.image}$`, `^versions\\.${c0.image}$`, `^adopted\\.${c0.image}$`)],
     },
   };
