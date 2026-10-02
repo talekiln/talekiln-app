@@ -41,3 +41,5 @@
 ## 进度
 
 （随合入更新）
+
+- P3-C 角色一致性：分支 `p3-consistency`，自动化测试通过；真 Key 分数分布、Windows 真机未验证。见 `docs/phase3-consistency.md`。
