@@ -463,6 +463,14 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
     r.post('/diagnostics/feedback', diag.sendFeedback);
   }
 
+  // P3-C 角色一致性：评分报告 / 重评 / 参考图自动挑选
+  if (extras.consistency) {
+    const consistency = require('./consistency')(extras.consistency, log);
+    r.get('/episodes/:id/consistency', consistency.episodeReport);
+    r.post('/shots/:id/consistency/rescore', consistency.rescore);
+    r.post('/characters/:id/references/auto-pick', consistency.autoPick);
+  }
+
   return r;
 }
 
