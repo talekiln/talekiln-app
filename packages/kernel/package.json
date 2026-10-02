@@ -1,0 +1,13 @@
+{
+  "name": "@talekiln/kernel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "数据内核：单一项目图 + 原子 op/事务 + 依赖失效 + 四种视图投影（纯 JS，零依赖，不碰 fs/db/网络）",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node --test test/*.test.js test/conformance/*.test.js"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

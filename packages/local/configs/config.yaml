@@ -1,0 +1,71 @@
+app:
+  name: Talekiln API
+  version: 1.0.0
+  debug: true
+  language: zh
+server:
+  port: 5679
+  host: 127.0.0.1
+  cors_origins:
+    - http://localhost:3012
+  read_timeout: 600
+  write_timeout: 600
+  insecure_tls: false
+database:
+  type: sqlite
+  path: ./data/drama_generator.db
+  max_idle: 10
+  max_open: 100
+storage:
+  type: local
+  local_path: ./data/storage
+  base_url: http://localhost:5679/static
+# 异步视频任务轮询总超时（分钟）；省略或 ≤0 时默认 30
+video:
+  generation_timeout_minutes: 30
+ai:
+  default_text_provider: openai
+  default_image_provider: openai
+  default_video_provider: doubao
+style:
+  default_style: ''
+  default_role_style: full body and face clearly visible, character centered, consistent facial features, high detail, masterpiece, best quality
+  default_scene_style: wide establishing shot, highly detailed environment, sharp focus, rich atmosphere, masterpiece, best quality
+  default_prop_style: object centered, clean simple background, studio lighting, sharp focus, high detail, masterpiece, best quality
+  default_image_ratio: '16:9'
+  default_video_ratio: '16:9'
+  default_prop_ratio: '1:1'
+  default_image_size: 1024x1024
+vendor_lock:
+  enabled: false
+  config_file: ai-configs-qudao.json
+image_proxy:
+  expire_hours: 2   # 按图床实际 TTL 调整
+  use_for_video: true
+  # 图床上传超时（秒），避免网络不通时长时间卡住
+  upload_timeout_seconds: 180
+  upload_max_attempts: 2
+  # upload_url: https://imageproxy.zhongzhuan.chat/api/upload
+# 持久化 AI 任务队列（worker）：按服务商并发上限、轮询/空闲间隔（毫秒）
+ai_queue:
+  limits:
+    default: 2
+    bailian: 3
+    ark: 3
+  idle_min_ms: 500
+  idle_max_ms: 5000
+  poll_min_ms: 2000
+  poll_max_ms: 30000
+  jitter_ratio: 0.2
+# 对外开放的服务商（唯一开关）：注册表、引导向导、AI 配置页、模型目录、错误/帮助文案都只认这一项。
+# 默认只开放阿里云百炼；其余服务商代码保留但隐藏。新增服务商见 docs/provider-extension.md。
+providers:
+  enabled:
+    - bailian
+# 生成：出图/出视频默认走持久队列（/episodes/:id/generate）。legacy_enabled=true 才在界面保留旧的同步按钮（仅用于排障对照）。
+generation:
+  legacy_enabled: false
+# 云端（账号/许可证/目录/推广跳转）。base_url 留占位表示未配置；也可用环境变量 TALEKILN_CLOUD_URL 覆盖
+cloud:
+  base_url: https://cloud.talekiln.example
+  require_login: false

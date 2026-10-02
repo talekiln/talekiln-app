@@ -1,0 +1,82 @@
+{
+  "name": "@talekiln/desktop",
+  "version": "1.2.8",
+  "description": "Talekiln desktop client",
+  "main": "main.js",
+  "author": "Talekiln",
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "electron .",
+    "test": "node --test test/*.test.js",
+    "dist:win": "node ../../scripts/pack-desktop.mjs --win"
+  },
+  "dependencies": {
+    "@talekiln/local": "workspace:*",
+    "electron-updater": "^6.8.9",
+    "@talekiln/core": "workspace:*"
+  },
+  "devDependencies": {
+    "electron": "39.8.10",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "app.talekiln.desktop",
+    "productName": "Talekiln",
+    "artifactName": "Talekiln-${version}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "lifecycle.js",
+      "core-runtime.js",
+      "user-data.js",
+      "startup-error.js",
+      "updater.js",
+      "updater-logic.js",
+      "update-config.json",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../renderer/dist",
+        "to": "renderer"
+      },
+      {
+        "from": "../../packages/core/target/release/lycore.exe",
+        "to": "lycore/lycore.exe"
+      },
+      {
+        "from": "resources/ffmpeg",
+        "to": "lycore/ffmpeg",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://updates.example.invalid/talekiln",
+        "channel": "latest"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "verifyUpdateCodeSignature": true
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**",
+      "**/node_modules/sharp/**",
+      "**/node_modules/@img/**"
+    ]
+  },
+  "private": true
+}

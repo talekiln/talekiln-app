@@ -1,0 +1,12 @@
+[
+  {"id": "gf-01", "templateId": "guofeng-drama", "durationSec": 45, "aspectRatio": "9:16", "story": "落魄书生在破庙避雨，遇到一位自称迷路的白衣女子。女子请他帮忙找回丢失的玉佩，书生在佛像下找到玉佩，却发现上面刻着自己的名字。"},
+  {"id": "gf-02", "templateId": "guofeng-drama", "durationSec": 60, "aspectRatio": "9:16", "story": "将军凯旋回京，发现府中老管家换成了陌生人。夜里他假装醉酒，听到新管家和人密谋。最后揭穿：新管家是皇帝派来保护他的暗卫，真正要害他的是自己的副将。"},
+  {"id": "gf-03", "templateId": "guofeng-drama", "durationSec": 30, "aspectRatio": "16:9", "story": "茶馆说书人每天讲同一个侠客故事，一个小乞丐每天都来听。一天侠客的仇家找上门，说书人放下醒木，原来他就是那个侠客。"},
+  {"id": "gf-04", "templateId": "guofeng-drama", "durationSec": 40, "aspectRatio": "9:16", "story": "绣娘为公主绣嫁衣，绣到最后一针时发现公主根本不想出嫁。她在嫁衣里藏了一张地图。"},
+  {"id": "ps-01", "templateId": "product-seeding", "durationSec": 30, "aspectRatio": "9:16", "story": "一款便携折叠电热水壶，容量 600 毫升，折叠后只有 4 厘米厚，支持双电压，适合出差和宿舍，硅胶壶身食品级。"},
+  {"id": "ps-02", "templateId": "product-seeding", "durationSec": 45, "aspectRatio": "9:16", "story": "一款降噪通勤双肩包，后背防盗拉链，侧面一秒取伞口袋，可放 16 寸电脑，防泼水面料，重量 900 克。目标人群是坐地铁上班的年轻人。"},
+  {"id": "ps-03", "templateId": "product-seeding", "durationSec": 60, "aspectRatio": "1:1", "story": "一款冷萃挂耳咖啡，冷水 3 分钟萃取，不苦不酸，一盒 12 包，每包 15 克，适合夏天在办公室喝。"},
+  {"id": "ke-01", "templateId": "knowledge-explainer", "durationSec": 45, "aspectRatio": "9:16", "story": "为什么天空是蓝色的？讲清楚瑞利散射：短波长的蓝光更容易被空气分子散射，傍晚阳光穿过更厚的大气，蓝光被散射掉，所以夕阳偏红。"},
+  {"id": "ke-02", "templateId": "knowledge-explainer", "durationSec": 60, "aspectRatio": "16:9", "story": "复利是怎么回事？用每年 5% 收益、本金 1 万元、30 年为例，对比单利和复利的差别，最后提一下 72 法则。"},
+  {"id": "ke-03", "templateId": "knowledge-explainer", "durationSec": 30, "aspectRatio": "9:16", "story": "为什么切洋葱会流泪？洋葱细胞破裂后释放酶，产生一种挥发性的含硫化合物，刺激眼睛，泪腺分泌眼泪来冲洗。冷藏洋葱或用锋利的刀可以减轻。"}
+]

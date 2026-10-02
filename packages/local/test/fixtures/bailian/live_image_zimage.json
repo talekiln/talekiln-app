@@ -1,0 +1,1 @@
+{"output":{"choices":[{"finish_reason":"stop","message":{"content":[{"image":"https://example.invalid/z.png"},{"text":"橘猫，简笔画"}],"reasoning_content":"","role":"assistant"}}]},"usage":{"height":1024,"image_count":1,"input_tokens":0,"output_tokens":0,"total_tokens":0,"width":1024},"request_id":"b77830b0-d301-92e6-8853-b3bd9d535eca"}

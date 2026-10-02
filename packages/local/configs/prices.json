@@ -1,0 +1,42 @@
+{
+  "_notice": "Public 百炼 list prices (CNY, pay-as-you-go, excluding free quota) copied from the Alibaba Cloud pricing pages on the date below. Used for estimates, caps and actual-cost write-back; the vendor bill is authoritative. Entries with verified:false have no public price we could confirm and keep a placeholder (shown as 示例价). Remote config (cloud catalog) overrides this file at runtime.",
+  "sample": false,
+  "version": "bailian-public-2025-12-19",
+  "price_date": "2025-12-19",
+  "source": "https://developer.aliyun.com/article/1695854 ; https://help.aliyun.com/zh/model-studio/model-pricing",
+  "currency": "CNY",
+  "max_factor": 1.2,
+  "defaults": { "duration_seconds": 5 },
+  "providers": {
+    "bailian": {
+      "image": {
+        "wan2.6-t2i": { "per": "image", "price": 0.2, "verified": true },
+        "wan2.6-image": { "per": "image", "price": 0.2, "verified": false, "note": "未在公开价目中单列，按 wan2.6-t2i 同价" },
+        "z-image-turbo": { "per": "image", "price": 0.1, "verified": false, "note": "未找到公开价目，占位" },
+        "_default": { "per": "image", "price": 0.2, "verified": false }
+      },
+      "video": {
+        "wan2.6-t2v": { "per": "second", "price": 0.6, "by_resolution": { "720P": 0.6, "1080P": 1.0 }, "verified": true },
+        "wan2.6-i2v-flash": { "per": "second", "price": 0.6, "by_resolution": { "720P": 0.6, "1080P": 1.0 }, "verified": false, "note": "公开价目只列 wan2.6-i2v（720P 0.6 / 1080P 1.0 元/秒），flash 档按同价占位" },
+        "wan2.6-r2v-flash": { "per": "second", "price": 0.6, "verified": false, "note": "未找到公开价目，按 wan2.6 视频同价占位" },
+        "wan2.2-kf2v-flash": { "per": "second", "price": 0.1, "verified": false, "note": "未找到公开价目，占位" },
+        "_default": { "per": "second", "price": 0.6, "verified": false }
+      },
+      "tts": {
+        "cosyvoice-v2": { "per": "char", "price": 0.0002, "verified": true, "note": "2 元/万字符；一个汉字计 2 个字符，字母/数字/标点/空格计 1 个" },
+        "_default": { "per": "char", "price": 0.0002, "verified": false }
+      }
+    },
+    "ark": {
+      "image": {
+        "_default": { "per": "image", "price": 0.25, "verified": false }
+      },
+      "video": {
+        "_default": { "per": "second", "price": 0.5, "by_resolution": { "480p": 0.25, "720p": 0.5, "1080p": 0.9 }, "verified": false }
+      },
+      "tts": {
+        "_default": { "per": "char", "price": 0.0002, "verified": false }
+      }
+    }
+  }
+}

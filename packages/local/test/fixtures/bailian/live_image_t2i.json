@@ -1,0 +1,1 @@
+{"request_id":"abf69571-ce32-941b-b121-44bc96ccdc21","output":{"choices":[{"message":{"role":"assistant","content":[{"image":"https://example.invalid/t2i.png","type":"image"}]},"finish_reason":"stop"}],"finished":true},"usage":{"image_count":1,"input_tokens":0,"output_tokens":0,"total_tokens":0,"size":"1024*1024"}}

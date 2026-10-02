@@ -1,0 +1,1 @@
+[{"header": {"task_id": "ac95bde7", "task_uuid": "faff7c8cf7604e71a158a8b7909059b8", "event": "task-started", "attributes": {}}, "payload": {}}, {"header": {"task_id": "ac95bde7", "event": "task-failed", "error_code": "InvalidParameter", "error_message": "Model not exist."}, "payload": {}}]
