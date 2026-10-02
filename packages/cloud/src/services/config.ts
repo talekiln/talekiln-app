@@ -68,6 +68,8 @@ export function parseRetiredKeys(env: NodeJS.ProcessEnv): RetiredSigningKey[] {
     const kid = checkKid(kids[i], 'PLUGIN_SIGNING_RETIRED_KEY_IDS');
     if (seen.has(kid)) throw new Error(`PLUGIN_SIGNING_RETIRED_KEY_IDS 重复：${kid}`);
     seen.add(kid);
+    // 只接受公钥材料：私钥 PEM 也能被 createPublicKey 读出公钥，但退役私钥应当销毁，不该还留在 .env 里
+    if (/PRIVATE KEY/.test(pem)) throw new Error(`PLUGIN_SIGNING_RETIRED_PUBLIC_KEYS_PEM 第 ${i + 1} 把是私钥；退役列表只能放公钥（SPKI PEM）`);
     let publicKey: KeyObject;
     try {
       publicKey = createPublicKey(pem);
