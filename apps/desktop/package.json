@@ -55,6 +55,13 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "resources/models",
+        "to": "models",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "publish": [
@@ -77,7 +84,8 @@
     "asarUnpack": [
       "**/node_modules/better-sqlite3/**",
       "**/node_modules/sharp/**",
-      "**/node_modules/@img/**"
+      "**/node_modules/@img/**",
+      "**/node_modules/onnxruntime-node/**"
     ],
     "mac": {
       "category": "public.app-category.video",

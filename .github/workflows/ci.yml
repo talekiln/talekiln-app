@@ -16,6 +16,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # 人脸模型（P3-C 人脸级一致性，约 10 MB，固定哈希）：没有它们 face 集成测试会跳过，这里取来让它真的跑
+      - run: node scripts/fetch-face-models.mjs
       - run: pnpm secrets:scan
       # spec 报告器会在末尾单独列出失败用例和错误；TAP 输出夹在几万行迁移日志里，日志尾部看不到失败的是谁
       - run: pnpm test
@@ -71,6 +73,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # 人脸模型（固定哈希）随安装包内置：resources/models/face
+      - run: node scripts/fetch-face-models.mjs
       - run: pnpm build
 
       # 渲染核心 lycore 与 ffmpeg（LGPL，固定哈希）随安装包内置：resources/lycore/
@@ -150,6 +154,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # 人脸模型（固定哈希）随安装包内置：resources/models/face
+      - run: node scripts/fetch-face-models.mjs
       - run: pnpm secrets:scan
       - run: pnpm test:scripts
       - run: pnpm build

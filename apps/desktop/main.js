@@ -132,7 +132,9 @@ async function startLocalService() {
     filePath: path.join(DATA_DIR, 'data', 'secrets.enc.json'),
   });
   if (!secretStore.isAvailable()) writeMainLog('safeStorage encryption unavailable: API keys cannot be saved');
-  const { app: expressApp, aiQueue } = createApp({ secretStore, onTaskFinished: (t) => lifecycle.onTaskFinished(t) });
+  // 人脸模型（P3-C 人脸级一致性）随包放在 <resources>/models/face；开发时本机服务按仓库目录 apps/desktop/resources/models/face 自己找
+  const faceModelsDir = app.isPackaged ? path.join(process.resourcesPath, 'models', 'face') : null;
+  const { app: expressApp, aiQueue } = createApp({ secretStore, onTaskFinished: (t) => lifecycle.onTaskFinished(t), faceModelsDir });
   aiWorker = aiQueue.worker;
   // 启动对账（恢复未完成任务，不会重复提交）后开始调度；失败不阻止应用启动
   aiWorker.start().catch((e) => writeMainLog(`ai worker start failed: ${e && e.stack ? e.stack : e}`));
