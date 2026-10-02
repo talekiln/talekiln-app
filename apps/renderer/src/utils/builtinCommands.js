@@ -5,6 +5,7 @@
  *   go(location)            跳转（vue-router 的 push）
  *   undo() / redo()         内核历史
  *   openHistory()           打开版本历史抽屉
+ *   openDirector(episodeId) 打开导演模式抽屉（P3-D）
  *   select(sel)             设置四视图共享选择 { kind, id }
  *   getViews()              { script, shots }（内核视图投影，可能为 null）
  * ctx（每次搜索现取）: { episodeId, dramaId, canUndo, canRedo, busy }
@@ -36,6 +37,8 @@ export function createBuiltinCommands(deps) {
     { id: 'project.batch', title: '批量生成', group: '项目', keywords: ['批量', '多集', '批次', 'batch', '并发', '预算'], when: (ctx) => !!ctx.dramaId, run: (ctx) => deps.go(`/project/${ctx.dramaId}/batch`) },
     // P3-T
     page('nav.templates', '模板市场', '/templates', ['模板', '套用', '市场', 'template', 'templates']),
+    // P3-D
+    { id: 'director.open', title: '导演模式', group: '编辑', keywords: ['导演', '自然语言', '改片', '一句话', 'director', 'ai'], when: hasEpisode, run: (ctx) => deps.openDirector(ctx.episodeId) },
   ]
 }
 

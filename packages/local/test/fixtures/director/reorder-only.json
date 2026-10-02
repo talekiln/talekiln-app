@@ -1,0 +1,8 @@
+{
+  "id": "reorder-only",
+  "note": "只调顺序：把第二镜提到第一镜前面。只有合成过期，花费为 0。",
+  "message": "把第二镜和第一镜对调一下顺序",
+  "replies": [
+    "{\"summary\": \"对调第一镜与第二镜的顺序\", \"steps\": [{\"view\": \"shot\", \"name\": \"reorderShots\", \"args\": {\"group_id\": \"grp_1\", \"ids\": [\"shot_2\", \"shot_1\", \"shot_3\", \"shot_4\", \"shot_5\"]}, \"reason\": \"只改顺序，不需要重新生成任何素材\"}], \"untouched\": [\"所有镜头的画面、台词与时长不变\"]}"
+  ]
+}

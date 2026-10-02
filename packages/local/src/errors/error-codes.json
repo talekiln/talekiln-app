@@ -444,6 +444,36 @@
       "scope": "local",
       "message": "内置模板不能覆盖或删除",
       "action": "换一个模板 id 再安装"
+    },
+    "NO_TEXT_PROVIDER": {
+      "scope": "local",
+      "message": "没有可用的文本模型配置",
+      "action": "到 AI 配置里添加百炼 Key（文本配置），再试一次"
+    },
+    "DIRECTOR_MODEL_FAILED": {
+      "scope": "local",
+      "message": "导演模式调用大模型失败",
+      "action": "检查文本模型的 Key 与网络后重试；反复出现请在反馈中附上日志"
+    },
+    "DIRECTOR_PLAN_REJECTED": {
+      "scope": "local",
+      "message": "模型给出的执行计划没有通过校验，未改动任何数据",
+      "action": "换一种说法再试，或把指令拆成更小的步骤；校验失败的原因见该轮记录"
+    },
+    "DIRECTOR_TURN_STATE": {
+      "scope": "local",
+      "message": "这轮计划的当前状态不允许该操作",
+      "action": "已拒绝的计划不能执行；已执行的计划请用撤销；撤销后要再执行请重新生成计划"
+    },
+    "DIRECTOR_STALE_PLAN": {
+      "scope": "local",
+      "message": "生成计划之后项目已被修改，计划不再适用",
+      "action": "重新生成计划后再执行"
+    },
+    "DIRECTOR_NOT_ON_TOP": {
+      "scope": "local",
+      "message": "这轮计划之后还有别的修改，不能单独撤销",
+      "action": "先在顶栏撤销后面的修改，或在版本历史里回到这一步"
     }
   }
 }
