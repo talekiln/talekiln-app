@@ -1,0 +1,146 @@
+{
+  "id": "official-rebirth-noble-daughter",
+  "name": "穿越重生 · 嫡女归来",
+  "version": "1.0.0",
+  "genre": "rebirth",
+  "tier": "free",
+  "description": "一集重生宅斗短剧的开篇：重生睁眼、前世闪回、请安试探、宫宴栽赃、当众反杀。十个镜头约 55 秒，四个槽位（嫡女、庶妹、继母、世子），结尾用「重生的不止她一个」留钩，适合古装言情与宅斗类账号。",
+  "cover": null,
+  "music_hint": "古琴与大鼓，闪回处用低沉的弦乐，反击段落加入急促的琵琶轮指，钩子处只留一声钟响",
+  "style": {
+    "name": "新古风",
+    "preset": "neo gufeng",
+    "prompt": "中国古装剧画面，新古风审美，精致汉服与宫宴陈设，暖烛光与冷月光对比，浅景深，丝绸与玉饰质感清晰，电影级调色",
+    "aspect_ratio": "9:16"
+  },
+  "character_slots": [
+    { "id": "heroine", "name": "沈昭宁", "role": "女主", "description": "前世被庶妹夺婿害死的侯府嫡女，重生回及笄前夜，这一世步步为营", "appearance": "十八岁女性，眉目英气，乌发半挽簪一支白玉簪，月白色绣竹纹襦裙，腰间悬一枚旧香囊" },
+    { "id": "sister", "name": "沈昭柔", "role": "反派", "description": "庶妹，表面柔弱爱哭，心机深沉", "appearance": "十七岁女性，杏眼含泪，粉色纱裙，发间簪一朵绢花，手帕从不离手" },
+    { "id": "stepmother", "name": "柳氏", "role": "反派", "description": "继母，侯府当家主母，庶妹的靠山", "appearance": "四十岁女性，妆容端庄，石青色织金褙子，手腕上一对翠玉镯" },
+    { "id": "prince", "name": "萧珩", "role": "男主", "description": "冷面世子，前世唯一为她收尸的人", "appearance": "二十二岁男性，身形颀长，玄色锦袍绣暗纹，束发玉冠，腰佩长剑" }
+  ],
+  "shots": [
+    {
+      "title": "重生睁眼",
+      "group": "重生",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{heroine}}猛地从床上坐起，一手掐着自己的喉咙，低头看见自己纤细年轻的双手，眼里从惊恐变成冷静",
+      "character_slots": ["heroine"],
+      "scene_slot": "侯府闺房，清晨，纱帐透进淡金色晨光",
+      "camera": "特写睁眼拉开到近景",
+      "lines": [
+        { "kind": "narration", "text": "前世，她死在亲妹妹递来的那杯酒里。这一世，她回来了。" },
+        { "kind": "dialogue", "speaker": "heroine", "text": "……及笄前夜。还来得及。" }
+      ]
+    },
+    {
+      "title": "前世那杯酒",
+      "group": "重生",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{sister}}端着一杯酒俯视倒在地上的{{heroine}}，笑容温柔，雪花从破窗飘进来落在酒杯上",
+      "character_slots": ["sister", "heroine"],
+      "scene_slot": "前世的冷僻偏院，雪夜，一盏将熄的油灯",
+      "camera": "手持俯拍",
+      "lines": [{ "kind": "dialogue", "speaker": "sister", "text": "姐姐，这杯酒，替我谢谢你让出来的夫君。" }]
+    },
+    {
+      "title": "请安",
+      "group": "试探",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{stepmother}}端坐上首，{{sister}}捧着一碗燕窝递给{{heroine}}，{{heroine}}含笑接过又轻轻推了回去",
+      "character_slots": ["stepmother", "sister", "heroine"],
+      "scene_slot": "侯府正院花厅，上午，雕花窗格透光",
+      "camera": "中景过肩",
+      "lines": [
+        { "kind": "dialogue", "speaker": "sister", "text": "姐姐，这是我亲手炖的。" },
+        { "kind": "dialogue", "speaker": "heroine", "text": "妹妹体弱，还是你喝。" },
+        { "kind": "action", "text": "柳氏端茶的手顿了一下。" }
+      ]
+    },
+    {
+      "title": "香囊",
+      "group": "试探",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{heroine}}独自倚着廊柱解下腰间旧香囊，倒出一小撮灰白色药末在掌心，神色平静",
+      "character_slots": ["heroine"],
+      "scene_slot": "侯府回廊，午后，廊下光影斑驳",
+      "camera": "特写俯拍手心",
+      "lines": [{ "kind": "narration", "text": "前世她用三年才查出来的东西，这一世，一天就够了。" }]
+    },
+    {
+      "title": "寿宴邀约",
+      "group": "试探",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{stepmother}}坐在妆台前卸着翠玉镯，透过铜镜看站在身后的{{heroine}}",
+      "character_slots": ["stepmother", "heroine"],
+      "scene_slot": "继母内室，黄昏，铜镜与烛台",
+      "camera": "镜中近景正反打",
+      "lines": [
+        { "kind": "dialogue", "speaker": "stepmother", "text": "太后寿宴，让柔儿替你去吧，你身子弱。" },
+        { "kind": "dialogue", "speaker": "heroine", "text": "母亲，嫡女不去，是打侯府的脸。" }
+      ]
+    },
+    {
+      "title": "宫宴初遇",
+      "group": "试探",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{prince}}在席间抬眼看向{{heroine}}，{{heroine}}垂下眼帘不与他对视，烛光在两人之间晃动",
+      "character_slots": ["prince", "heroine"],
+      "scene_slot": "宫中寿宴大殿，夜，宫灯成排",
+      "camera": "跟拍侧移",
+      "lines": [
+        { "kind": "dialogue", "speaker": "prince", "text": "沈家嫡女？" },
+        { "kind": "dialogue", "speaker": "heroine", "text": "世子认错人了。" }
+      ]
+    },
+    {
+      "title": "栽赃",
+      "group": "反击",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{sister}}跪在殿中掩面哭泣，一只翠玉镯从{{heroine}}的袖中滑落在地，满座哗然，{{heroine}}却不慌不忙地弯腰拾起",
+      "character_slots": ["sister", "heroine"],
+      "scene_slot": "寿宴大殿中央，众目睽睽，烛火通明",
+      "camera": "中景环绕",
+      "lines": [
+        { "kind": "dialogue", "speaker": "sister", "text": "姐姐，你为何拿我的镯子？" },
+        { "kind": "dialogue", "speaker": "heroine", "text": "妹妹不妨看看，镯子内侧刻的是谁家的字号。" }
+      ]
+    },
+    {
+      "title": "当众对质",
+      "group": "反击",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{heroine}}把翠玉镯举到灯下，内侧刻字清晰可见，{{stepmother}}脸色煞白，手腕上只剩一只镯子",
+      "character_slots": ["heroine", "stepmother"],
+      "scene_slot": "寿宴大殿，宫灯下",
+      "camera": "特写镯子摇到脸部",
+      "lines": [
+        { "kind": "action", "text": "镯子内侧，刻着柳氏娘家的字号。" },
+        { "kind": "dialogue", "speaker": "heroine", "text": "母亲的镯子，怎会在妹妹腕上？" }
+      ]
+    },
+    {
+      "title": "世子出手",
+      "group": "反击",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{prince}}起身离席走到殿中，玄色衣袍扫过地面，满殿寂静，{{sister}}的哭声戛然而止",
+      "character_slots": ["prince", "sister"],
+      "scene_slot": "寿宴大殿，殿中空地",
+      "camera": "低机位全景",
+      "lines": [{ "kind": "dialogue", "speaker": "prince", "text": "本世子作证，这镯子方才还在二小姐腕上。" }]
+    },
+    {
+      "title": "马车夜话",
+      "group": "钩子",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{heroine}}掀开马车车帘，{{prince}}骑马与车并行，俯身在车窗边低声说了一句话，{{heroine}}的手僵在车帘上",
+      "character_slots": ["heroine", "prince"],
+      "scene_slot": "回府的宫道上，深夜，马车灯笼摇晃",
+      "camera": "近景车窗定格",
+      "lines": [
+        { "kind": "dialogue", "speaker": "prince", "text": "沈昭宁，你不该记得前世的事。" },
+        { "kind": "narration", "text": "原来，重生的不止她一个。" }
+      ]
+    }
+  ]
+}
