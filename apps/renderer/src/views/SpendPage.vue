@@ -13,18 +13,20 @@
 
     <main v-loading="loading" class="main">
       <el-alert
-        v-if="summary && summary.sample_prices"
-        type="warning"
+        v-if="note.text"
+        :type="note.warn ? 'warning' : 'info'"
         :closable="false"
         show-icon
-        title="当前价格表为示例价，费用仅为估算，不代表服务商实际账单。实际费用以服务商控制台为准。"
+        :title="note.text"
+        data-test="price-note"
       />
 
       <section class="cards">
         <div class="card">
-          <div class="card-label">所选范围合计</div>
+          <div class="card-label">所选范围合计（有实际用量按实际，否则按预估）</div>
           <div class="card-value" data-test="total">{{ money(summary?.total.cost ?? 0) }}</div>
-          <div class="card-sub">{{ summary?.total.count ?? 0 }} 个已完成任务</div>
+          <div class="card-sub">{{ summary?.total.count ?? 0 }} 个已完成任务，预估合计 {{ money(summary?.total.estimated ?? 0) }}</div>
+          <div class="card-sub" data-test="actual-sub">{{ actualSubtitle(summary?.total, currency) }}</div>
         </div>
         <div class="card">
           <div class="card-label">本月已用</div>
@@ -79,7 +81,16 @@
             <template #default="{ row }">{{ money(row.estimated) }}</template>
           </el-table-column>
           <el-table-column label="实际" width="100" align="right">
-            <template #default="{ row }">{{ row.actual == null ? '未回传' : money(row.actual) }}</template>
+            <template #default="{ row }">
+              <el-tooltip v-if="row.actual != null && usageText(row.usage)" :content="usageText(row.usage)" placement="top">
+                <span>{{ money(row.actual) }}</span>
+              </el-tooltip>
+              <span v-else-if="row.actual != null">{{ money(row.actual) }}</span>
+              <span v-else class="muted">未回传</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="用量" min-width="150">
+            <template #default="{ row }">{{ usageText(row.usage) || '-' }}</template>
           </el-table-column>
           <el-table-column label="计入" width="100" align="right">
             <template #default="{ row }"><b>{{ money(row.cost) }}</b></template>
@@ -105,7 +116,8 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { spendAPI } from '@/api/spend'
 import {
-  RANGE_PRESETS, rangeFor, formatMoney, monthProgress, parseCapInput, withBarPercent, kindLabel, csvFileName
+  RANGE_PRESETS, rangeFor, formatMoney, monthProgress, parseCapInput, withBarPercent, kindLabel, csvFileName,
+  priceNote, actualSubtitle, usageText
 } from '@/utils/spendView'
 
 const router = useRouter()
@@ -123,6 +135,7 @@ const capText = ref('')
 const currency = computed(() => summary.value?.currency || 'CNY')
 const money = (v) => formatMoney(v, currency.value)
 const progress = computed(() => monthProgress(summary.value?.month))
+const note = computed(() => priceNote(summary.value))
 const range = computed(() => rangeFor(preset.value))
 
 const groups = computed(() => {
@@ -223,4 +236,5 @@ onMounted(reload)
 .bar-num { text-align: right; font-variant-numeric: tabular-nums; }
 .bar-count { margin-left: 6px; color: var(--text-subtle); font-size: 11px; }
 .pager { margin-top: 12px; justify-content: center; }
+.muted { color: var(--text-subtle); }
 </style>

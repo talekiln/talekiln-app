@@ -280,6 +280,22 @@ test('画布：connectNodes 推断端口、替换单连接端口、拒绝非法�
   assert.throws(() => canvas.disconnectNodes(g, { edge_id: 'ghost' }), { code: 'INTENT' });
 });
 
+test('画布：renameGroup 只改场景标题，三视图同步，key 与 staleSet 不变；空标题 / 未知组报 INTENT', () => {
+  const g = adoptAll(fixtureGraph());
+  const gid = g.group_order[0];
+  const r = run(g, canvas.renameGroup(g, gid, '  新场景名  '));
+  assert.equal(r.graph.groups[gid].title, '新场景名');
+  assert.equal(K.canvasView(r.graph).groups.find((x) => x.id === gid).title, '新场景名');
+  assert.equal(K.scriptView(r.graph).groups.find((x) => x.id === gid).title, '新场景名');
+  assert.equal(K.shotView(r.graph).groups.find((x) => x.id === gid).title, '新场景名');
+  assert.deepEqual(K.cacheKeys(r.graph), K.cacheKeys(g));
+  assert.deepEqual(r.invalidated.concat(r.revalidated), []);
+  assert.equal(canvas.renameGroup(g, gid, g.groups[gid].title).ops.length, 0); // 没变 = 空事务
+  assert.throws(() => canvas.renameGroup(g, gid, '   '), { code: 'INTENT' });
+  assert.throws(() => canvas.renameGroup(g, gid, 42), { code: 'INTENT' });
+  assert.throws(() => canvas.renameGroup(g, 'ghost_group', 'x'), { code: 'INTENT' });
+});
+
 test('画布：addNodeAt 各类型；compose 唯一；带 layout', () => {
   const g = fixtureGraph();
   const s = canvas.addNodeAt(g, 'shot', { x: 5, y: 6, group: 'grp_2', params: { title: '画布新建' } });
