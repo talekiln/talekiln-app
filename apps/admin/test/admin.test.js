@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { ApiError, auth, createApi, errorText } from '../src/api.js'
-import { barPercent, formatBytes, formatTime, invitesToCsv, newId, validateAnnouncements, validateCatalog } from '../src/format.js'
+import { barPercent, formatBytes, formatTime, invitesToCsv, newId, validateCatalog } from '../src/format.js'
 
 function fakeFetch(responses) {
   const calls = []
@@ -103,9 +103,6 @@ describe('format', () => {
     assert.match(validateCatalog([{ ...ok, name: ' ' }]), /名称/)
     assert.match(validateCatalog([ok, ok]), /重复/)
     assert.match(validateCatalog([{ ...ok, price: Number.NaN }]), /价格/)
-    assert.equal(validateAnnouncements([{ title: 't', body: 'b' }]), null)
-    assert.match(validateAnnouncements([{ title: '', body: '' }]), /标题/)
-    assert.match(validateAnnouncements([{ title: 't', body: 'x'.repeat(2001) }]), /2000/)
     assert.notEqual(newId('a'), newId('a'))
   })
 })

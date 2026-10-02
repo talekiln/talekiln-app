@@ -110,6 +110,12 @@ const router = createRouter({
       meta: { title: '快捷键设置' }
     },
     {
+      path: '/settings/about',
+      name: 'about',
+      component: () => import('@/views/About.vue'),
+      meta: { title: '关于' }
+    },
+    {
       path: '/ai-config',
       name: 'ai-config',
       component: () => import('@/views/AiConfig.vue'),

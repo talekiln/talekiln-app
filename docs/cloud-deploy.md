@@ -50,6 +50,7 @@ CREATE DATABASE talekiln OWNER talekiln;
 | `MAX_DIAGNOSTIC_BYTES` / `FEEDBACK_RATE_LIMIT` | 反馈诊断包大小上限与限流 |
 | `CATALOG_FILE` | 自定义模型目录文件 |
 | `PORT` | 监听端口，默认 3000 |
+| `PAYMENT_MODE` / `PAYMENT_SANDBOX_SECRET` / `PAYMENT_NOTIFY_BASE_URL` / `ORDER_TTL_MINUTES` / `PLAN_PRO_PRICE_MONTH_CENTS` / `PLAN_PRO_PRICE_YEAR_CENTS` | 收费与支付，见 `docs/phase2-payments.md` |
 
 ## 3. 应用迁移
 

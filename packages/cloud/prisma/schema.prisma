@@ -13,29 +13,33 @@ enum Role {
 }
 
 model Account {
-  id           String         @id @default(uuid())
-  email        String         @unique
-  passwordHash String
-  role         Role           @default(USER)
-  disabledAt   DateTime?
-  plan         String         @default("test")
-  createdAt    DateTime       @default(now())
-  devices      Device[]
+  id            String         @id @default(uuid())
+  email         String         @unique
+  passwordHash  String
+  role          Role           @default(USER)
+  disabledAt    DateTime?
+  plan          String         @default("test")
+  createdAt     DateTime       @default(now())
+  devices       Device[]
   refreshTokens RefreshToken[]
-  invitesUsed  InviteCode[]   @relation("InviteUsedBy")
+  invitesUsed   InviteCode[]   @relation("InviteUsedBy")
+  subscription  Subscription?
+  orders        Order[]
+  licenceUsages LicenceUsage[]
+  adminRole     AdminRole?
 }
 
 model InviteCode {
-  id          String    @id @default(uuid())
-  code        String    @unique
-  plan        String    @default("test")
-  createdBy   String?
-  createdAt   DateTime  @default(now())
-  expiresAt   DateTime?
-  usedAt      DateTime?
-  usedById    String?
-  revokedAt   DateTime?
-  usedBy      Account?  @relation("InviteUsedBy", fields: [usedById], references: [id], onDelete: SetNull)
+  id        String    @id @default(uuid())
+  code      String    @unique
+  plan      String    @default("test")
+  createdBy String?
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+  usedAt    DateTime?
+  usedById  String?
+  revokedAt DateTime?
+  usedBy    Account?  @relation("InviteUsedBy", fields: [usedById], references: [id], onDelete: SetNull)
 }
 
 model Device {
@@ -109,4 +113,235 @@ model ReferralClick {
   createdAt DateTime @default(now())
 
   @@index([code, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// 收费与授权（P2-B）。金额一律为整数分（CNY）。价格与权益放在 PlanVersion，
+// 改价 = 新增一个版本；已下的订单永远指向下单时的版本。
+// ---------------------------------------------------------------------------
+
+enum BillingPeriod {
+  MONTH
+  YEAR
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  CLOSED
+  REFUNDING
+  REFUNDED
+}
+
+enum RefundStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum InvoiceStatus {
+  REQUESTED
+  ISSUED
+  VOID
+}
+
+model Plan {
+  id        String        @id @default(uuid())
+  code      String        @unique
+  name      String
+  enabled   Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  versions  PlanVersion[]
+}
+
+model PlanVersion {
+  id              String         @id @default(uuid())
+  planId          String
+  plan            Plan           @relation(fields: [planId], references: [id], onDelete: Restrict)
+  version         Int
+  priceMonthCents Int?
+  priceYearCents  Int?
+  // { maxDevices, exportMaxHeight, watermark, features: string[] }
+  entitlements    Json
+  createdAt       DateTime       @default(now())
+  subscriptions   Subscription[]
+  orders          Order[]
+
+  @@unique([planId, version])
+}
+
+// 每个账号至多一条订阅；currentPeriodEnd 即授权到期时间，是否有效按当前时间判断。
+model Subscription {
+  id                 String      @id @default(uuid())
+  accountId          String      @unique
+  account            Account     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  planVersionId      String
+  planVersion        PlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+}
+
+model Order {
+  id            String        @id @default(uuid())
+  outTradeNo    String        @unique
+  accountId     String
+  account       Account       @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  planVersionId String
+  planVersion   PlanVersion   @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
+  period        BillingPeriod
+  amountCents   Int
+  provider      String
+  status        OrderStatus   @default(PENDING)
+  codeUrl       String?
+  createdAt     DateTime      @default(now())
+  expiresAt     DateTime
+  paidAt        DateTime?
+  // 付款成功时确定：本单授予的授权区间（退款折算依据）
+  periodStart   DateTime?
+  periodEnd     DateTime?
+  payment       Payment?
+  refunds       Refund[]
+  invoice       Invoice?
+
+  @@index([accountId, createdAt])
+  @@index([status, createdAt])
+}
+
+model Payment {
+  id          String   @id @default(uuid())
+  orderId     String   @unique
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  provider    String
+  tradeNo     String
+  amountCents Int
+  paidAt      DateTime
+  createdAt   DateTime @default(now())
+
+  @@unique([provider, tradeNo])
+}
+
+model Refund {
+  id               String       @id @default(uuid())
+  orderId          String
+  order            Order        @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  outRefundNo      String       @unique
+  amountCents      Int
+  status           RefundStatus @default(PENDING)
+  reason           String?
+  providerRefundNo String?
+  failureReason    String?
+  createdBy        String?
+  createdAt        DateTime     @default(now())
+  finishedAt       DateTime?
+
+  @@index([orderId])
+  @@index([createdAt])
+}
+
+model Invoice {
+  id          String        @id @default(uuid())
+  orderId     String        @unique
+  order       Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  title       String
+  taxNo       String?
+  email       String
+  amountCents Int
+  status      InvoiceStatus @default(REQUESTED)
+  invoiceNo   String?
+  createdAt   DateTime      @default(now())
+  issuedAt    DateTime?
+  voidedAt    DateTime?
+
+  @@index([status, createdAt])
+}
+
+// 回调去重：(provider, notifyId) 唯一；与订单生效在同一事务里写入。
+model PaymentNotification {
+  id         String   @id @default(uuid())
+  provider   String
+  notifyId   String
+  outTradeNo String
+  receivedAt DateTime @default(now())
+
+  @@unique([provider, notifyId])
+  @@index([outTradeNo])
+}
+
+// 每次签发许可证令牌记一条（用量与审计）。
+model LicenceUsage {
+  id        String   @id @default(uuid())
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  deviceId  String
+  planCode  String
+  issuedAt  DateTime
+  expiresAt DateTime
+
+  @@index([accountId, issuedAt])
+}
+
+// ---- P2-H：公告、版本灰度、管理员角色、审计 ----
+// 枚举类字段用 String 存，取值由服务层 zod 与迁移里的 CHECK 约束共同保证。
+
+model Announcement {
+  id        String    @id @default(uuid())
+  title     String
+  body      String
+  level     String    @default("info") // info | warn | critical
+  channel   String    @default("all") // all | beta | stable
+  startsAt  DateTime
+  endsAt    DateTime?
+  enabled   Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([enabled, startsAt])
+}
+
+model Release {
+  id             String   @id @default(uuid())
+  version        String
+  channel        String // beta | stable
+  rolloutPercent Int      @default(0)
+  minVersion     String?
+  forced         Boolean  @default(false)
+  notes          String   @default("")
+  enabled        Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([version, channel])
+  @@index([channel, enabled])
+}
+
+// 后台角色：每账号至多一条；无此记录时，Account.role = ADMIN 的旧管理员按 ADMIN 对待。
+model AdminRole {
+  accountId String   @id
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  role      String // ADMIN | OPERATOR | READONLY
+  grantedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// 审计日志：只增不改。操作者账号被删后保留邮箱快照。
+model AdminAudit {
+  id         String   @id @default(uuid())
+  at         DateTime
+  actorId    String?
+  actorEmail String?
+  actorRole  String?
+  action     String
+  targetType String?
+  targetId   String?
+  ok         Boolean
+  status     Int
+  detail     Json?
+  ip         String?
+
+  @@index([at])
+  @@index([actorId, at])
+  @@index([targetType, targetId])
 }

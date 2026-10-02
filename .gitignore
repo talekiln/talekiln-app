@@ -28,3 +28,4 @@ node_modules
 .claude/worktrees/
 packages/local/data/
 apps/desktop/resources/
+!apps/desktop/build

@@ -19,6 +19,14 @@ export const exportAPI = {
   openFolder(jobId) {
     return request.post(`/export/${jobId}/open-folder`, {})
   },
+  /** body: { episode_id, output_dir, name?, width, height, fps, overwrite?, dry_run? } → { output_dir, files, stats, warnings, written } */
+  jianying(body) {
+    return request.post('/export/jianying', body)
+  },
+  /** 同上，加 format: 'xmeml'（默认，Premiere）| 'fcpxml' */
+  fcpxml(body) {
+    return request.post('/export/fcpxml', body)
+  },
   getAigc() {
     return request.get('/settings/aigc')
   },

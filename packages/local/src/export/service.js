@@ -7,6 +7,7 @@ const { spawn } = require('child_process');
 const timeline = require('../timeline');
 const aigc = require('./aigc');
 const { resolveTimelineAssets, describeProblems } = require('./resolve');
+const { PLATFORM_PRESETS } = require('./exporters/presets');
 
 class ExportError extends Error {
   constructor(message, status = 400, code = 'BAD_REQUEST', details) {
@@ -76,6 +77,7 @@ function createExportService(db, {
     const ts = new Date(now()).toISOString().replace(/[-:T]/g, '').slice(0, 14);
     return {
       resolutions: RESOLUTIONS,
+      platform_presets: PLATFORM_PRESETS,
       fps_options: FPS_OPTIONS,
       default_resolution: '1080p',
       default_fps: 30,

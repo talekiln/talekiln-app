@@ -12,13 +12,13 @@ function clean(raw) {
 }
 
 /**
- * Where the app keeps its data. Default is `<appData>/talekiln` (`%APPDATA%\talekiln` on Windows).
+ * Where the app keeps its data. Default is `defaultDir` (platform.userDataDir) or `<appData>/talekiln`.
  * Overrides, highest priority first: the `--user-data-dir=` argument, then TALEKILN_USER_DATA_DIR.
  * Only absolute paths are accepted; anything else falls back to the default so a broken value can never
  * put the data somewhere unexpected. Returns `{ dir, source }` with source in 'arg' | 'env' | 'default'.
  */
-function resolveUserDataDir({ appDataDir, env = process.env, argv = process.argv } = {}) {
-  if (!appDataDir) throw new Error('appDataDir is required');
+function resolveUserDataDir({ appDataDir, defaultDir, env = process.env, argv = process.argv } = {}) {
+  if (!appDataDir && !defaultDir) throw new Error('appDataDir is required');
   const arg = (argv || []).find((a) => typeof a === 'string' && a.startsWith(ARG_PREFIX));
   const candidates = [
     ['arg', arg ? arg.slice(ARG_PREFIX.length) : ''],
@@ -28,7 +28,8 @@ function resolveUserDataDir({ appDataDir, env = process.env, argv = process.argv
     const v = clean(raw);
     if (v && path.isAbsolute(v)) return { dir: path.normalize(v), source };
   }
-  return { dir: path.join(appDataDir, 'talekiln'), source: 'default' };
+  // defaultDir：平台相关的默认目录（见 platform.userDataDir）；没给时用 <appData>/talekiln
+  return { dir: defaultDir || path.join(appDataDir, 'talekiln'), source: 'default' };
 }
 
 module.exports = { resolveUserDataDir, ENV_VAR, ARG_PREFIX };

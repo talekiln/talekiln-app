@@ -33,6 +33,9 @@
           <el-button class="btn-library" title="AI 花费统计" @click="$router.push('/spend')">
             花费统计
           </el-button>
+          <el-button class="btn-library" title="关于、隐私政策、用户协议与举报" data-test="to-about" @click="$router.push('/settings/about')">
+            关于
+          </el-button>
           <el-button class="btn-theme" :title="isDark ? '切换到浅色模式' : '切换到暗色模式'" @click="toggleTheme">
             <el-icon><Sunny v-if="isDark" /><Moon v-else /></el-icon>
             {{ isDark ? '浅色' : '暗色' }}

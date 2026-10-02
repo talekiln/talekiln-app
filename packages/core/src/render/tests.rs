@@ -138,7 +138,54 @@ fn final_args_with_and_without_music() {
 
 #[test]
 fn concat_line_escapes() {
-    assert_eq!(concat_line("C:\\a\\it's.mp4"), "file 'C:/a/it'\\''s.mp4'\n");
+    assert_eq!(concat_line_for("C:\\a\\it's.mp4", true), "file 'C:/a/it'\\''s.mp4'\n");
+}
+
+#[test]
+fn concat_line_keeps_backslash_on_unix() {
+    // a backslash is a legal file-name character on macOS/Linux and must not become a separator
+    assert_eq!(concat_line_for("/Users/a/we\\ird.mp4", false), "file '/Users/a/we\\ird.mp4'\n");
+    assert_eq!(concat_line_for("/Users/a/it's.mp4", false), "file '/Users/a/it'\\''s.mp4'\n");
+    assert_eq!(concat_line_for("/Users/张三/镜头 1.mp4", false), "file '/Users/张三/镜头 1.mp4'\n");
+}
+
+#[test]
+fn videotoolbox_encoder_args() {
+    let a = encoder_args("h264_videotoolbox", &out());
+    assert_eq!(arg_after(&a, "-c:v"), "h264_videotoolbox");
+    assert_eq!(arg_after(&a, "-b:v"), "10M");
+    assert_eq!(arg_after(&a, "-allow_sw"), "0");
+    assert_eq!(arg_after(&a, "-pix_fmt"), "yuv420p");
+}
+
+#[test]
+fn filter_escape_two_levels() {
+    assert_eq!(filter_escape("/Users/jo/My Fonts"), "/Users/jo/My Fonts");
+    // C:\fonts -> option level C\:\\fonts -> graph level doubles every backslash
+    assert_eq!(filter_escape(r"C:\fonts"), r"C\\:\\\\fonts");
+    assert_eq!(filter_escape("/a,b;c[d]"), r"/a\,b\;c\[d\]");
+    // ' is escaped at option level (\') and again at graph level (\\\')
+    assert_eq!(filter_escape("/it's"), r"/it\\\'s");
+}
+
+#[test]
+fn fonts_dir_resolution_order() {
+    let d = tmpdir("fontsdir");
+    assert_eq!(resolve_fonts_dir(Some("/p"), Some("/e"), Some(&d)).as_deref(), Some("/p"));
+    assert_eq!(resolve_fonts_dir(Some(""), Some("/e"), Some(&d)).as_deref(), Some("/e"));
+    assert_eq!(resolve_fonts_dir(None, None, Some(&d)), Some(d.to_string_lossy().into_owned()));
+    assert_eq!(resolve_fonts_dir(None, None, Some(&d.join("missing"))), None);
+    assert_eq!(resolve_fonts_dir(None, None, None), None);
+}
+
+#[test]
+fn subtitles_filter_gets_fontsdir() {
+    let sc = SceneSpec { dur_ms: 1000, video: None, cues: vec![], narr: vec![] };
+    let a = scene_args_ex(&sc, &out(), "libx264", Some("subs0.ass"), Some("/Users/jo/My Fonts"), "t.tmp");
+    let fc = arg_after(&a, "-filter_complex");
+    assert!(fc.contains("subtitles=filename=subs0.ass:fontsdir=/Users/jo/My Fonts,"), "{fc}");
+    let none = scene_args_ex(&sc, &out(), "libx264", Some("subs0.ass"), None, "t.tmp");
+    assert!(!arg_after(&none, "-filter_complex").contains("fontsdir"));
 }
 
 // ------------------------------------------------------------ job-level tests
@@ -403,7 +450,8 @@ async fn fake_ffmpeg_all_encoders_fail_ends_libx264_last() {
     assert_eq!(s["error"]["code"], ERR_RENDER_FAILED);
     let log = std::fs::read_to_string(fd.join("calls.log")).unwrap();
     let order: Vec<&str> = log.lines().map(|l| l.split("-c:v ").nth(1).unwrap().split(' ').next().unwrap()).collect();
-    assert_eq!(order, vec!["h264_nvenc", "h264_nvenc", "h264_qsv", "h264_qsv", "libx264", "libx264"]);
+    // software fallbacks come last: libx264, then libopenh264 (what the pinned LGPL build ships)
+    assert_eq!(order, vec!["h264_nvenc", "h264_nvenc", "h264_qsv", "h264_qsv", "libx264", "libx264", "libopenh264", "libopenh264"]);
 }
 
 #[cfg(unix)]

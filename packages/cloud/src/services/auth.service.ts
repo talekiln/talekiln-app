@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { ServiceError } from './errors';
+import { DeviceService } from './device.service';
 import type { TokenPair, TokenService } from './token.service';
 import type { Account, InviteCode, Repositories } from '../domain/repositories';
 
@@ -19,6 +20,8 @@ export class AuthService {
     private readonly tokens: TokenService,
     private readonly now: () => Date = () => new Date(),
     private readonly bcryptRounds = 12,
+    /** 注入后登录/激活带设备时也走设备数上限；不注入则每次按仓储与当前时钟自建一个。 */
+    private readonly devices: DeviceService = new DeviceService(repos, now),
   ) {}
 
   hash(password: string) { return bcrypt.hash(password, this.bcryptRounds); }
@@ -78,9 +81,7 @@ export class AuthService {
   private async start(account: Account, info?: DeviceInfo): Promise<AuthResult> {
     let device = null;
     if (info) {
-      device = await this.repos.devices.upsert(account.id, info.fingerprint, info.name);
-      if (device.revokedAt) throw new ServiceError('device_revoked');
-      await this.repos.devices.touch(device.id, this.now());
+      device = await this.devices.register(account.id, info);
     }
     const pair = await this.tokens.issue(account, device?.id ?? null);
     return {

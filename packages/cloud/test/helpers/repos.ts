@@ -10,7 +10,11 @@ export const usingPostgres = Boolean(url);
 
 let client: PrismaClient | null = null;
 
-const TABLES = ['RefreshToken', 'Device', 'InviteCode', 'Feedback', 'TelemetryEvent', 'ReferralClick', 'Setting', 'Account'];
+const TABLES = [
+  'RefreshToken', 'Device', 'InviteCode', 'Feedback', 'TelemetryEvent', 'ReferralClick', 'Setting', 'Account',
+  'Plan', 'PlanVersion', 'Subscription', 'Order', 'Payment', 'Refund', 'Invoice', 'PaymentNotification', 'LicenceUsage',
+  'Announcement', 'Release', 'AdminRole', 'AdminAudit',
+];
 
 /** 每个测试调用一次，得到一份干净的仓储（PG 模式下先清空所有表）。 */
 export async function makeRepos(): Promise<Repositories> {

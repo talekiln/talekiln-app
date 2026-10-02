@@ -5,7 +5,7 @@ const aigc = require('../export/aigc');
 const { TimelineError } = require('../timeline');
 
 /** REST handlers for /api/v1/export (G06) and /api/v1/settings/aigc (G04). `exporter` may be null when lycore is not wired. */
-function exportRoutes(db, exporter, log) {
+function exportRoutes(db, exporter, log, mediaExporter = null) {
   const wrap = (name, fn) => async (req, res) => {
     try {
       if (!exporter) throw new ExportError('渲染核心未启动，无法导出。请重启应用后重试', 503, 'CORE_UNAVAILABLE');
@@ -18,7 +18,22 @@ function exportRoutes(db, exporter, log) {
       response.internalError(res, err && err.message);
     }
   };
+  // 导出到剪映 / Premiere 不需要渲染核心，只读内核投影后写文件
+  const mediaWrap = (name, fn) => (req, res) => {
+    try {
+      if (!mediaExporter) throw new ExportError('导出服务未就绪', 503, 'CORE_UNAVAILABLE');
+      response.success(res, fn(req.body || {}));
+    } catch (err) {
+      if (err instanceof ExportError) return response.error(res, err.status, err.code, err.message, err.details);
+      log.error('export ' + name, { error: err && err.message });
+      response.internalError(res, err && err.message);
+    }
+  };
   return {
+    /** POST /export/jianying { episode_id, output_dir, name?, preset?|width,height,fps, overwrite?, dry_run? } -> 剪映草稿文件夹 */
+    jianying: mediaWrap('jianying', (b) => mediaExporter.jianying(b)),
+    /** POST /export/fcpxml { …同上, format?: 'xmeml'(默认，Premiere) | 'fcpxml' } */
+    fcpxml: mediaWrap('fcpxml', (b) => mediaExporter.fcpxml(b)),
     /** GET /export/options?episode_id= -> presets, default path, AIGC settings, detected encoders (when core is up) */
     options: wrap('options', async (req, res) => {
       const d = exporter.defaults(req.query.episode_id);

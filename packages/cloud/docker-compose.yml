@@ -18,6 +18,9 @@ services:
     build:
       context: ../..
       dockerfile: packages/cloud/Dockerfile
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-}
+        PRISMA_ENGINES_MIRROR: ${PRISMA_ENGINES_MIRROR:-}
     depends_on:
       postgres:
         condition: service_healthy

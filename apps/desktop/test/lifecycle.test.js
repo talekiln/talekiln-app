@@ -83,9 +83,9 @@ describe('tray', () => {
     win.emit('close', { preventDefault: () => { prevented = true; } });
     assert.equal(prevented, false);
   });
-  it('without a tray the window closes and the app quits', () => {
+  it('without a tray the window closes and the app quits (windows/linux)', () => {
     const { deps, calls } = fakes({ trayThrows: true });
-    const lc = createLifecycle(deps);
+    const lc = createLifecycle({ ...deps, platform: 'win32' });
     assert.equal(lc.setupTray(), false);
     const win = fakeWindow();
     lc.attachWindow(win);
@@ -94,6 +94,18 @@ describe('tray', () => {
     win.emit('closed');
     assert.equal(prevented, false);
     assert.equal(calls.quit, 1);
+  });
+});
+
+describe('tray (macOS)', () => {
+  it('without a tray the app keeps running after the last window closes', () => {
+    const { deps, calls } = fakes({ trayThrows: true });
+    const lc = createLifecycle({ ...deps, platform: 'darwin' });
+    assert.equal(lc.setupTray(), false);
+    const win = fakeWindow();
+    lc.attachWindow(win);
+    win.emit('closed');
+    assert.equal(calls.quit || 0, 0);
   });
 });
 
