@@ -127,4 +127,15 @@ function deleteNode(g, nodeId, opts) {
   return U.mkTx('deleteNode', [{ op: 'removeNode', id: nodeId }], opts);
 }
 
-module.exports = { moveNode, setNodeParam, moveNodes, connectNodes, disconnectNodes, addNodeAt, deleteNode };
+/** 场景组改名（画布上的场景框标题）。标题去首尾空白，不能为空；没变 = 空事务。 */
+function renameGroup(g, groupId, title, opts) {
+  const grp = U.needGroup(g, groupId);
+  if (typeof title !== 'string') throw U.intentError('renameGroup: title must be a string');
+  const t = title.trim();
+  if (!t) throw U.intentError('renameGroup: title must not be empty');
+  if (t.length > 200) throw U.intentError('renameGroup: title too long (max 200)');
+  if (grp.title === t) return U.mkTx('renameGroup', [], opts);
+  return U.mkTx('renameGroup', [{ op: 'setGroupTitle', group: groupId, title: t }], opts);
+}
+
+module.exports = { moveNode, setNodeParam, moveNodes, connectNodes, disconnectNodes, addNodeAt, deleteNode, renameGroup };

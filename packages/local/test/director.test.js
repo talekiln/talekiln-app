@@ -14,7 +14,8 @@ const { createDirectorService, DirectorError, STATUS_LABEL } = require('../src/d
 const P = require('../src/director/plan');
 const { buildContext, buildMessages, repairMessages } = require('../src/director/prompt');
 const { SCHEMAS, EXCLUDED, allowedIntents, checkArgs, describeIntent } = require('../src/director/intentSchemas');
-const { createSpendService } = require('../src/spend');
+const { createSpendService, createEstimator } = require('../src/spend');
+const TEST_PRICES = require('./fixtures/prices.sample.json'); // 固定示例价表，见 batch.test.js
 const { createAiTaskStore } = require('../src/queue');
 const { createGenerationService } = require('../src/generation');
 const { localTokenGuard } = require('../src/utils/localToken');
@@ -57,7 +58,7 @@ async function harness({ withGeneration = false } = {}) {
   let spend = null;
   let generation = null;
   if (withGeneration) {
-    spend = createSpendService(db);
+    spend = createSpendService(db, { estimator: createEstimator(TEST_PRICES) });
     generation = createGenerationService({
       db, store: createAiTaskStore(db), worker: { wake() {} }, spend, storageRoot: path.join(dir, 'storage'), getCore: null,
       listConfigs: () => FAKE_CONFIGS, catalogModels: () => [], log,

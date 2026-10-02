@@ -216,12 +216,15 @@ function createQueueProvider(provider, { storageDir, listConfigs, createProvider
       if (kind === 'image') {
         const r = await facade.image.generate(provider, params);
         if (!r || !Array.isArray(r.urls) || !r.urls.length) throw new ProviderError(ERROR_CODES.BAD_RESPONSE, 'no image urls', { provider });
-        return { vendorTaskId: encodeSync({ urls: r.urls }) };
+        // usage.images = 实际返回的张数（服务商另有 usage 时合并），花费回写按张计
+        return { vendorTaskId: encodeSync({ urls: r.urls, usage: { images: r.urls.length, ...(r.usage && typeof r.usage === 'object' ? r.usage : {}) } }) };
       }
       const r = await facade.tts.synthesize(provider, params);
       if (!r || !r.audio || !r.audio.length) throw new ProviderError(ERROR_CODES.BAD_RESPONSE, 'empty audio', { provider });
       const out = { format: r.format || params.format || 'mp3', ...(await writeBlob(Buffer.from(r.audio))) };
       if (Array.isArray(r.words)) out.words = r.words.length ? { ...(await writeBlob(Buffer.from(JSON.stringify(r.words)))), count: r.words.length } : { count: 0 };
+      // 服务商回传的计费字符数（CosyVoice usage.characters）随结果走，花费回写用它算实际费用
+      if (r.usage && typeof r.usage === 'object') out.usage = r.usage;
       return { vendorTaskId: encodeSync(out) };
     },
 

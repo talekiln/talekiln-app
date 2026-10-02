@@ -1,4 +1,4 @@
-// 花费页的纯函数：金额格式、日期范围、月度进度、上限输入解析、条形图比例。
+// 花费页的纯函数：金额格式、日期范围、月度进度、上限输入解析、条形图比例、价目说明、用量文案。
 
 const pad = (n) => String(n).padStart(2, '0')
 
@@ -70,4 +70,34 @@ export function kindLabel(kind) {
 
 export function csvFileName(range) {
   return `spend-${range.from || 'all'}_${range.to || 'now'}.csv`
+}
+
+/** 价目来源说明（summary.prices）：{ text, warn }；旧接口没有 prices 时退回 sample_prices 标记。 */
+export function priceNote(summary) {
+  if (!summary) return { text: '', warn: false }
+  const p = summary.prices
+  if (!p) return summary.sample_prices ? { text: '当前价格表为示例价，费用仅为估算，不代表服务商实际账单。', warn: true } : { text: '', warn: false }
+  const bits = [`费用按百炼公开价目计算${p.date ? `（${p.date} 版）` : ''}`]
+  if (p.sample) bits.push('价格表含示例价，仅供估算')
+  bits.push('实际账单以服务商控制台为准')
+  return { text: bits.join('；'), warn: !!p.sample }
+}
+
+/** 预估/实际合计卡片的副标题：“实际 ¥1.20（已回传 3/5）” */
+export function actualSubtitle(total, currency = 'CNY') {
+  if (!total) return ''
+  const n = Number(total.actual_count) || 0
+  if (!n) return '尚无服务商回传的实际用量'
+  return `实际 ${formatMoney(total.actual, currency)}（已回传 ${n}/${total.count} 个任务）`
+}
+
+const UNIT_LABEL = { second: '秒', char: '字符', image: '张' }
+
+/** 逐任务表“实际”列的说明：按回传用量，如“5 秒 × ¥1.00（1080P）”“120 字符 × ¥0.0002”。 */
+export function usageText(usage) {
+  if (!usage || usage.units == null) return ''
+  const unit = UNIT_LABEL[usage.unit] || usage.unit || ''
+  let t = `${usage.units} ${unit} × ${formatMoney(usage.unit_price)}`
+  if (usage.resolution) t += `（${usage.resolution}）`
+  return t
 }

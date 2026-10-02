@@ -14,6 +14,7 @@ const { createJwksProvider } = require('./cloud/jwks');
 const { createPluginHost } = require('./plugins');
 const { createGenerationService } = require('./generation');
 const { createBatchService, createBatchScheduler, attachToWorker } = require('./batch');
+const { createVoiceoverService } = require('./voiceover/queue');
 const { localTokenGuard } = require('./utils/localToken');
 
 function createAiQueue({ config, db, log, storageRoot, providers, onTaskFinished, cloud }) {
@@ -119,6 +120,7 @@ function createApp(opts = {}) {
   let generation = null; // I1：任务成功后写回数据内核（在 aiQueue 之后创建，所以这里用闭包取）
   let batch = null; // P3-B：批次调度（任务结束时唤醒）
   let regionEdit = null; // P3-R：改片任务结束后拼接并记成新版本（同样闭包取）
+  let voiceover = null; // 配音任务成功后写回 narration 版本（同上）
   const aiQueue = createAiQueue({
     cloud, config, db, log, storageRoot,
     providers: opts.queueProviders || buildQueueProviders({ db, storageDir: storageRoot, listConfigs: opts.listConfigs }),
@@ -126,6 +128,7 @@ function createApp(opts = {}) {
       if (generation) { try { generation.onTaskFinished(t); } catch (e) { log.error && log.error('generation finish', { error: e && e.message }); } }
       if (batch) { try { batch.onTaskFinished(t); } catch (e) { log.error && log.error('batch finish', { error: e && e.message }); } }
       if (regionEdit) { try { regionEdit.onTaskFinished(t); } catch (e) { log.error && log.error('region edit finish', { error: e && e.message }); } }
+      if (voiceover) { try { voiceover.onTaskFinished(t); } catch (e) { log.error && log.error('voiceover finish', { error: e && e.message }); } }
       if (opts.onTaskFinished) opts.onTaskFinished(t);
     },
   });
@@ -166,7 +169,11 @@ function createApp(opts = {}) {
     catalogModels: () => { try { return cloud.catalog.getCatalog().models || []; } catch (_) { return []; } },
   });
   regionEdit.recoverFinished().catch((e) => log.error && log.error('region edit recover', { error: e && e.message }));
-  app.use('/api/v1', setupRouter(config, db, log, aiQueue, cloud, { storageRoot, exporter: opts.exporter, getCore, generation, batch, templates, consistency, pluginHost, regionEdit }));
+  voiceover = opts.voiceover || createVoiceoverService({
+    db, store: aiQueue.store, worker: aiQueue.worker, spend: aiQueue.spend, storageRoot, listConfigs: opts.listConfigs, resolve: opts.voiceoverResolve, log,
+  });
+  voiceover.recoverFinished().catch((e) => log.error && log.error('voiceover recover', { error: e && e.message }));
+  app.use('/api/v1', setupRouter(config, db, log, aiQueue, cloud, { storageRoot, exporter: opts.exporter, getCore, generation, batch, templates, consistency, pluginHost, regionEdit, voiceover }));
 
   // 前端静态资源（sxy：web/dist）；Electron 打包时可设 WEB_DIST_PATH
   const webDist = process.env.WEB_DIST_PATH || path.join(process.cwd(), '..', 'frontweb', 'dist');

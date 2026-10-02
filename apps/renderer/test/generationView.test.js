@@ -103,6 +103,7 @@ test('submittedText and taskTarget', () => {
   assert.equal(submittedText({ tasks: [{ outcome: 'created' }, { outcome: 'already_queued' }] }), '已加入队列 1 个任务，1 个已在队列中，可在任务中心查看进度')
   assert.equal(taskTarget({ params: { _gen: { storyboard_id: 4, kind: 'video' } } }), '镜头 #4 · 视频')
   assert.equal(taskTarget({ params: { _gen: { storyboard_id: 4, kind: 'image' } } }), '镜头 #4 · 首帧图')
+  assert.equal(taskTarget({ params: { _vo: { legacy_id: 7, shot_id: 's1' } } }), '镜头 #7 · 旁白配音')
   assert.equal(taskTarget({ params: { prompt: 'x' } }), '')
   assert.equal(taskTarget(null), '')
 })
