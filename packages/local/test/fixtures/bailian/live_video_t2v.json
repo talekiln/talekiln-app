@@ -1,0 +1,38 @@
+{
+ "submit": {
+  "output": {
+   "task_id": "3fd7c56d-b1cd-4e55-a9e8-8e30da3c3fe2",
+   "task_status": "PENDING"
+  },
+  "request_id": "8a118a00-20d4-92ac-988d-926f31d17cbc"
+ },
+ "running": {
+  "request_id": "4845fb27-61a1-9fe3-8cda-45d91fc77973",
+  "output": {
+   "task_id": "3fd7c56d-b1cd-4e55-a9e8-8e30da3c3fe2",
+   "task_status": "RUNNING",
+   "submit_time": "2026-10-02 01:09:18.337",
+   "scheduled_time": "2026-10-02 01:09:18.391"
+  }
+ },
+ "succeeded": {
+  "request_id": "bad126cb-8d41-9443-97b1-bf9de5fb1a0a",
+  "output": {
+   "task_id": "3fd7c56d-b1cd-4e55-a9e8-8e30da3c3fe2",
+   "task_status": "SUCCEEDED",
+   "submit_time": "2026-10-02 01:09:18.337",
+   "scheduled_time": "2026-10-02 01:09:18.391",
+   "end_time": "2026-10-02 01:10:01.031",
+   "video_url": "https://example.invalid/redacted",
+   "orig_prompt": "一只橘猫在窗台上伸懒腰，阳光洒进来"
+  },
+  "usage": {
+   "video_count": 1,
+   "duration": 5,
+   "size": "1280*720",
+   "SR": 720,
+   "output_video_duration": 5,
+   "input_video_duration": 0
+  }
+ }
+}

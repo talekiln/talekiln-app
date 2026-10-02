@@ -1,0 +1,33 @@
+{
+  "name": "talekiln",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm native:electron && pnpm --filter @talekiln/desktop dev",
+    "dev:web": "pnpm native:node && pnpm -r --parallel --filter @talekiln/local --filter @talekiln/renderer dev",
+    "build": "pnpm --filter @talekiln/renderer build",
+    "dist:win": "pnpm --filter @talekiln/desktop dist:win",
+    "lint": "pnpm -r --if-present lint",
+    "native:node": "node scripts/native-abi.mjs node",
+    "native:electron": "node scripts/native-abi.mjs electron",
+    "test": "pnpm native:node && pnpm -r --if-present test",
+    "licenses:check": "node scripts/licenses-check.mjs",
+    "secrets:scan": "node scripts/secret-scan.mjs"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "better-sqlite3",
+      "electron",
+      "electron-winstaller",
+      "esbuild",
+      "prisma",
+      "sharp",
+      "vue-demi"
+    ]
+  }
+}

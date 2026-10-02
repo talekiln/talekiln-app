@@ -1,0 +1,120 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm secrets:scan
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm --filter @talekiln/admin build
+
+  # 云服务：同一套测试跑在真实 PostgreSQL 上（服务容器需要 Linux runner）。
+  # 下面的库口令仅用于该一次性服务容器，不是任何真实环境的凭据。
+  cloud-pg:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci-throwaway-db
+          POSTGRES_DB: talekiln_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d talekiln_ci"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://ci:ci-throwaway-db@localhost:5432/talekiln_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @talekiln/cloud prisma:generate
+      - run: pnpm --filter @talekiln/cloud prisma:deploy
+      - run: pnpm --filter @talekiln/cloud exec prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+      - run: pnpm --filter @talekiln/cloud test:pg
+
+  package:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      # 渲染核心 lycore 与 ffmpeg（LGPL，固定哈希）随安装包内置：resources/lycore/
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release
+        working-directory: packages/core
+      - run: node scripts/fetch-ffmpeg.mjs
+
+      # 签名骨架：只有存在证书 Secrets 且不是 PR 时才签名；否则走未签名构建。
+      # 机密只经 env 传给下面单个步骤，不 echo、不落盘。见 docs/release-signing.md
+      - name: Detect signing secrets
+        id: signing
+        shell: pwsh
+        env:
+          HAS_CERT: ${{ secrets.WIN_CSC_LINK != '' && secrets.WIN_CSC_KEY_PASSWORD != '' }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if ($env:HAS_CERT -eq 'true' -and $env:EVENT -ne 'pull_request') { "enabled=true" >> $env:GITHUB_OUTPUT }
+          else { "enabled=false" >> $env:GITHUB_OUTPUT }
+
+      - name: Build installer (signed)
+        if: steps.signing.outputs.enabled == 'true'
+        run: pnpm dist:win
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+
+      - name: Build installer (unsigned)
+        if: steps.signing.outputs.enabled != 'true'
+        run: pnpm dist:win
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Verify signature and update publisher
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        run: |
+          Get-ChildItem apps/desktop/release/*.exe | ForEach-Object {
+            $sig = Get-AuthenticodeSignature $_.FullName
+            if ($sig.Status -ne 'Valid') { throw "bad signature on $($_.Name): $($sig.Status)" }
+            if (-not $sig.TimeStamperCertificate) { throw "no timestamp on $($_.Name)" }
+          }
+          $yml = Get-ChildItem -Recurse apps/desktop/release -Filter app-update.yml | Select-Object -First 1
+          if (-not $yml -or -not (Select-String -Path $yml.FullName -Pattern '^publisherName:' -Quiet)) {
+            throw 'app-update.yml has no publisherName: auto-update would skip signature verification'
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: talekiln-win-${{ steps.signing.outputs.enabled == 'true' && 'signed' || 'UNSIGNED' }}
+          path: |
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/latest*.yml

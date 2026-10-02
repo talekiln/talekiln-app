@@ -1,0 +1,55 @@
+{
+    "streams": [
+        {
+            "index": 0,
+            "codec_name": "h264",
+            "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+            "profile": "High",
+            "codec_type": "video",
+            "width": 1920,
+            "height": 1080,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "30000/1001",
+            "avg_frame_rate": "30000/1001",
+            "time_base": "1/30000",
+            "duration": "63.496500",
+            "bit_rate": "2310455",
+            "disposition": { "default": 1, "attached_pic": 0 }
+        },
+        {
+            "index": 1,
+            "codec_name": "aac",
+            "codec_long_name": "AAC (Advanced Audio Coding)",
+            "profile": "LC",
+            "codec_type": "audio",
+            "sample_fmt": "fltp",
+            "sample_rate": "48000",
+            "channels": 2,
+            "channel_layout": "stereo",
+            "r_frame_rate": "0/0",
+            "avg_frame_rate": "0/0",
+            "duration": "63.519000",
+            "bit_rate": "128012",
+            "disposition": { "default": 1, "attached_pic": 0 }
+        },
+        {
+            "index": 2,
+            "codec_name": "mov_text",
+            "codec_type": "subtitle",
+            "r_frame_rate": "0/0",
+            "avg_frame_rate": "0/0",
+            "disposition": { "default": 0, "attached_pic": 0 }
+        }
+    ],
+    "format": {
+        "filename": "/media/clip.mp4",
+        "nb_streams": 3,
+        "format_name": "mov,mp4,m4a,fnp,3gp,3g2,mj2",
+        "format_long_name": "QuickTime / MOV",
+        "start_time": "0.000000",
+        "duration": "63.520000",
+        "size": "18734021",
+        "bit_rate": "2359400",
+        "probe_score": 100
+    }
+}

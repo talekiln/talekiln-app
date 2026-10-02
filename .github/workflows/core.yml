@@ -1,0 +1,24 @@
+name: core
+on:
+  push:
+    paths: ['packages/core/**', '.github/workflows/core.yml']
+  pull_request:
+    paths: ['packages/core/**', '.github/workflows/core.yml']
+jobs:
+  core:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: packages/core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/core
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: cargo build --release
+      - run: cargo test
+      - run: node client/test.js
