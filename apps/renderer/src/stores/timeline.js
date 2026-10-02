@@ -4,7 +4,6 @@ import { timelinesAPI } from '@/api/timelines'
 import { musicAPI } from '@/api/music'
 import { DEFAULT_MIX, mergeMix } from '@/utils/mixView'
 import { findClip, timelineDuration, splitClipAt, clipAt } from '@/utils/timelineMath'
-import { createHistory } from '@/utils/editHistory'
 import { createDraftWriter, draftKey, makeDraft, assessRecovery, mergeDraft } from '@/utils/draft'
 
 /** 编辑合并为一次保存的等待时间（毫秒） */
@@ -25,11 +24,9 @@ export const useTimelineStore = defineStore('timeline', () => {
 
   /** 待用户决定的本地草稿恢复：{ draft, conflict } | null */
   const recovery = ref(null)
-  const historyTick = ref(0)
 
   let saveTimer = null
   let saving = false
-  const history = createHistory({ limit: 100, coalesceMs: 400 })
   let draftWriter = null
 
   function getDraftWriter() {
@@ -70,7 +67,6 @@ export const useTimelineStore = defineStore('timeline', () => {
   function applyRecovery() {
     const r = recovery.value
     if (!r || !timeline.value) return
-    recordBefore('恢复本地草稿')
     timeline.value = mergeDraft(timeline.value, r.draft)
     recovery.value = null
     scheduleSave()
@@ -81,50 +77,19 @@ export const useTimelineStore = defineStore('timeline', () => {
     recovery.value = null
   }
 
-  // ---------- 撤销 / 重做 ----------
+  // 撤销 / 重做只有一份：内核历史（projectViews 的 undo / redo，顶栏按钮 + Ctrl+Z）。
+  // 这里不再维护第二份本地快照栈；编辑直接排队保存，内核回退后由 views.revision 触发重新读取。
 
-  function snapshot() {
-    return JSON.stringify(timeline.value?.tracks ?? [])
-  }
-
-  function recordBefore(label, coalesceKey = null) {
-    history.record(snapshot(), label, coalesceKey)
-    historyTick.value++
-  }
-
-  /** 编辑封装：fn 返回 false 表示未发生修改（不入栈） */
-  function mutate(label, fn, coalesceKey = null) {
+  /** 编辑封装：fn 返回 false 表示未发生修改（不保存） */
+  function mutate(label, fn) {
     if (!timeline.value) return false
-    const before = snapshot()
+    const before = JSON.stringify(timeline.value.tracks ?? [])
     const result = fn()
-    if (result === false || snapshot() === before) return result
-    history.record(before, label, coalesceKey)
-    historyTick.value++
+    if (result === false || JSON.stringify(timeline.value.tracks ?? []) === before) return result
+    void label
     scheduleSave()
     return result
   }
-
-  function restore(snap) {
-    if (snap == null || !timeline.value) return false
-    timeline.value.tracks = JSON.parse(snap)
-    if (selectedClipId.value && !findClip(timeline.value.tracks, selectedClipId.value)) selectedClipId.value = null
-    historyTick.value++
-    scheduleSave()
-    return true
-  }
-
-  function undo() {
-    if (!timeline.value) return false
-    return restore(history.undo(snapshot()))
-  }
-
-  function redo() {
-    if (!timeline.value) return false
-    return restore(history.redo(snapshot()))
-  }
-
-  const canUndo = computed(() => (historyTick.value, history.canUndo))
-  const canRedo = computed(() => (historyTick.value, history.canRedo))
 
   const tracks = computed(() => timeline.value?.tracks ?? [])
   const durationMs = computed(() => timelineDuration(tracks.value))
@@ -141,8 +106,6 @@ export const useTimelineStore = defineStore('timeline', () => {
     loading.value = true
     missing.value = false
     selectedClipId.value = null
-    history.clear()
-    historyTick.value++
     recovery.value = null
     try {
       setTimeline(await timelinesAPI.getByEpisode(epId))
@@ -162,8 +125,6 @@ export const useTimelineStore = defineStore('timeline', () => {
       setTimeline(await timelinesAPI.assemble(epId, replace ? { replace: true } : {}))
       clearDraft(epId)
       recovery.value = null
-      history.clear()
-      historyTick.value++
       episodeId.value = epId
       missing.value = false
       saveState.value = 'idle'
@@ -222,8 +183,6 @@ export const useTimelineStore = defineStore('timeline', () => {
       try {
         flushDraft()
         setTimeline(await timelinesAPI.getByEpisode(tl.episode_id))
-        history.clear()
-        historyTick.value++
         // 被服务端状态覆盖的本地编辑仍在草稿里，让用户决定是否恢复
         checkRecovery(timeline.value)
       } catch (_) { /* ignore */ }
@@ -274,7 +233,7 @@ export const useTimelineStore = defineStore('timeline', () => {
       const track = tracks.value.find((t) => t.kind === kind)
       if (!track || !Number.isFinite(volume)) return false
       track.volume = Math.min(4, Math.max(0, volume))
-    }, `vol-${kind}`)
+    })
   }
 
   /** 把音乐库中的曲目放到音乐轨：先落盘本地编辑，再由服务端追加并返回最新时间线 */
@@ -283,8 +242,6 @@ export const useTimelineStore = defineStore('timeline', () => {
     await flushPending()
     const res = await musicAPI.attach(timeline.value.id, { music_id: musicId, ...opts })
     setTimeline(res.timeline)
-    history.clear()
-    historyTick.value++
     return res
   }
 
@@ -327,8 +284,8 @@ export const useTimelineStore = defineStore('timeline', () => {
 
   return {
     timeline, episodeId, loading, missing, selectedClipId, saveState,
-    tracks, durationMs, selected, recovery, mix, musicTrack, canUndo, canRedo,
+    tracks, durationMs, selected, recovery, mix, musicTrack,
     load, assemble, updateMix, setTrackVolume, attachMusic, flushPending, flushDraft, save, select, patchClip, deleteClip, splitAt, toggleMute,
-    undo, redo, applyRecovery, discardRecovery,
+    applyRecovery, discardRecovery,
   }
 })
