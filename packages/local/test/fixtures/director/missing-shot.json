@@ -1,0 +1,9 @@
+{
+  "id": "missing-shot",
+  "note": "参数表检查通过，但引用了不存在的镜头 shot_99；干跑时内核报错，整份计划拒绝。",
+  "message": "第九镜改成仰拍",
+  "replies": [
+    "{\"summary\": \"第九镜改为仰拍\", \"steps\": [{\"view\": \"shot\", \"name\": \"setShotField\", \"args\": {\"shot_id\": \"shot_99\", \"patch\": {\"angle\": \"仰拍\"}}, \"reason\": \"按要求改角度\"}], \"untouched\": []}",
+    "{\"summary\": \"第九镜改为仰拍\", \"steps\": [{\"view\": \"shot\", \"name\": \"setShotField\", \"args\": {\"shot_id\": \"shot_99\", \"patch\": {\"angle\": \"仰拍\"}}, \"reason\": \"按要求改角度\"}], \"untouched\": []}"
+  ]
+}

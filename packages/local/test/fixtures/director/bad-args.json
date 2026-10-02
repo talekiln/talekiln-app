@@ -1,0 +1,9 @@
+{
+  "id": "bad-args",
+  "note": "动作在清单里，但参数类型不对（duration_ms 给了中文）且多了一个编造的参数 force；缺少必填的 line_id。两次都一样，拒绝。",
+  "message": "第一镜拉长到三秒，顺便把旁白改成更口语的说法",
+  "replies": [
+    "{\"summary\": \"第一镜改为三秒，旁白口语化\", \"steps\": [{\"view\": \"shot\", \"name\": \"setShotField\", \"args\": {\"shot_id\": \"shot_1\", \"patch\": {\"duration_ms\": \"三秒\"}, \"force\": true}, \"reason\": \"用户要三秒\"}, {\"view\": \"script\", \"name\": \"rewriteLine\", \"args\": {\"patch\": {\"text\": \"这天阿宁又加班到深夜。\"}}, \"reason\": \"口语化\"}], \"untouched\": []}",
+    "{\"summary\": \"第一镜改为三秒，旁白口语化\", \"steps\": [{\"view\": \"shot\", \"name\": \"setShotField\", \"args\": {\"shot_id\": \"shot_1\", \"patch\": {\"duration_ms\": \"三秒\"}, \"force\": true}, \"reason\": \"用户要三秒\"}, {\"view\": \"script\", \"name\": \"rewriteLine\", \"args\": {\"patch\": {\"text\": \"这天阿宁又加班到深夜。\"}}, \"reason\": \"口语化\"}], \"untouched\": []}"
+  ]
+}
