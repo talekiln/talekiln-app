@@ -49,6 +49,23 @@ export const useAccountStore = defineStore('account', () => {
     return status.value
   }
 
+  // P2-C：短信验证码 / 微信扫码。两者登录成功后返回的都是与 login 相同的状态视图
+  async function loginBySms(form) {
+    status.value = await accountAPI.smsLogin({
+      phone: String(form.phone || '').replace(/[\s-]/g, ''),
+      code: String(form.code || '').trim(),
+      invite_code: String(form.inviteCode || '').trim() || undefined
+    })
+    lastAt.value = Date.now()
+    return status.value
+  }
+
+  async function loginByWechat(ticket, inviteCode) {
+    status.value = await accountAPI.wechatLogin({ ticket, invite_code: String(inviteCode || '').trim() || undefined })
+    lastAt.value = Date.now()
+    return status.value
+  }
+
   /** 周期同步；会话在后台失效（刷新令牌被拒）或授权过期时，门禁开启则跳转登录页。 */
   function startWatcher(router, routeDecision) {
     if (timer) return
@@ -65,5 +82,5 @@ export const useAccountStore = defineStore('account', () => {
     timer = null
   }
 
-  return { status, loaded, lastAt, summary, loggedIn, fetch, login, register, logout, startWatcher, stopWatcher }
+  return { status, loaded, lastAt, summary, loggedIn, fetch, login, register, logout, loginBySms, loginByWechat, startWatcher, stopWatcher }
 })
