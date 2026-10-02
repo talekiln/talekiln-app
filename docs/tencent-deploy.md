@@ -197,6 +197,8 @@ curl -fsS https://api.你的域名.com/.well-known/licence-jwks.json   # 应同�
 
 ## 8. 对象存储（MinIO）
 
+> **2026-10-02 更新**：MinIO 官方镜像与二进制已拿不到（quay.io / Docker Hub 拒绝拉取，dl.min.io 回 410）。本节的 compose 文件在选定替代服务器（SeaweedFS / Garage / RustFS，或阿里云 OSS / 腾讯云 COS）之前只能当占位；桶布局、策略与客户端设置对任何 S3 兼容服务都一样。CI 里已验证 SeaweedFS 的 S3 网关可用（`scripts/ci-s3-server.sh`）。
+
 决定：先自己搭 MinIO，后续再接第三方。桌面端的「云备份」（P3-K，`docs/phase3-backup.md`）走 S3 兼容接口，所以今天指向这台 MinIO，以后换阿里云 OSS（S3 兼容接口）、腾讯云 COS 或 Cloudflare R2 只要改地址 / 区域 / 存储桶，客户端代码不动。同一套桶布局也是工作室版共享素材库（前缀 `shared/`）的基础。
 
 ### 8.1 启动
