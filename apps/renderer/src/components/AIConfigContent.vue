@@ -1993,6 +1993,8 @@ async function openTest(row) {
   testServiceType.value = row.service_type || 'text'
   try {
     await aiAPI.testConnection({
+      // 列表里的 api_key 是掩码，带 id 让服务端用已保存的真 Key 测
+      id: row.id,
       base_url: row.base_url,
       api_key: row.api_key,
       model: Array.isArray(row.model) ? row.model[0] : row.model,

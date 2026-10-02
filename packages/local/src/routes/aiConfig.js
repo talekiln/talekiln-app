@@ -1,5 +1,6 @@
 const aiConfigService = require('../services/aiConfigService');
 const response = require('../response');
+const secrets = require('../secrets');
 
 function unavailable(res) {
   response.error(res, 503, 'SECRET_STORE_UNAVAILABLE', '系统密钥加密不可用，无法保存 API Key');
@@ -115,16 +116,33 @@ function bulkUpdateKey(db, log, cfg) {
   };
 }
 
-function testConnection(log) {
+/**
+ * 列表接口只回掩码 Key（C04），所以「测试」已保存的配置时浏览器手里没有真 Key：
+ * 带上 id 且 api_key 为空或掩码，就在服务端取已保存的 Key；表单里新输入的真 Key 仍优先。
+ */
+function resolveTestKey(db, body) {
+  const raw = body.api_key;
+  if (raw && !secrets.isMaskedKey(raw)) return { api_key: raw };
+  const id = Number(body.id);
+  if (!Number.isInteger(id) || id <= 0) return { error: '缺少 api_key（已保存的配置请带 id 测试）' };
+  const cfg = aiConfigService.listConfigsInternal(db).find((c) => c.id === id);
+  if (!cfg) return { error: '配置不存在' };
+  if (!cfg.api_key) return { error: '该配置尚未保存 API Key' };
+  return { api_key: cfg.api_key };
+}
+
+function testConnection(db, log) {
   return async (req, res) => {
     const body = req.body || {};
-    if (!body.base_url || !body.api_key) {
-      return response.badRequest(res, '缺少 base_url 或 api_key');
+    if (!body.base_url) {
+      return response.badRequest(res, '缺少 base_url');
     }
+    const key = resolveTestKey(db, body);
+    if (key.error) return response.badRequest(res, key.error);
     try {
       await aiConfigService.testConnection({
         base_url: body.base_url,
-        api_key: body.api_key,
+        api_key: key.api_key,
         model: body.model,
         provider: body.provider,
         endpoint: body.endpoint,
@@ -134,7 +152,7 @@ function testConnection(log) {
       response.success(res, { message: '连接测试成功' });
     } catch (err) {
       log.error('AI config test connection failed', { error: err.message });
-      response.badRequest(res, '连接测试失败: ' + (err.message || '未知错误'));
+      response.badRequest(res, '连接测试失败: ' + secrets.redactText(err.message || '未知错误'));
     }
   };
 }
@@ -202,7 +220,7 @@ module.exports = function aiConfigRoutes(db, log, cfg) {
     create: create(db, log, cfg),
     update: update(db, log, cfg),
     delete: remove(db, log, cfg),
-    testConnection: testConnection(log),
+    testConnection: testConnection(db, log),
     listJimeng2MaterialAssets: listJimeng2MaterialAssets(log),
     modelArkAsset: modelArkAsset(log),
     bulkUpdateKey: bulkUpdateKey(db, log, cfg),

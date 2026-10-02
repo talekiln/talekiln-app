@@ -315,3 +315,79 @@ describe('ai_tasks queue', () => {
     s.db.close();
   });
 });
+
+// I1（睡眠/唤醒）：唤醒后网络还没恢复时下载失败（EAI_AGAIN），任务不能直接判死——
+// 服务商已经生成好结果，只是这台机器暂时拿不到；应像轮询一样退避重试。
+describe('download stage retries transient network errors', () => {
+  function netErr(msg = 'download failed after 6 attempts: fetch failed (EAI_AGAIN)') {
+    return new ProviderError(ERROR_CODES.NETWORK, msg);
+  }
+  function bootDownloading(vendor, queueOpts) {
+    const s = boot(tmpDbPath(), vendor, { queueOpts });
+    const { task } = s.queue.enqueue({ idempotencyKey: 'dl', provider: 'fake' });
+    s.store.transition(task.id, 'queued', 'submitting');
+    s.store.recordVendorId(task.id, 'vendor-dl');
+    s.store.transition(task.id, 'submitted', 'downloading', { result: JSON.stringify({ url: 'http://x/v.mp4' }) });
+    return { ...s, task };
+  }
+
+  it('keeps the task downloading (result retained) and schedules a later attempt instead of failing', async () => {
+    let clock = 1_000_000;
+    const vendor = makeVendor();
+    const downloads = [];
+    vendor.provider.download = async (task, res) => { downloads.push(res.url); if (downloads.length === 1) throw netErr(); return { ...res, local: 'v.mp4' }; };
+    const s = bootDownloading(vendor, { now: () => clock, downloadBackoff: () => 15000 });
+    await s.queue.reconcile(); // what the desktop does on system resume
+    let row = s.store.get(s.task.id);
+    assert.equal(row.state, 'downloading');
+    assert.equal(row.poll_attempts, 1);
+    assert.equal(row.error_code, 'NETWORK');
+    assert.match(row.error_message, /EAI_AGAIN/);
+    assert.equal(JSON.parse(row.result).url, 'http://x/v.mp4');
+    assert.equal(row.next_attempt_at, clock + 15000);
+    // not due yet: a tick must not re-download
+    await s.queue.tick();
+    assert.equal(downloads.length, 1);
+    clock += 15000;
+    const summary = await s.queue.tick();
+    assert.equal(downloads.length, 2);
+    assert.equal(summary.downloaded, 1);
+    row = s.store.get(s.task.id);
+    assert.equal(row.state, 'succeeded');
+    assert.equal(JSON.parse(row.result).local, 'v.mp4');
+    assert.equal(row.error_code, null);
+    assert.equal(vendor.submits.length, 0, 'never resubmitted to the vendor');
+    s.db.close();
+  });
+
+  it('fails after maxPollErrors consecutive network errors, with the last message', async () => {
+    let clock = 0;
+    const vendor = makeVendor();
+    let n = 0;
+    vendor.provider.download = async () => { n++; throw netErr(`try ${n}`); };
+    const s = bootDownloading(vendor, { now: () => clock, maxPollErrors: 3, downloadBackoff: () => 1000 });
+    for (let i = 0; i < 3; i++) { clock += 1000; await s.queue.tick(); }
+    const row = s.store.get(s.task.id);
+    assert.equal(n, 3);
+    assert.equal(row.state, 'failed');
+    assert.equal(row.error_code, 'NETWORK');
+    assert.match(row.error_message, /try 3/);
+    s.db.close();
+  });
+
+  it('a non-retryable download error still fails immediately', async () => {
+    const vendor = makeVendor();
+    vendor.provider.download = async () => { throw new ProviderError(ERROR_CODES.BAD_RESPONSE, 'download HTTP 403'); };
+    const s = bootDownloading(vendor, { downloadBackoff: () => 1000 });
+    await s.queue.tick();
+    const row = s.store.get(s.task.id);
+    assert.equal(row.state, 'failed');
+    assert.equal(row.error_code, 'BAD_RESPONSE');
+    s.db.close();
+  });
+
+  it('default download backoff grows from 15s and caps at 5 minutes (post-wake networks take a while)', () => {
+    const { defaultDownloadBackoff } = require('../src/queue/aiTaskQueue');
+    assert.deepEqual([1, 2, 3, 4, 5, 9].map((n) => defaultDownloadBackoff('fake', null, n)), [15000, 30000, 60000, 120000, 240000, 300000]);
+  });
+});

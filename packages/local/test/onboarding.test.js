@@ -87,6 +87,23 @@ describe('onboarding state', () => {
   });
 });
 
+describe('onboarding status when the key was saved outside the wizard', () => {
+  before(() => secrets.setSecretStore(memStore()));
+  after(() => secrets.setSecretStore(null));
+
+  it('falls back to the active keyed config so the test step is reachable', () => {
+    const db = openDb();
+    assert.equal(onboarding.getStatus(db).config_id, null);
+    const cfg = aiConfigService.createConfig(db, log, { service_type: 'text', name: 'w', provider: 'dashscope', base_url: 'https://example.invalid/v1', api_key: FAKE_KEY, model: ['qwen-plus'] });
+    const st = onboarding.getStatus(db);
+    assert.equal(st.has_key, true);
+    assert.equal(st.config_id, cfg.id);
+    // 向导自己记下的 config_id 优先
+    onboarding.saveState(db, { config_id: cfg.id + 100 });
+    assert.equal(onboarding.getStatus(db).config_id, cfg.id + 100);
+  });
+});
+
 describe('onboarding connectivity test', () => {
   before(() => secrets.setSecretStore(memStore()));
   after(() => secrets.setSecretStore(null));

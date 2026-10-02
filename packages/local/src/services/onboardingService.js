@@ -21,6 +21,12 @@ function hasConfiguredKey(db) {
   return aiConfigService.listConfigs(db).some((c) => c.is_active && c.has_api_key);
 }
 
+/** Key 不是在向导里保存的（例如在「AI 配置」页填的）时，向导没记下 config_id；退回到当前有 Key 的配置，让连通测试一步可达。 */
+function fallbackConfigId(db) {
+  const c = aiConfigService.listConfigs(db).find((c) => c.is_active && c.has_api_key);
+  return c ? c.id : null;
+}
+
 /** Wizard steps for the current enablement: the provider-choice step is skipped when only one is enabled. */
 function stepsFor(providerIds = enablement.getEnabled()) {
   return providerIds.length > 1 ? STEPS : STEPS.filter((s) => s !== 'provider');
@@ -41,7 +47,7 @@ function getStatus(db) {
     provider: enabled.includes(st.provider) ? st.provider : (enabled.length === 1 ? enabled[0] : null),
     providers: enablement.listEnabledMeta().map((m) => ({ id: m.id, label: m.label })),
     steps: stepsFor(enabled),
-    config_id: Number.isInteger(st.config_id) ? st.config_id : null,
+    config_id: Number.isInteger(st.config_id) ? st.config_id : fallbackConfigId(db),
   };
 }
 
