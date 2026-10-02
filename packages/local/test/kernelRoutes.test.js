@@ -235,7 +235,7 @@ describe('kernel REST', () => {
       script: ['rewriteLine', 'insertLine', 'deleteLine', 'splitLine', 'mergeLines', 'reorderLines'],
       shot: ['setShotField', 'splitShot', 'mergeShots', 'reorderShots', 'moveShotToGroup', 'addShot', 'deleteShot', 'regenerateShot'],
       timeline: ['trimSegment', 'moveSegment', 'splitSegment', 'deleteSegment', 'setTransition', 'addMusic'],
-      canvas: ['moveNode', 'setNodeParam', 'connectNodes', 'disconnectNodes', 'addNodeAt', 'deleteNode'],
+      canvas: ['moveNode', 'setNodeParam', 'connectNodes', 'disconnectNodes', 'addNodeAt', 'deleteNode', 'renameGroup'],
     };
     for (const v of Object.keys(spec)) assert.deepEqual(Object.keys(kernelRoutes.INTENTS[v]).sort(), [...spec[v]].sort(), v);
     assert.deepEqual(Object.keys(kernelRoutes.INTENTS).sort(), Object.keys(spec).sort());
