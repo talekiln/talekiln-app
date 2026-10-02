@@ -3,6 +3,7 @@ import type {
   AdminAuditRecord, AdminRoleRecord, AnnouncementRecord, ReleaseRecord,
   Account, Device, FeedbackRecord, InvoiceRecord, InviteCode, LicenceUsageRecord, OrderRecord, PaymentRecord,
   Plan, PlanVersion, RefreshTokenRecord, RefundRecord, Repositories, Subscription, TelemetryRow,
+  TemplateRecord, TemplateVersionRecord,
 } from './repositories';
 
 // 内存实现：仅用于测试（单线程 JS 下每个方法体天然原子）。
@@ -28,10 +29,56 @@ export function createMemoryRepositories(): Repositories {
   const releases = new Map<string, ReleaseRecord>();
   const adminRoles = new Map<string, AdminRoleRecord>(); // key: accountId
   const audits: AdminAuditRecord[] = [];
+  const templates = new Map<string, TemplateRecord>();
+  const templateVersions = new Map<string, TemplateVersionRecord>();
   const clone = <T extends object>(x: T): T => structuredClone(x);
   const cloneOrNull = <T extends object>(x: T | undefined | null): T | null => (x ? structuredClone(x) : null);
+  const byNewest = (a: { createdAt: Date; id: string }, b: { createdAt: Date; id: string }) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id);
 
   return {
+    templates: {
+      async create(t, now) {
+        if (templates.has(t.id)) throw new Error('unique:id');
+        const rec: TemplateRecord = { ...t, createdAt: now, updatedAt: now };
+        templates.set(rec.id, rec);
+        return clone(rec);
+      },
+      async update(id, patch, now) {
+        const r = templates.get(id);
+        if (!r) return null;
+        Object.assign(r, patch, { updatedAt: now });
+        return clone(r);
+      },
+      async findById(id) { return cloneOrNull(templates.get(id)); },
+      async list() { return [...templates.values()].sort((a, b) => a.id.localeCompare(b.id)).map(clone); },
+      async delete(id) {
+        if (!templates.delete(id)) return false;
+        for (const [vid, v] of templateVersions) if (v.templateId === id) templateVersions.delete(vid);
+        return true;
+      },
+      async addVersion(v, now) {
+        if (!templates.has(v.templateId)) throw new Error('fk:templateId');
+        for (const x of templateVersions.values()) if (x.templateId === v.templateId && x.version === v.version) throw new Error('unique:version');
+        const rec: TemplateVersionRecord = { ...v, manifest: structuredClone(v.manifest), id: randomUUID(), published: false, publishedAt: null, createdAt: now };
+        templateVersions.set(rec.id, rec);
+        return clone(rec);
+      },
+      async findVersion(id) { return cloneOrNull(templateVersions.get(id)); },
+      async listVersions(templateId) {
+        return [...templateVersions.values()].filter((v) => v.templateId === templateId).sort(byNewest).map(clone);
+      },
+      async setPublished(id, published, now) {
+        const v = templateVersions.get(id);
+        if (!v) return null;
+        v.published = published;
+        v.publishedAt = published ? now : null;
+        return clone(v);
+      },
+      async listPublished() {
+        return [...templateVersions.values()].filter((v) => v.published)
+          .sort((a, b) => (b.publishedAt!.getTime() - a.publishedAt!.getTime()) || byNewest(a, b)).map(clone);
+      },
+    },
     announcements: {
       async create(a, now) {
         const rec: AnnouncementRecord = { ...a, id: randomUUID(), createdAt: now, updatedAt: now };

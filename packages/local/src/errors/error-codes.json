@@ -409,6 +409,41 @@
       "scope": "local",
       "message": "批次当前状态不允许该操作",
       "action": "刷新批次页查看最新状态后再操作"
+    },
+    "CLOUD_UNREACHABLE": {
+      "scope": "local",
+      "message": "无法连接云端，请检查网络后重试",
+      "action": "确认网络畅通后重试；离线时仍可使用已安装的模板"
+    },
+    "CLOUD_NOT_CONFIGURED": {
+      "scope": "local",
+      "message": "尚未配置云端地址",
+      "action": "在 config.yaml 的 cloud.base_url 填写云端地址后重启"
+    },
+    "TEMPLATE_INVALID": {
+      "scope": "local",
+      "message": "模板清单不合法",
+      "action": "按错误详情修正 manifest.json 后重新安装"
+    },
+    "TEMPLATE_PACKAGE_INVALID": {
+      "scope": "local",
+      "message": "模板包无法读取",
+      "action": "确认路径是含 manifest.json 的目录或 .lytpl 压缩包"
+    },
+    "TEMPLATE_SIGNATURE_INVALID": {
+      "scope": "local",
+      "message": "模板签名无效，已拒绝安装",
+      "action": "从官方渠道重新下载模板；自制模板请去掉 signature 字段"
+    },
+    "TEMPLATE_PRO_REQUIRED": {
+      "scope": "local",
+      "message": "这是付费模板，当前账号不可用",
+      "action": "登录并升级套餐后再套用，或选择免费模板"
+    },
+    "TEMPLATE_BUILTIN_READONLY": {
+      "scope": "local",
+      "message": "内置模板不能覆盖或删除",
+      "action": "换一个模板 id 再安装"
     }
   }
 }

@@ -130,7 +130,12 @@ function createApp(opts = {}) {
   attachToWorker(aiQueue.worker, batchScheduler);
   aiQueue.batch = batch;
   aiQueue.batchScheduler = batchScheduler;
-  app.use('/api/v1', setupRouter(config, db, log, aiQueue, cloud, { storageRoot, exporter: opts.exporter, getCore, generation, batch }));
+  // P3-T 模板市场：内置模板在这里同步进表
+  const templates = opts.templates || require('./templates').createTemplateService({
+    db, spend: aiQueue.spend, log, cloud, listConfigs: opts.listConfigs,
+    catalogModels: () => { try { return cloud.catalog.getCatalog().models || []; } catch (_) { return []; } },
+  });
+  app.use('/api/v1', setupRouter(config, db, log, aiQueue, cloud, { storageRoot, exporter: opts.exporter, getCore, generation, batch, templates }));
 
   // 前端静态资源（sxy：web/dist）；Electron 打包时可设 WEB_DIST_PATH
   const webDist = process.env.WEB_DIST_PATH || path.join(process.cwd(), '..', 'frontweb', 'dist');

@@ -34,6 +34,8 @@ export function createBuiltinCommands(deps) {
     { id: 'project.export', title: '导出视频', group: '项目', keywords: ['导出', 'export', '渲染', '成片'], when: hasEpisode, run: (ctx) => deps.go({ path: `/episodes/${ctx.episodeId}/export`, query: ctx.dramaId ? { drama: String(ctx.dramaId) } : {} }) },
     // P3-B
     { id: 'project.batch', title: '批量生成', group: '项目', keywords: ['批量', '多集', '批次', 'batch', '并发', '预算'], when: (ctx) => !!ctx.dramaId, run: (ctx) => deps.go(`/project/${ctx.dramaId}/batch`) },
+    // P3-T
+    page('nav.templates', '模板市场', '/templates', ['模板', '套用', '市场', 'template', 'templates']),
   ]
 }
 

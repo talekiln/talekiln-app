@@ -345,3 +345,34 @@ model AdminAudit {
   @@index([actorId, at])
   @@index([targetType, targetId])
 }
+
+// P3-T 模板市场：模板（id 即清单里的 id）与它的版本（清单 JSON + 官方 ES256 签名）。只有 published 的版本进公开目录。
+model Template {
+  id          String            @id
+  name        String
+  genre       String
+  tier        String            @default("free") // free | pro
+  description String            @default("")
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  versions    TemplateVersion[]
+}
+
+model TemplateVersion {
+  id          String    @id @default(uuid())
+  templateId  String
+  template    Template  @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  version     String
+  manifest    Json
+  packageUrl  String?
+  sha256      String
+  signature   String
+  kid         String
+  tier        String    @default("free") // free | pro
+  published   Boolean   @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([templateId, version])
+  @@index([published, publishedAt])
+}

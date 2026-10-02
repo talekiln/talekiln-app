@@ -474,6 +474,17 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
     r.post('/batches/:id/pause', batches.pause);
     r.post('/batches/:id/resume', batches.resume);
   }
+  // P3-T 模板市场
+  if (extras && extras.templates) {
+    const t = require('./templates')(extras.templates, log);
+    r.get('/templates', t.list);
+    r.get('/templates/cloud', t.cloud);
+    r.post('/templates/install', t.install);
+    r.get('/templates/:id', t.get);
+    r.post('/templates/:id/estimate', t.estimate);
+    r.post('/templates/:id/apply', t.apply);
+    r.delete('/templates/:id', t.remove);
+  }
 
   return r;
 }
