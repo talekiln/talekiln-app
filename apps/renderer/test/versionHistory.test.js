@@ -15,6 +15,10 @@ test('txLabel / sourceLabel map known names and keep unknown ones readable', () 
   assert.equal(sourceLabel('legacy-import'), '导入')
   assert.equal(sourceLabel('rebase'), '改记（沿用旧素材）')
   assert.equal(sourceLabel(null), '未知来源')
+  // P3-R
+  assert.equal(sourceLabel('region-edit:7'), '选镜改片')
+  assert.equal(txLabel('editShotRegion'), '选镜改片')
+  assert.equal(txLabel('adoptShotVersion'), '采用版本（参数跟随）')
 })
 
 test('formatTime: local MM-DD HH:mm; invalid -> empty', () => {

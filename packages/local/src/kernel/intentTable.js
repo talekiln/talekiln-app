@@ -28,6 +28,11 @@ const INTENTS = {
     addShot: (g, a, o) => { need(a, 'group'); const { legacy_id, ...rest } = a; return I.shot.addShot(g, rest, o); }, // legacy_id 只由物化分配
     deleteShot: (g, a, o) => { need(a, 'shot_id'); return I.shot.deleteShot(g, a.shot_id, o); },
     regenerateShot: (g, a, o) => { need(a, 'shot_id'); return I.shot.regenerateShot(g, a.shot_id, { seed: a.seed, targets: a.targets }, o); },
+    // P3-R 选镜改片：只写 video.edit 参数（让视频过期）；提交任务、拼接写回走 /shots/:id/edit-region（regionEdit 服务）
+    editShotRegion: (g, a, o) => {
+      need(a, 'shot_id', 't0_ms', 't1_ms', 'prompt');
+      return I.shot.editShotRegion(g, a.shot_id, { t0_ms: a.t0_ms, t1_ms: a.t1_ms, rect: a.rect, prompt: a.prompt, mode: a.mode === undefined ? 'region' : a.mode }, o);
+    },
   },
   timeline: {
     trimSegment: (g, a, o) => { need(a, 'segment_id'); return I.timeline.trimSegment(g, a.segment_id, { in_ms: a.in_ms, out_ms: a.out_ms }, o); },

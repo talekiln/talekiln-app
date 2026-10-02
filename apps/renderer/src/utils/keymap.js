@@ -36,6 +36,9 @@ export const ACTIONS = [
   { id: 'shot.pick3', scope: SCOPE_WORKBENCH, label: '选用候选 V3', keys: ['Alt+3'] },
   { id: 'shot.pick4', scope: SCOPE_WORKBENCH, label: '选用候选 V4', keys: ['Alt+4'] },
   { id: 'shot.compareToggle', scope: SCOPE_WORKBENCH, label: '切换 A/B 对比', keys: ['Tab'] },
+  // P3-R 选镜改片：播放头位置设为入点 / 出点
+  { id: 'shot.markIn', scope: SCOPE_WORKBENCH, label: '设入点（选镜改片）', keys: ['I'] },
+  { id: 'shot.markOut', scope: SCOPE_WORKBENCH, label: '设出点（选镜改片）', keys: ['O'] },
 ]
 
 const MOD_ORDER = ['Ctrl', 'Alt', 'Shift']

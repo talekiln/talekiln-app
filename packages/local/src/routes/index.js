@@ -517,6 +517,14 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
     r.get('/settings/developer-mode', plugins.getDeveloperMode);
     r.put('/settings/developer-mode', plugins.putDeveloperMode);
   }
+  // P3-R
+  // ---------- region edit (选镜改片): estimate / confirm -> queue -> ffmpeg splice -> new kernel version; adopt via adoptShotVersion ----------
+  if (extras.regionEdit) {
+    const re = require('./regionEdit')(extras.regionEdit, log);
+    r.post('/shots/:id/edit-region', re.editRegion);
+    r.get('/shots/:id/edit-regions', re.listRegions);
+    r.post('/shots/:id/adopt-version', re.adoptVersion);
+  }
 
   return r;
 }

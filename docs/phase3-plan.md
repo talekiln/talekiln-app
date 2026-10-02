@@ -44,3 +44,4 @@
 
 - P3-C 角色一致性：分支 `p3-consistency`，自动化测试通过；真 Key 分数分布、Windows 真机未验证。见 `docs/phase3-consistency.md`。
 - P3-P 插件适配器：分支 `p3-plugins`。SDK 签名/验签与 `sign-plugin.mjs`，本地迁移 32 `installed_plugins`、插件宿主（扫描、离线验签、开发者模式、安装/删除、接入注册表与队列）与 `/plugins` 接口，云端 PluginRegistry（登记/审核/签名/公开目录，迁移 `20261005000000_plugin_registry`），插件页 `/settings/plugins`。详见 `docs/phase3-plugins.md`；真实厂商插件未写，真机未验。
+- P3-R 选镜改片：分支 `p3-region-edit`，见 docs/phase3-region-edit.md。内核意图 `editShotRegion` / `adoptShotVersion`（edit 进 cacheKey）、迁移 29 `edit_regions`、服务 `packages/local/src/regionEdit/`（估算只算重做的那一段；厂商能力位 `video.edit`，百炼 / 方舟未实现则走“截两帧 -> 首尾帧生视频 -> ffmpeg 拼接”的降级路径；结果作为新版本入图、不自动采用）、路由 `POST /shots/:id/edit-region`、`GET /shots/:id/edit-regions`、`POST /shots/:id/adopt-version`、分镜工作台「选镜改片」面板与基于内核版本的 V1..Vn / A/B 对比 / 采用。自动化：拼接后时长误差在一帧内（lavfi 样例）。未验证：百炼是否有带遮罩的视频编辑模型、降级路径接缝效果（真机）。

@@ -53,6 +53,7 @@ function validateManifest(input) {
       seen.add(c);
     }
     if (seen.has('video.submit') !== seen.has('video.poll')) errors.push('video.submit and video.poll must be declared together');
+    if (seen.has('video.edit') && !seen.has('video.poll')) errors.push('video.edit requires video.poll (its task is polled the same way)');
   }
 
   if (!Array.isArray(m.permissions)) {

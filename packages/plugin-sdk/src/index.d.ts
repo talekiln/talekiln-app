@@ -1,7 +1,7 @@
 // @talekiln/plugin-sdk (MIT). Types for provider-adapter plugins.
 
 export declare const SDK_VERSION: string;
-export declare const CAPABILITIES: readonly ['llm.chat', 'image.generate', 'video.submit', 'video.poll', 'tts.synthesize'];
+export declare const CAPABILITIES: readonly ['llm.chat', 'image.generate', 'video.submit', 'video.poll', 'tts.synthesize', 'video.edit'];
 export declare const VIDEO_STATUSES: readonly ['pending', 'running', 'succeeded', 'failed'];
 
 export type Capability = (typeof CAPABILITIES)[number];
@@ -70,6 +70,12 @@ export interface VideoSubmitRequest {
   model?: string; prompt: string; imageUrl?: string; firstFrameUrl?: string; lastFrameUrl?: string;
   referenceUrls?: string[]; duration?: number; resolution?: string; signal?: AbortSignal;
 }
+/** Region / time-range edit of an existing clip (rect normalized to 0..1); the task is polled through video.poll. */
+export interface VideoEditRequest {
+  model?: string; prompt: string; videoUrl: string;
+  edit: { t0_ms: number; t1_ms: number; rect: { x: number; y: number; w: number; h: number }; mode: 'region' | 'segment' };
+  duration?: number; resolution?: string; signal?: AbortSignal;
+}
 export interface VideoPollRequest { taskId: string; signal?: AbortSignal }
 export interface VideoPollResult {
   status: 'pending' | 'running' | 'succeeded' | 'failed';
@@ -91,6 +97,7 @@ export interface CapabilityMap {
   'video.submit': (req: VideoSubmitRequest) => Promise<{ taskId: string }>;
   'video.poll': (req: VideoPollRequest) => Promise<VideoPollResult>;
   'tts.synthesize': (req: TtsRequest) => Promise<TtsResult>;
+  'video.edit': (req: VideoEditRequest) => Promise<{ taskId: string }>;
 }
 
 export interface ProbeResult { ok: boolean; costly: boolean }
