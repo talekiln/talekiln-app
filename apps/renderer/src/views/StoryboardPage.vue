@@ -128,7 +128,7 @@ const saver = createAutosaver({ delay: 800, onState: (s) => { saveState.value = 
 const consistency = ref(null)
 const consMap = computed(() => consistencyShotMap(consistency.value))
 const consChip = (id) => badgeForShot(consMap.value, id)
-const consHint = (id) => consistencyHint(consMap.value.get(Number(id)), consistency.value?.min_score)
+const consHint = (id) => consistencyHint(consMap.value.get(Number(id)), consistency.value?.min_score, consistency.value)
 let consTimer = null
 async function loadConsistency() {
   if (!episodeId.value) return
