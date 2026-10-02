@@ -119,6 +119,15 @@ export function createApi({ base = '/api', fetchImpl, getToken = () => null, onU
     addTemplateVersion: (id, body) => json('POST', `/admin/templates/${enc(id)}/versions`, body),
     publishTemplateVersion: (id, vid, published = true) => json('POST', `/admin/templates/${enc(id)}/versions/${enc(vid)}/${published ? 'publish' : 'unpublish'}`, {}),
 
+    // 插件审核与官方签名（P3-P）；签名私钥只在云端服务器上，后台只发指令
+    listPlugins: (f = {}) => json('GET', '/admin/plugins' + qs({ status: f.status, limit: f.limit })),
+    getPlugin: (id) => json('GET', `/admin/plugins/${enc(id)}`),
+    submitPlugin: (body) => json('POST', '/admin/plugins', body),
+    approvePlugin: (id, notes) => json('POST', `/admin/plugins/${enc(id)}/approve`, { notes: notes || '' }),
+    rejectPlugin: (id, notes) => json('POST', `/admin/plugins/${enc(id)}/reject`, { notes: notes || '' }),
+    signPlugin: (id, notes) => json('POST', `/admin/plugins/${enc(id)}/sign`, { notes: notes || '' }),
+    pluginSigningKey: () => json('GET', '/admin/plugins/signing-key'),
+
     // 管理员与审计
     listAdmins: () => json('GET', '/admin/admins'),
     grantAdmin: (body) => json('POST', '/admin/admins', body),
