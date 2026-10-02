@@ -30,6 +30,8 @@
       "main.js",
       "lifecycle.js",
       "core-runtime.js",
+      "user-data.js",
+      "startup-error.js",
       "updater.js",
       "updater-logic.js",
       "update-config.json",

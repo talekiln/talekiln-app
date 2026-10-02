@@ -8,7 +8,10 @@ try {
   require('dns').setDefaultResultOrder('ipv4first');
 } catch (_) {}
 
-const USERDATA_DIR = path.join(app.getPath('appData'), 'talekiln');
+// 数据目录：默认 %APPDATA%\talekiln；可用 --user-data-dir=<绝对路径> 或环境变量 TALEKILN_USER_DATA_DIR 改到别处（见 user-data.js）
+const { describeStartupError } = require('./startup-error');
+const USERDATA = require('./user-data').resolveUserDataDir({ appDataDir: app.getPath('appData') });
+const USERDATA_DIR = USERDATA.dir;
 app.setPath('userData', USERDATA_DIR);
 
 const LOG_FILE = path.join(USERDATA_DIR, 'main.log');
@@ -18,6 +21,7 @@ function writeMainLog(msg) {
     fs.appendFileSync(LOG_FILE, `${new Date().toISOString()} ${msg}\n`);
   } catch (_) {}
 }
+if (USERDATA.source !== 'default') writeMainLog(`userData overridden by ${USERDATA.source}: ${USERDATA_DIR}`);
 process.on('uncaughtException', (e) => writeMainLog(`uncaughtException: ${e && e.stack ? e.stack : e}`));
 process.on('unhandledRejection', (r) => writeMainLog(`unhandledRejection: ${r instanceof Error ? r.stack : r}`));
 
@@ -211,7 +215,7 @@ app.whenReady().then(async () => {
   } catch (err) {
     const stack = err && err.stack ? err.stack : String(err);
     writeMainLog(`startup failed\n${stack}`);
-    dialog.showErrorBox('Talekiln 启动失败', `本地服务未能启动，日志：${LOG_FILE}\n\n${stack}`);
+    dialog.showErrorBox('Talekiln 启动失败', describeStartupError(err, { logFile: LOG_FILE, packaged: app.isPackaged }));
     app.quit();
   }
 });

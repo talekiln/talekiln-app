@@ -127,3 +127,9 @@ test('restarting the poller drops the old job', async () => {
   await t.run()
   assert.deepEqual(seen, ['a', 'b', 'b'])
 })
+
+test('libopenh264（LGPL 构建的软件编码）有中文标签，并可作为推荐项', () => {
+  const o = encoderOptions([{ name: 'libopenh264', listed: true, available: true }], 'libopenh264')
+  assert.equal(o[0].label, '自动（推荐：软件编码 (libopenh264)）')
+  assert.equal(o[1].label, '软件编码 (libopenh264)')
+})

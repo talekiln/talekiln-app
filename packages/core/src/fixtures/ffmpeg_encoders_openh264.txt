@@ -1,0 +1,21 @@
+Encoders:
+ V..... = Video
+ A..... = Audio
+ S..... = Subtitle
+ .F.... = Frame-level multithreading
+ ..S... = Slice-level multithreading
+ ...X.. = Codec is experimental
+ ....B. = Supports draw_horiz_band
+ .....D = Supports direct rendering method 1
+ ------
+ V....D libopenh264          OpenH264 H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10 (codec h264)
+ V....D h264_amf             AMD AMF H.264 Encoder (codec h264)
+ V....D h264_d3d12va         D3D12VA h264 encoder (codec h264)
+ V....D h264_mf              H264 via MediaFoundation (codec h264)
+ V....D h264_nvenc           NVIDIA NVENC H.264 encoder (codec h264)
+ V..... h264_qsv             H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10 (Intel Quick Sync Video acceleration) (codec h264)
+ V....D h264_vaapi           H.264/AVC (VAAPI) (codec h264)
+ V....D h264_vulkan          H.264/AVC (Vulkan) (codec h264)
+ A....D aac                  AAC (Advanced Audio Coding)
+ A....D aac_mf               AAC via MediaFoundation (codec aac)
+ S..... mov_text             3GPP Timed Text subtitle
