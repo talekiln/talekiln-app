@@ -80,7 +80,10 @@ jobs:
       - run: pnpm native:node
       - name: Start MinIO (throwaway credentials) and wait for /minio/health/live
         run: |
-          docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=ci -e MINIO_ROOT_PASSWORD=ci-throwaway-minio minio/minio server /data
+          # MinIO 官方镜像在 quay.io（Docker Hub 上的 minio/minio 已拉不到：2026-10-02 首次真跑报 pull access denied）
+          IMAGE=quay.io/minio/minio:latest
+          docker pull "$IMAGE" || IMAGE=minio/minio:latest
+          docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=ci -e MINIO_ROOT_PASSWORD=ci-throwaway-minio "$IMAGE" server /data
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null; then echo "minio up after $i tries"; break; fi
             sleep 2
