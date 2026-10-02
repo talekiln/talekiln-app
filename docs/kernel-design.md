@@ -197,7 +197,7 @@ Node { id, type, params, legacy_id? }
 - **词级字幕**：不新增第二份事实源，也不放进 `compose.params`：字幕块（相对镜头起点的 `{start_ms,end_ms,text}`，由 `splitCues(words)` 算出）是那次配音的产物，存在旁白版本 metadata 里。`timelineView` 只在旁白新鲜（采用版本 cacheKey = 当前 key，即行文字、音色没变）时按块输出 `sub_<shot>_<n>`，否则退回整镜一条 `sub_<shot>`（文字取自行）。`subtitle_overrides[lineId]` 的样式对所有块生效。字幕块被夹到镜头时间范围内；旁白片段时长取 `min(镜头跨度, 音频时长)`。
 - **真实片长**：`effectiveSegments`（只读投影）——采用的 video 版本带正整数 `metadata.duration_ms`（R）时，到末尾的片段（out == 目标时长）伸缩到 R，其余裁到 R 以内；存储的 `shot.duration_ms` 与 `compose.segments` 不变。`timelineView`、`shotView.used_ms` 用它，`shotView` 另给 `real_ms`。物化后旧时间线表同步。注意：改写镜头目标时长会改 shot 的 cacheKey 进而让图/视频过期，所以不用“回写 duration_ms”的办法。
 - **装配**：`timeline/kernelAssemble.js` 的 `assembleFromKernel(db, ep, {replace})` 与 `assembleFromStoryboard` 同语义（已存在且未 replace -> 409），但经内核；`replace` 重置片段为整段、清字幕样式覆盖（音乐保留）。旧路由 `POST /timelines/episode/:id/assemble` 尚未改调（路由归 I3）。
-- **未做**：配音进队列/任务中心；多说话人分别配不同音色（现在一个镜头一个音色）；台词比镜头长只返回时间不处理（`timelineView` 会夹掉越界字幕）；除 `longxiaochun_v2` 外音色未实测；字幕样式界面。
+- **未做**：~~配音进队列/任务中心~~（任务 3：`voiceover/queue.js`，见 §15）；多说话人分别配不同音色（现在一个镜头一个音色）；台词比镜头长只返回时间不处理（`timelineView` 会夹掉越界字幕）；除 `longxiaochun_v2` 外音色未实测；字幕样式界面。
 
 ## 12. 旧写接口改道（I3）：兼容层与剩余绕过
 
@@ -269,8 +269,9 @@ Node { id, type, params, legacy_id? }
 - 路由：`/episodes/:id/script`、`/episodes/:id/canvas`、`/episodes/:id/storyboard`（查出项目后跳到 `/project/:dramaId/storyboard?episode=`）、既有 `/episodes/:id/timeline`；入口在项目列表卡片「四视图」与剧集卡片。
 - 共享 store 只存服务端数据（graph / stale / seq / can_undo / can_redo + 四个视图投影）和两项 UI 状态（选择、播放头）。所有编辑 `POST /intent`（画布属性面板里没有意图的字段用 `POST /tx` 的 `setParam`），返回后整体回读；失败时显示内核的错误文案并回读。
 - 选择 `{kind: line|shot|segment|node, id}` 切换视图时不变，各视图用 `focusIn(view, selection)` 找对应对象（行 → 第一个关联镜头 → 第一个视频片段 → 画布节点）。
-- 顶栏撤销 / 重做 / Ctrl+Z / Ctrl+Shift+Z = 内核历史；时间线页保留编辑器自己的 Ctrl+Z（走 `PUT /timelines` 改道后同样进内核历史）。分镜表、时间线编辑器保存完成后刷新共享 store，被顶栏撤销 / 重做后重新读取各自的旧表数据。
-- 局限：画布没有新增节点 / 场景组改名的界面；分镜页与时间线页的内部数据仍来自旧表（物化），不是投影直读；画布未存 layout 的节点用显示用的自动布局（不写回图）。
+- 顶栏撤销 / 重做 / Ctrl+Z / Ctrl+Shift+Z = 内核历史；时间线页不再有自己的撤销按钮：Ctrl+Z / Ctrl+Shift+Z 先 `flushPending()` 保存未提交的编辑，再调同一个内核历史（轨道音量/静音/混音在图外，撤销不恢复它们）。分镜表、时间线编辑器保存完成后刷新共享 store，被顶栏撤销 / 重做后重新读取各自的旧表数据。
+- 画布工具栏可新增节点（shot / script_line / image / video / narration，`canvas.addNodeAt`，镜头与剧本行需选场景组）；未选中节点时属性面板列出场景组可改名（`canvas.renameGroup`）。
+- 局限：分镜页与时间线页的内部数据仍来自旧表（物化），不是投影直读；画布未存 layout 的节点用显示用的自动布局（不写回图）。
 
 ## 14. K4：生成输入进 cacheKey、画布改参数意图、sceneKey 对照 G02
 
@@ -289,6 +290,9 @@ Node { id, type, params, legacy_id? }
 - 只允许该节点类型白名单里的顶层参数（`NODE_PARAM_RULES`：script_line 的 kind/speaker/text；shot 的各文字字段、characters、duration_ms；image 的 model/seed/reference_hashes；video 的 model/seed/tail_frame_hash；narration 的 voice/speed；compose 的 fps/size/aigc_label）并校验取值；`segments / music / subtitle_overrides` 拒绝（有时间线意图）。可选参数用 `null` 清除，必填参数清除或类型不对 -> `INTENT`（REST 400）。值没变 = 空事务。镜头 `duration_ms` 委托给 `setShotField`（片段联动）。事务标签 `setNodeParam`。
 - REST `POST /episodes/:id/intent` 白名单加入 `canvas.setNodeParam`（args：`node_id, path, value`），错误码沿用 `INTENT`，错误码表无需新增。一致性套件的 `canvasEdit` 已改为调用它（原来是一条裸 `setParam` 事务）。
 
+### 14.2b `canvas.renameGroup(g, groupId, title)`
+- 改场景组标题：去首尾空白、非空、不超过 200 字；值没变 = 空事务；组不存在 -> `INTENT`。REST 意图白名单加入（args：`group_id, title`）。一致性套件场景 `canvas_rename_group`。
+
 ### 14.3 sceneKey 对照真实 G02 渲染计划
 `render.plan`（`packages/core/src/plan.rs`）按**视频片段**切场景；场景键 = 渲染器版本 + 输出设置 + 视频（素材身份、srcIn/srcOut、音量）+ 与该场景时间重叠的字幕（相对起止、文字、样式）+ 重叠的旁白（相对起点、时长、素材身份、srcIn、音量）。对照后的发现与修正：
 
@@ -302,3 +306,13 @@ Node { id, type, params, legacy_id? }
 | gap 是 G02 里独立的“空场景”，不属于任何镜头 | gap 不进镜头键；对照测试显示改 gap 不改任何镜头的两种键 |
 
 对照测试 `kernel/test/sceneKeyG02.test.js`：用真实 `lycore` 二进制（`cargo build` 得到 `packages/core/target/*/lycore`）的 `render.plan`，素材换成内容 = `asset.hash` 的临时文件（`hashContent` 模式）。17 种编辑，两边逐镜头一致：对白文字、对白改动作行、字幕样式、裁剪、切分、改时长、重新生成视频、重新配音 -> 两边都变；音乐、画布移动、转场、镜头标题、生成输入参数、语速参数、镜头重排、改别的镜头的 gap、删别的镜头 -> 两边都不变。没有二进制时只跑按 plan.rs 字段写的 JS 移植；有二进制时还校验该移植与真实 `render.plan` 逐键一致。
+
+## 15. 任务 3：配音进队列、真实花费回写
+
+代码：`packages/local/src/voiceover/queue.js`、`routes/voiceover.js`、`spend/index.js`（`actual`、`recordFinished`）、迁移 `28_spend_log_usage.sql`、`configs/prices.json`；测试 `local/test/narrationFlow.test.js`、`spend.test.js`、`providerAdapter.test.js`。
+
+- **配音任务**：`POST /episodes/:id/voiceover` 的估价 / 确认 / 402 语义不变；`confirm:true` 改为逐镜建 `/ai-tasks`（kind tts，参数带 `_vo: {episode_id, shot_id, legacy_id, node, cache_key, voice, text_sha, aspect_ratio}`），返回 `{tasks, skipped}`。同一镜头同 cacheKey 已在队列则 `already_queued`，已有新鲜旁白则 `already_done`（`force` 可重做）。
+- **写回**：worker 的 `onTaskFinished` 调 `voiceoverService.onTaskFinished`：读音频/词时间戳 blob，在一个事务里基于最新图 `recordGeneration`（版本 id `t_<task_id>`），并物化旧列。合成期间台词或音色改了（cacheKey 不等）-> `STALE_INPUT` 跳过。启动时 `recoverFinished` 把崩溃前已完成但未采用的任务补写回（幂等）。
+- **状态**：`GET /episodes/:id/voiceover/status` 按镜头给 `none | queued | running | failed | stale | fresh` 与计数，抽屉据此轮询。
+- **花费回写**：provider 结果带 `usage`（视频 `duration`/`SR`、配音 `characters`、图片 `images`）；`spend.actual()` 按价目算实际并连同 `{units, unit, unit_price, resolution}` 存 `spend_log.usage/actual`；`summary.total` 多 `estimated / actual / actual_count`，`prices` 带 `version/date/sample`。没有 usage 的任务 `actual` 为空，合计按“有实际用实际，否则估算”。
+- **未做 / 待产品决定**：价目里未逐条核对的模型（`verified:false`）仍按示例价提示；画布属性面板里 image/video/narration/compose 的参数仍用裸 `setParam` 事务（每次点击一步撤销）；时间线轨道音量/静音/混音在图外。

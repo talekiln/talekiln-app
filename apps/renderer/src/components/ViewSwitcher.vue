@@ -58,7 +58,7 @@ function goBack() {
 }
 
 // Ctrl+Z / Ctrl+Shift+Z（Ctrl+Y）= 内核历史。输入框里保留浏览器自己的文字撤销；
-// 时间线页自带编辑器级撤销（useKeymap），这里不重复处理。
+// 时间线页由它自己的 useKeymap（edit.undo / edit.redo）先冲掉未保存的编辑再调同一份内核历史，这里不重复处理。
 function onKey(e) {
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return
   const k = e.key.toLowerCase()

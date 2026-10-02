@@ -26,7 +26,7 @@
 | F04 快捷键/撤销 | 已做（未在浏览器测） | |
 | F06 自动保存与恢复 | 部分 | localStorage 草稿恢复，未用 IndexedDB |
 | G02 渲染计划与场景缓存 | 已做 | 只改一镜只重渲一镜 |
-| D06 花费确认与上限 / 队列接适配器 | 已做（模拟数据） | 价格表为示例价 |
+| D06 花费确认与上限 / 队列接适配器 | 已做（模拟数据） | 价格表已换为百炼公开价目（2025-12-19 版，`configs/prices.json`），未逐条核对的条目标 `verified:false` 仍按示例价提示；任务完成后用结果里的用量写 `spend_log.actual`（任务 3） |
 | G03/G05 渲染导出 | 已做（Linux 真 ffmpeg 测过） | 硬件编码器、Windows 路径、取消需 Windows 真机 |
 | B01–B03 云端账号与授权 | 已做（无数据库验证） | 迁移与 Prisma 仓库待真 Postgres 验证 |
 | D04/D05 角色库与镜头工作台 | 已做（未在浏览器打开） | 锁定参考图对火山经典路径可能无效 |
@@ -43,9 +43,9 @@
 | H02 使用统计 | 已做（内存仓储验证） | 云端 POST /telemetry 白名单、概览聚合；客户端 opt-in 模块已写，尚未接入应用事件与设置开关 |
 | H03 反馈与诊断包 | 已做（无 Electron/Postgres 验证） | GET /api/v1/diagnostics/bundle 脱敏 zip（植入假密钥测试）；云端 POST /feedback 有大小与限流；诊断包直接存库，未用 OSS 临时凭证；界面入口未做 |
 | B05 登录/注册页与云端客户端 | 已做（模拟云端测试，未跑 Electron） | 邀请码注册/登录页、本地 `/api/v1/account/*`、刷新令牌存系统密钥存储、许可证验签与离线宽限；云端地址 `cloud.base_url` 仍是占位，未对真实云端验证；登录名为邮箱（云端无用户名） |
-| B06 目录与价格表 | 已做（模拟云端测试） | 云端 `GET /catalog`（内容哈希 + ES256 签名）；本地拉取、验签、缓存，失败回退内置 prices.json；模型覆盖下拉用目录补充。花费估算器的价格表下次启动才切换；目录价格为示例价 |
+| B06 目录与价格表 | 已做（模拟云端测试） | 云端 `GET /catalog`（内容哈希 + ES256 签名）；本地拉取、验签、缓存，失败回退内置 prices.json；模型覆盖下拉用目录补充。花费估算器的价格表下次启动才切换；内置价目已改为百炼公开价（2025-12-19），云端目录尚未同步更新 |
 | C07 推广跳转 | 已做（模拟云端测试） | 云端 `GET /r/:code` 记录点击并 302（主机白名单、仅 https）；添加 Key 向导走本地 `/api/v1/referral/:provider`；真实推广链接未配置，迁移需真 Postgres 验证 |
-| E05 花费页 | 已做（模拟接口数据截图，未连真实服务） | `/spend`：按日/服务商/模型汇总、月度上限、逐任务费用、导出 CSV；价格仍为示例价 |
+| E05 花费页 | 已做（模拟接口数据截图，未连真实服务） | `/spend`：按日/服务商/模型汇总、月度上限、逐任务费用、导出 CSV；任务 3 后显示预估与实际（含回传用量：计费时长/字符/张数）、注明价目版本与日期 |
 | F05 背景音乐 | 已做（未跑 Electron） | 音乐库（用户导入 + 程序合成的示例配乐）、添加到音乐轨（可循环铺满）、音量/压低/响度写入时间线 JSON；render.plan 与 render.start 原本就支持音乐轨与压低 |
 | G04 AI 生成内容标识 | 部分 | 画面水印“AI生成”+ MP4 元数据 AIGC，默认开；字段、位置、大小、时长必须由法务确认，见 docs/aigc-marking.md |
 | G06 导出页 | 已做（Linux 真 lycore + ffmpeg 测过，页面用模拟接口截图） | `/episodes/:id/export`：分辨率/帧率/编码器/位置、进度轮询、取消、打开文件夹；本地服务经 `LYCORE_ENDPOINT` 连接 lycore，桌面主进程已启动 lycore 并设置该变量；Windows 打包版（unpacked 与 NSIS 安装包均已构建）经接口实测导出成功（h264+aac，含 AIGC 标识）；界面点击导出需 Task 4 人工复核 |
@@ -59,7 +59,8 @@
 | 数据内核 K3 一致性套件 | 已做 | 910 次场景×视图×故事执行 + 176 次等价比较，失败 0；报告 docs/kernel-conformance.md；抓到并修复 2 个内核缺陷 |
 | 任务 2：界面出图/出视频走 /ai-tasks | 已做（代码 + 单测；未真 Key 在界面点击验证） | 分镜级出图/出视频（FilmCreate、画布批量/工作流）改经 `apps/renderer/src/api/queuedGeneration.js`：先估价 -> 确认弹窗（批量只弹一次）-> `/episodes/:id/generate`；旧轮询经合成 id 读队列状态，取消走 `/ai-tasks/:id/cancel`；任务中心沿用 E04。旧 `POST /images`、`POST /videos` 保留但界面不再调用分镜级入口，并补了服务端花费上限检查（402 SPEND_LIMIT）。未迁移：角色/场景/道具等非分镜图、FreeCreate 视频，仍走旧同步路径（见 windows-test-results）。 |
 | 内核接线 I1 出图出视频走队列写回内核 | 已做（模拟数据） | /episodes/:id/generate，估价确认，幂等，缓存命中，崩溃恢复 |
-| 内核接线 I2 剧本入库/配音/词级字幕/真实片长 | 已做（模拟数据） | 配音未进队列和任务中心 |
+| 内核接线 I2 剧本入库/配音/词级字幕/真实片长 | 已做（模拟数据） | 配音已于任务 3 进队列/任务中心（`voiceover/queue.js`） |
+| 任务 3：配音进队列 / 真实花费回写 / 画布新增节点 | 已做（代码 + 单测；未真 Key 在界面点击验证） | 配音 `POST /episodes/:id/voiceover` 改为建 `/ai-tasks`（kind tts），估价/确认/402 不变，worker 完成后由 `voiceover/queue.js` 经内核 `recordGeneration` 写回旁白版本与词级字幕，新增 `GET .../voiceover/status`，配音抽屉轮询并显示排队/生成中/失败；任务结果 `usage` 写进 `spend_log.usage/actual`（视频计费时长 × 分辨率价、配音字符、图片张数），花费页显示预估/实际/用量；`prices.json` 换为百炼公开价目（2025-12-19）；画布工具栏新增节点（shot/script_line/image/video/narration，经 `canvas.addNodeAt`）、场景组改名（新意图 `canvas.renameGroup`），时间线页的本地撤销/重做按钮移除，Ctrl+Z/Y 改为先保存再走内核历史。见 windows-test-results/2026-10-02.md |
 | 内核接线 I3 旧写接口改走内核 | 已做 | 镜头与时间线编辑全部经内核；剩余绕过清单见 kernel-design §12.5 |
 | 只接百炼 + 扩展文档 + 全流程覆盖审计 + 端到端脚本 | 已做（Windows 真 Key 端到端通过） | providers.enabled 默认只开百炼；docs/bailian-flow-coverage.md |
 | 云端真 Postgres 验证 | 已做 | 33 个测试在内存库与 Postgres 上同一套断言通过；CI 加 Postgres 任务 |

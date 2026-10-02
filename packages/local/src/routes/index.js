@@ -360,11 +360,12 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
   r.post('/episodes/:id/redo', kernelRoutes.postRedo);
   r.post('/episodes/:id/import-legacy', kernelRoutes.importLegacy);
 
-  // ---------- narration voiceover (estimate -> confirm -> synthesize -> kernel write-back) ----------
-  if (extras.storageRoot) {
-    const vo = require('./voiceover')(db, log, { spend: aiQueue && aiQueue.spend, storageRoot: extras.storageRoot, resolve: extras.voiceoverResolve });
+  // ---------- narration voiceover (estimate -> confirm -> tts task in the queue -> kernel write-back) ----------
+  if (extras.voiceover) {
+    const vo = require('./voiceover')(db, log, extras.voiceover);
     r.get('/voiceover/voices', vo.voices);
     r.post('/episodes/:id/voiceover', vo.voiceover);
+    r.get('/episodes/:id/voiceover/status', vo.status);
   }
 
   // ---------- generation (I1): image / video through the durable queue, results land in the kernel ----------

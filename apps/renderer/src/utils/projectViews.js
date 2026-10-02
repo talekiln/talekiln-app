@@ -275,6 +275,50 @@ export function displayPos(n) {
   return { x: n.layout.x, y: Math.round(n.layout.y * 1.6 + (n.type === 'narration' ? 14 : 0)) }
 }
 
+/** 画布“新增节点”可选类型（合成节点每集唯一，不在此列）。 */
+export const ADD_NODE_TYPES = ['shot', 'script_line', 'image', 'video', 'narration'].map((value) => ({ value, label: NODE_TYPE_LABEL[value] }))
+
+/** 新节点的落点：放到现有节点最右侧一列，纵向对齐同类型节点（没有同类型就对齐首个节点）；空画布放原点。 */
+export function newNodePos(canvas, type) {
+  const nodes = (canvas && canvas.nodes) || []
+  if (!nodes.length) return { x: 0, y: 0 }
+  const pos = nodes.map((n) => ({ type: n.type, ...displayPos(n) }))
+  const x = Math.max(...pos.map((p) => p.x)) + NODE_SIZE.w + 60
+  const same = pos.filter((p) => p.type === type)
+  const y = same.length ? Math.max(...same.map((p) => p.y)) + NODE_SIZE.h + 40 : pos[0].y
+  return { x: Math.round(x), y: Math.round(y) }
+}
+
+/**
+ * canvas.addNodeAt 的参数：镜头 / 剧本行要落在一个场景组里（缺省第一个），并给可读的默认参数；
+ * 图 / 视频 / 配音节点只需类型和位置，之后用连线挂到镜头下。
+ */
+export function addNodeArgs(canvas, type, { group = null } = {}) {
+  const { x, y } = newNodePos(canvas, type)
+  const args = { type, x, y }
+  if (type === 'shot' || type === 'script_line') {
+    const gid = group || (canvas && canvas.groups && canvas.groups[0] ? canvas.groups[0].id : null)
+    if (gid) args.group = gid
+    args.params = type === 'shot' ? { title: '新镜头' } : { kind: 'action', text: '（新剧本行）' }
+  }
+  return args
+}
+
+/** 侧栏“场景”列表：{ id, title, lines, shots, stale }。 */
+export function sceneRows(canvas) {
+  return ((canvas && canvas.groups) || []).map((g) => ({
+    id: g.id, title: g.title || '', lines: g.summary?.lines ?? 0, shots: g.summary?.shots ?? 0, stale: g.summary?.stale ?? 0,
+  }))
+}
+
+/** 场景标题校验（与内核 renameGroup 同规则）：去首尾空白，非空，≤ 200 字；返回 { value } 或 { error }。 */
+export function sceneTitleInput(raw) {
+  const t = String(raw ?? '').trim()
+  if (!t) return { error: '场景标题不能为空' }
+  if (t.length > 200) return { error: '场景标题最多 200 字' }
+  return { value: t }
+}
+
 /** 画布视图 -> Vue Flow 节点 / 边（分组框在最底层）。 */
 export function canvasToFlow(canvas, selectedId = null) {
   if (!canvas) return { nodes: [], edges: [] }

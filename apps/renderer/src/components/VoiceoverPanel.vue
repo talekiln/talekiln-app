@@ -1,6 +1,6 @@
 <template>
   <div class="voiceover-panel">
-    <p class="hint">用 CosyVoice 给有台词的镜头生成旁白。台词来自剧本行；改了台词，旁白会变成“过期”，需要重新生成。</p>
+    <p class="hint">用 CosyVoice 给有台词的镜头生成旁白。台词来自剧本行；改了台词，旁白会变成“过期”，需要重新生成。确认后配音进入任务队列，进度也能在任务中心看到。</p>
     <div class="field">
       <label>音色</label>
       <el-select v-model="voice" size="small" data-test="voice-select" style="width: 220px">
@@ -23,20 +23,21 @@
         <p>{{ estimateText(est) }}</p>
         <p v-if="!est.allowed" class="warn">{{ est.message }}</p>
         <el-button type="primary" size="small" :disabled="!est.allowed" :loading="busy === 'run'" data-test="voiceover-confirm" @click="confirm">
-          确认并生成
+          确认并加入队列
         </el-button>
       </template>
       <p v-else>没有需要生成的镜头（都已有最新旁白，或没有台词）。</p>
     </div>
     <p v-if="result" class="result" data-test="voiceover-result">{{ resultText(result) }}</p>
+    <p v-if="statusLine" class="result" :class="{ busy: polling }" data-test="voiceover-status">{{ statusLine }}</p>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import { voiceoverAPI } from '@/api/voiceover'
-import { estimateText, needsConfirm, resultText, voiceOptions } from '@/utils/voiceover'
+import { estimateText, needsConfirm, resultText, voiceOptions, voStatusBusy, voStatusText } from '@/utils/voiceover'
 
 const props = defineProps({ episodeId: { type: Number, required: true } })
 const emit = defineEmits(['done'])
@@ -47,7 +48,12 @@ const scope = ref('missing')
 const est = ref(null)
 const result = ref(null)
 const busy = ref('')
+const status = ref(null)
+const polling = ref(false)
 const options = computed(() => voiceOptions(voices.value))
+const statusLine = computed(() => voStatusText(status.value))
+const POLL_MS = 2000
+let timer = null
 
 const body = () => ({ voice: voice.value || undefined, ...(scope.value === 'redo' ? { all: true, force: true } : { all: true }) })
 
@@ -70,11 +76,37 @@ async function confirm() {
   try {
     result.value = await voiceoverAPI.run(props.episodeId, { ...body(), confirm: true })
     est.value = null
-    if ((result.value.done || []).length) emit('done')
+    if ((result.value.tasks || []).length) startPolling()
   } catch (e) {
     ElMessage.error(e.message || '配音失败')
   } finally { busy.value = '' }
 }
+
+// 任务在队列里跑，这里每 2 秒看一次状态；全部结束（没有排队/执行中的）就通知外层刷新时间线
+function startPolling() {
+  stopPolling()
+  polling.value = true
+  const tick = async () => {
+    try {
+      status.value = await voiceoverAPI.status(props.episodeId)
+    } catch (_) { /* 提示由 request 拦截器给出；下一轮再试 */ }
+    if (status.value && !voStatusBusy(status.value)) {
+      stopPolling()
+      emit('done')
+      return
+    }
+    timer = setTimeout(tick, POLL_MS)
+  }
+  tick()
+}
+
+function stopPolling() {
+  if (timer) clearTimeout(timer)
+  timer = null
+  polling.value = false
+}
+
+onBeforeUnmount(stopPolling)
 </script>
 
 <style scoped>
@@ -83,4 +115,5 @@ async function confirm() {
 .hint { color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.6; }
 .estimate, .result { margin-top: 12px; font-size: 13px; }
 .warn { color: var(--el-color-danger); }
+.busy { color: var(--el-color-primary); }
 </style>
