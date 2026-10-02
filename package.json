@@ -6,13 +6,15 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "pnpm --filter @talekiln/desktop dev",
-    "dev:web": "pnpm -r --parallel --filter @talekiln/local --filter @talekiln/renderer dev",
+    "dev": "pnpm native:electron && pnpm --filter @talekiln/desktop dev",
+    "dev:web": "pnpm native:node && pnpm -r --parallel --filter @talekiln/local --filter @talekiln/renderer dev",
     "build": "pnpm --filter @talekiln/renderer build",
     "dist:win": "pnpm --filter @talekiln/desktop dist:win",
     "dist:mac": "pnpm --filter @talekiln/desktop dist:mac",
     "lint": "pnpm -r --if-present lint",
-    "test": "pnpm -r --if-present test",
+    "native:node": "node scripts/native-abi.mjs node",
+    "native:electron": "node scripts/native-abi.mjs electron",
+    "test": "pnpm native:node && pnpm -r --if-present test",
     "licenses:check": "node scripts/licenses-check.mjs",
     "secrets:scan": "node scripts/secret-scan.mjs",
     "test:scripts": "node --test scripts/open-source-export.test.mjs scripts/platform-lib.test.mjs",

@@ -50,7 +50,7 @@ describe('catalog', () => {
     const bundled = loadBundledPrices();
     assert.equal(c.source, 'bundled');
     assert.equal(c.version, bundled.version);
-    assert.equal(c.sample_prices, true);
+    assert.equal(c.sample_prices, false); // 内置价目已是百炼公开价（prices.sample === false）
     assert.ok(c.models.some((m) => m.provider === 'bailian' && m.service_type === 'video' && m.id === 'wan2.6-t2v'));
     assert.ok(!c.models.some((m) => m.id.startsWith('_')));
     assert.deepEqual(ctx.cloud.catalog.effectivePrices(), bundled);

@@ -786,6 +786,30 @@ const SCENARIOS = [
     ] },
   },
   {
+    id: 'canvas_rename_group', title: '画布场景组改名（只写 groups.<id>.title，不影响过期集合 / 其它视图内容）', applicable: needShots(1),
+    entries: { canvas: [
+      variant('renameGroup', (g0) => {
+        const grp = shotGroups(g0)[0];
+        return [
+          (g, o) => ({
+            tx: canvas.renameGroup(g, grp.id, '  改名后的场景  ', o), invalidated: [], writes: W(`^groups\.${esc(grp.id)}\.title$`),
+            check: (b, a) => {
+              assert.equal(K.canvasView(a).groups.find((x) => x.id === grp.id).title, '改名后的场景');
+              assert.equal(K.scriptView(a).groups.find((x) => x.id === grp.id).title, '改名后的场景');
+              assert.equal(K.shotView(a).groups.find((x) => x.id === grp.id).title, '改名后的场景');
+              assert.deepEqual(K.cacheKeys(a), K.cacheKeys(b));
+              assert.deepEqual(K.staleSet(a), K.staleSet(b));
+            },
+          }),
+          (g, o) => ({ tx: canvas.renameGroup(g, grp.id, '改名后的场景', o), invalidated: [], check: (b, a) => assert.equal(K.toJSON(a), K.toJSON(b), 'same title is a no-op on the graph') }),
+          () => ({ undo: true }),
+          () => ({ undo: true }),
+          (g, o) => { assert.equal(g.groups[grp.id].title, grp.title); return { tx: canvas.renameGroup(g, grp.id, '第二次改名', o), invalidated: [], writes: W(`^groups\.${esc(grp.id)}\.title$`) }; },
+        ];
+      }),
+    ] },
+  },
+  {
     id: 'canvas_delete_node', title: '画布删除生成节点（image / video / narration）', applicable: needShots(1),
     entries: { canvas: ['image', 'video', 'narration'].map((kind) => variant(`deleteNode(${kind})`, (g0) => {
       const T = mid(flatShots(g0));

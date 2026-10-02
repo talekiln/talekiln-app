@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { rangeFor, formatMoney, monthProgress, parseCapInput, withBarPercent, csvFileName } from '../src/utils/spendView.js'
+import { rangeFor, formatMoney, monthProgress, parseCapInput, withBarPercent, csvFileName, priceNote, actualSubtitle, usageText } from '../src/utils/spendView.js'
 
 test('rangeFor presets use local dates', () => {
   const now = new Date(2026, 2, 5)
@@ -43,4 +43,29 @@ test('withBarPercent scales to the max', () => {
 test('csvFileName mirrors the server name', () => {
   assert.equal(csvFileName({ from: '2026-10-01', to: undefined }), 'spend-2026-10-01_now.csv')
   assert.equal(csvFileName({}), 'spend-all_now.csv')
+})
+
+test('priceNote names the public price list and its date, warns on sample entries', () => {
+  const ok = priceNote({ prices: { date: '2025-12-19', sample: false } })
+  assert.equal(ok.warn, false)
+  assert.match(ok.text, /百炼公开价目计算（2025-12-19 版）/)
+  assert.match(ok.text, /服务商控制台为准/)
+  const sample = priceNote({ prices: { date: null, sample: true } })
+  assert.equal(sample.warn, true)
+  assert.match(sample.text, /示例价/)
+  assert.equal(priceNote({ sample_prices: true }).warn, true) // 旧形状
+  assert.equal(priceNote(null).text, '')
+})
+
+test('actualSubtitle shows written-back actuals against the task count', () => {
+  assert.equal(actualSubtitle({ count: 5, actual: 1.2, actual_count: 3 }), '实际 ¥1.20（已回传 3/5 个任务）')
+  assert.equal(actualSubtitle({ count: 2, actual: 0, actual_count: 0 }), '尚无服务商回传的实际用量')
+  assert.equal(actualSubtitle(null), '')
+})
+
+test('usageText explains the actual column from reported usage', () => {
+  assert.equal(usageText({ units: 5, unit: 'second', unit_price: 1, resolution: '1080P' }), '5 秒 × ¥1.00（1080P）')
+  assert.equal(usageText({ units: 120, unit: 'char', unit_price: 0.0002 }), '120 字符 × ¥0.0002')
+  assert.equal(usageText({ units: 2, unit: 'image', unit_price: 0.2 }), '2 张 × ¥0.20')
+  assert.equal(usageText(null), '')
 })
