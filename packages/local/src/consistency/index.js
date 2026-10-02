@@ -4,6 +4,9 @@
  *
  *   评分     由 lycore 的 consistency.score 完成（ffmpeg 抽帧后算感知哈希、色彩直方图、主色调，不依赖模型，
  *            认不出“是不是同一张脸”）；scorer 可注入，默认经 JSON-RPC 调 lycore，没有内核时静默不评分。
+ *   人脸     角色参考图另加人脸部分（./face.js：YuNet 检测 + SFace 特征，本地 CPU 小模型，不联网）：参考图最大的脸对目标每帧里的脸算
+ *            余弦相似度，映射成 0–100 的人脸分后 总分 = 0.6·人脸分 + 0.4·原分（规则见 combineWithFace）；参考图没脸则原分不变；
+ *            模型或 onnxruntime 缺失时只按原算法评分，报告里 face_available=false。场景参考图不做人脸。见 docs/phase3-face.md。
  *   触发     生成服务每写回一个新版本就调 onAdopted（见 generation/service.js），对该版本与镜头的每张锁定参考图各评一次，
  *            结果存 consistency_scores（版本 × 参考实体 唯一，重评覆盖）。
  *   阈值     configs/config.yaml consistency.min_score（默认 60）：score ≥ 阈值 ok；低 20 分以上 retry；其间 check。
@@ -20,7 +23,10 @@ const store = require('../kernel/store');
 const kernelInputs = require('../kernel/inputs');
 const referenceLocks = require('../services/referenceLockService');
 
-const DEFAULTS = Object.freeze({ enabled: true, min_score: 60, sample_frames: 5 });
+const { faceScore } = require('./face');
+
+const DEFAULTS = Object.freeze({ enabled: true, min_score: 60, sample_frames: 5, face: Object.freeze({ enabled: true, min_similarity: 0.363, models_dir: null }) });
+const FACE_WEIGHT = 0.6; // 参考图与目标都有脸时人脸分的权重，其余归原算法（色彩 / 构图）
 const RETRY_MARGIN = 20;
 const SEVERITY = { ok: 0, check: 1, retry: 2 };
 const CORE_RETRY_MS = 30000;
@@ -40,10 +46,18 @@ function settingsFrom(config) {
   const c = (config && config.consistency) || {};
   const min = Number(c.min_score);
   const frames = Number(c.sample_frames);
+  const f = c.face && typeof c.face === 'object' ? c.face : {};
+  const sim = Number(f.min_similarity);
   return {
     enabled: c.enabled !== false,
     min_score: Number.isFinite(min) && min >= 0 && min <= 100 ? min : DEFAULTS.min_score,
     sample_frames: Number.isInteger(frames) && frames >= 1 && frames <= 30 ? frames : DEFAULTS.sample_frames,
+    face: {
+      enabled: f.enabled !== false,
+      // 余弦相似度的同人线：人脸分 ≥ min_score ⇔ 相似度 ≥ 它（OpenCV 给 SFace 的阈值 0.363）
+      min_similarity: Number.isFinite(sim) && sim > 0 && sim < 1 ? sim : DEFAULTS.face.min_similarity,
+      models_dir: typeof f.models_dir === 'string' && f.models_dir.trim() ? f.models_dir.trim() : DEFAULTS.face.models_dir,
+    },
   };
 }
 
@@ -55,6 +69,30 @@ function suggestionFor(score, minScore) {
 }
 
 const worstSuggestion = (list) => list.reduce((w, s) => (SEVERITY[s] > SEVERITY[w] ? s : w), 'ok');
+
+/**
+ * 人脸部分并入原分数（纯函数）。cmp 是 face.compare 的结果 { ref_faces, target_faces, matched_frames, similarity, frames, kind, took_ms }：
+ *   参考图没脸（或 cmp 为空）   -> 原分、原建议不变；parts.face 只记 ref_faces: 0（界面显示“参考图未检测到人脸”）
+ *   参考图有脸、目标帧里有脸    -> 人脸分 = faceScore(各帧最像的脸的平均余弦)，总分 = round(0.6·人脸分 + 0.4·原分)，建议按总分重算
+ *   参考图有脸、目标帧里没脸    -> 人脸分 0，总分 = round(0.4·原分)，建议至少 check（画面里根本没有这个角色的脸）
+ * 返回 { score, suggestion, face }，face 即写进 parts.face 的对象。
+ */
+function combineWithFace(old, cmp, { min_score = DEFAULTS.min_score, min_similarity = DEFAULTS.face.min_similarity } = {}) {
+  const face = cmp ? {
+    similarity: Number.isFinite(cmp.similarity) ? cmp.similarity : null, score: null,
+    ref_faces: cmp.ref_faces || 0, target_faces: cmp.target_faces || 0, matched_frames: cmp.matched_frames || 0,
+    frames: Array.isArray(cmp.frames) ? cmp.frames : [], kind: cmp.kind || null, took_ms: Number.isFinite(cmp.took_ms) ? cmp.took_ms : null,
+  } : null;
+  if (!face || !face.ref_faces) return { score: old.score, suggestion: old.suggestion, face };
+  if (!face.matched_frames || face.similarity == null) {
+    face.score = 0;
+    const score = Math.round((1 - FACE_WEIGHT) * old.score);
+    return { score, suggestion: worstSuggestion([suggestionFor(score, min_score), 'check']), face };
+  }
+  face.score = faceScore(face.similarity, { min_similarity, min_score });
+  const score = Math.round(FACE_WEIGHT * face.score + (1 - FACE_WEIGHT) * old.score);
+  return { score, suggestion: suggestionFor(score, min_score), face };
+}
 
 /** 存储目录相对路径（或 /static/<rel>）-> 存储目录里的相对路径；远程 / data URL 返回 null。 */
 function relOf(ref) {
@@ -144,11 +182,25 @@ function createCoreScorer(getCore, { retryAfterMs = CORE_RETRY_MS, now = Date.no
  * @param {object} [o.scorer]       { available(), score(params), pickReference(params) }；缺省用 getCore 建
  * @param {Function} [o.getCore]
  * @param {Function} [o.generation] () => 生成服务（估算重做费用用；惰性取，因为生成服务在本服务之后创建）
+ * @param {object|null} [o.face]    人脸引擎 { available(), compare(params), status()? }；不传时按配置建（./face.js），传 null 表示不用
+ * @param {string} [o.faceModelsDir] 桌面端随包内置的模型目录（<resources>/models/face）；优先级低于 TALEKILN_MODELS_DIR 与配置 models_dir
  */
-function createConsistencyService({ db, storageRoot, config = null, scorer = null, getCore = null, generation = null, log = console }) {
+function createConsistencyService({ db, storageRoot, config = null, scorer = null, getCore = null, generation = null, face, faceModelsDir = null, log = console }) {
   if (!db) throw new Error('db is required');
   const settings = settingsFrom(config);
   const engine = scorer || createCoreScorer(getCore);
+  const faceEngine = face !== undefined ? face : (settings.face.enabled ? require('./face').createFaceEngine({ config, bundledDir: faceModelsDir, log }) : null);
+  /** 人脸部分可用？（配置开着、引擎在、onnxruntime 与模型都加载得了）结果由引擎缓存，失败不抛。 */
+  const faceAvailable = async () => {
+    if (!settings.face.enabled || !faceEngine) return false;
+    try { return !!(await faceEngine.available()); } catch (_) { return false; }
+  };
+  /** 不可用的原因：disabled | no_engine | module_missing | models_missing | load_failed | unavailable。 */
+  const faceReason = () => {
+    if (!settings.face.enabled) return 'disabled';
+    if (!faceEngine) return 'no_engine';
+    try { return (typeof faceEngine.status === 'function' && faceEngine.status().reason) || 'unavailable'; } catch (_) { return 'unavailable'; }
+  };
   const warn = (msg, extra) => { try { (log.warn || log.error || (() => {})).call(log, msg, extra); } catch (_) { /* ignore */ } };
   const gen = () => (typeof generation === 'function' ? generation() : generation);
 
@@ -194,15 +246,31 @@ function createConsistencyService({ db, storageRoot, config = null, scorer = nul
     const target = resolveLocal(storageRoot, version.asset && version.asset.ref);
     if (!target) return { scored: 0, rows: [], reason: 'target_not_local' };
     if (!(await engine.available())) return { scored: 0, rows: [], reason: 'scorer_unavailable' };
+    // 人脸只对角色参考图做；这里先问一次可用性（首次会加载模型，之后缓存）
+    const faceOn = refs.some((x) => x.entity_type === 'character') && (await faceAvailable());
     const rows = [];
     for (const r of refs) {
       const reference = resolveLocal(storageRoot, r.ref);
       if (!reference) { rows.push({ entity_type: r.entity_type, entity_id: r.entity_id, skipped: 'reference_not_local' }); continue; }
       const res = await engine.score({ reference, target, sample_frames: settings.sample_frames, min_score: settings.min_score });
-      const score = Number(res && res.score);
+      let score = Number(res && res.score);
       if (!Number.isFinite(score)) throw new ConsistencyError('CONSISTENCY_FAILED', '评分结果无效', 502);
-      const suggestion = ['ok', 'check', 'retry'].includes(res.suggestion) ? res.suggestion : suggestionFor(score, settings.min_score);
-      const row = { episode_id: ep, node_id: node, version_id, entity_type: r.entity_type, entity_id: r.entity_id, score, parts: res.parts || null, suggestion, created_at: new Date().toISOString() };
+      let suggestion = ['ok', 'check', 'retry'].includes(res.suggestion) ? res.suggestion : suggestionFor(score, settings.min_score);
+      let parts = res.parts || null;
+      if (faceOn && r.entity_type === 'character') {
+        // 人脸引擎出错不影响这一行：原分照存，parts.face 记下错误
+        try {
+          const cmp = await faceEngine.compare({ reference, target, sample_frames: settings.sample_frames });
+          const merged = combineWithFace({ score, suggestion }, cmp, { min_score: settings.min_score, min_similarity: settings.face.min_similarity });
+          score = merged.score;
+          suggestion = merged.suggestion;
+          parts = { ...(parts || {}), face: merged.face };
+        } catch (e) {
+          warn('consistency face', { error: e && e.message, reference, target });
+          parts = { ...(parts || {}), face: { error: String((e && e.message) || e) } };
+        }
+      }
+      const row = { episode_id: ep, node_id: node, version_id, entity_type: r.entity_type, entity_id: r.entity_id, score, parts, suggestion, created_at: new Date().toISOString() };
       upsert.run(ep, node, version_id, r.entity_type, r.entity_id, score, row.parts ? JSON.stringify(row.parts) : null, suggestion, row.created_at);
       rows.push(row);
     }
@@ -273,7 +341,11 @@ function createConsistencyService({ db, storageRoot, config = null, scorer = nul
     const ep = Number(episodeId);
     if (!Number.isInteger(ep) || ep <= 0) throw new ConsistencyError('BAD_REQUEST', 'episode id must be a positive integer');
     if (!db.prepare('SELECT id FROM episodes WHERE id = ? AND deleted_at IS NULL').get(ep)) throw new ConsistencyError('NOT_FOUND', `分集 ${ep} 不存在`, 404);
-    const base = { episode_id: ep, enabled: settings.enabled, available: await engine.available(), min_score: settings.min_score, shots: [], counts: { ok: 0, check: 0, retry: 0, unscored: 0 } };
+    const faceOk = await faceAvailable();
+    const base = {
+      episode_id: ep, enabled: settings.enabled, available: await engine.available(), min_score: settings.min_score,
+      face_available: faceOk, face_reason: faceOk ? null : faceReason(), shots: [], counts: { ok: 0, check: 0, retry: 0, unscored: 0 },
+    };
     if (!store.hasProject(db, ep)) return base;
     const { graph: g } = store.openProject(db, ep);
     const rows = db.prepare('SELECT * FROM consistency_scores WHERE episode_id = ? ORDER BY id').all(ep);
@@ -375,9 +447,10 @@ function createConsistencyService({ db, storageRoot, config = null, scorer = nul
     };
   }
 
-  return { settings, scorer: engine, scoreVersion, onAdopted, episodeReport, rescoreShot, autoPickCharacter, resolveLocal: (ref) => resolveLocal(storageRoot, ref) };
+  return { settings, scorer: engine, face: faceEngine, faceAvailable, scoreVersion, onAdopted, episodeReport, rescoreShot, autoPickCharacter, resolveLocal: (ref) => resolveLocal(storageRoot, ref) };
 }
 
 module.exports = {
-  createConsistencyService, createCoreScorer, ConsistencyError, settingsFrom, suggestionFor, resolveLocal, relOf, lockedEntitiesForStoryboard, shotOfNode, DEFAULTS, RETRY_MARGIN,
+  createConsistencyService, createCoreScorer, ConsistencyError, settingsFrom, suggestionFor, combineWithFace, resolveLocal, relOf, lockedEntitiesForStoryboard, shotOfNode,
+  DEFAULTS, RETRY_MARGIN, FACE_WEIGHT,
 };
