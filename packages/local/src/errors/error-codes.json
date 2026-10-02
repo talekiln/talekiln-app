@@ -375,6 +375,21 @@
       "message": "写入导出文件失败",
       "action": "检查目标磁盘空间和写入权限，或换一个文件夹"
     },
+    "REGION_EDIT_NO_VIDEO": {
+      "scope": "local",
+      "message": "该镜头还没有已采用的视频，无法选镜改片",
+      "action": "先生成并采用一版视频，再框选时间段和区域修改"
+    },
+    "REGION_EDIT_BASE_MISSING": {
+      "scope": "local",
+      "message": "找不到当前视频的本地文件，无法截取入点和出点的画面",
+      "action": "重新生成一次视频（结果会下载到本地）后再试"
+    },
+    "REGION_EDIT_FFMPEG": {
+      "scope": "local",
+      "message": "截帧或拼接视频失败（FFmpeg）",
+      "action": "确认 FFmpeg 可用（设置里的检测），再重试；反复失败请导出日志反馈"
+    },
     "device_limit": {
       "scope": "cloud",
       "message": "设备数已达套餐上限",

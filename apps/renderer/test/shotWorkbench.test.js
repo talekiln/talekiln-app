@@ -70,6 +70,7 @@ test('workbench keys R / Alt+1..4 / Tab resolve to real handlers', () => {
   const calls = []
   const handlers = buildWorkbenchHandlers({
     regenerate: () => calls.push('regen'), pick: (n) => calls.push('pick' + n), toggleCompare: () => calls.push('toggle'),
+    markIn: () => calls.push('in'), markOut: () => calls.push('out'),
   })
   const km = buildKeymap()
   const ev = (o) => ({ key: '', code: '', ctrlKey: false, shiftKey: false, altKey: false, metaKey: false, ...o })
@@ -78,8 +79,13 @@ test('workbench keys R / Alt+1..4 / Tab resolve to real handlers', () => {
   fire({ key: '1', code: 'Digit1', altKey: true })
   fire({ key: '4', code: 'Digit4', altKey: true })
   fire({ key: 'Tab', code: 'Tab' })
-  assert.deepEqual(calls, ['regen', 'pick1', 'pick4', 'toggle'])
+  fire({ key: 'i', code: 'KeyI' })
+  fire({ key: 'o', code: 'KeyO' })
+  assert.deepEqual(calls, ['regen', 'pick1', 'pick4', 'toggle', 'in', 'out'])
   for (const a of ACTIONS.filter((x) => x.scope === SCOPE_WORKBENCH)) assert.ok(handlers[a.id], a.id)
+  // 没接入入出点的页面也不会因为按了 I / O 报错
+  const bare = buildWorkbenchHandlers({ regenerate() {}, pick() {}, toggleCompare() {} })
+  assert.doesNotThrow(() => { bare['shot.markIn'](); bare['shot.markOut']() })
 })
 
 test('candidateVideoSrc prefers local path', () => {

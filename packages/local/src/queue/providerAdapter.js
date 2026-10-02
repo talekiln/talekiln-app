@@ -200,7 +200,8 @@ function createQueueProvider(provider, { storageDir, listConfigs, createProvider
       }
       if (kind === 'image' || kind === 'video') params = inlineLocalMedia(params, storageDir);
       if (kind === 'video') {
-        const r = await facade.video.submit(provider, params);
+        // P3-R：带 edit（时间段 + 区域）的视频任务走 video.edit；适配器没有这个能力时得到 CAPABILITY_NOT_SUPPORTED（可读的任务错误）
+        const r = params.edit ? await facade.video.edit(provider, params) : await facade.video.submit(provider, params);
         if (!r || !r.taskId) throw new ProviderError(ERROR_CODES.BAD_RESPONSE, 'missing video task id', { provider });
         return { vendorTaskId: r.taskId };
       }
