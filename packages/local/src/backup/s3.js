@@ -12,7 +12,9 @@
  * s3Code 为对象存储返回的 <Code>（SignatureDoesNotMatch / NoSuchKey …）。
  */
 const crypto = require('crypto');
-const { Readable } = require('stream');
+const fs = require('fs');
+const { Readable, Transform } = require('stream');
+const { pipeline } = require('stream/promises');
 
 const EMPTY_SHA256 = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 const UNSIGNED_PAYLOAD = 'UNSIGNED-PAYLOAD';
@@ -33,6 +35,12 @@ class S3Error extends Error {
 // ---------- 编码与哈希 ----------
 
 const sha256Hex = (data) => crypto.createHash('sha256').update(data).digest('hex');
+/** 流式算文件 sha256（不把文件读进内存）。 */
+async function sha256File(filePath) {
+  const hash = crypto.createHash('sha256');
+  await pipeline(fs.createReadStream(filePath), new Transform({ transform(chunk, _enc, cb) { hash.update(chunk); cb(); } }));
+  return hash.digest('hex');
+}
 const hmac = (key, data) => crypto.createHmac('sha256', key).update(data, 'utf8').digest();
 
 /** AWS 的 UriEncode：除 A-Z a-z 0-9 - _ . ~ 外全部百分号编码；路径里的 / 不编码。 */
@@ -273,10 +281,17 @@ function createS3Client({
     return { host, path: rawPath, href };
   }
 
+  /**
+   * body：null / Buffer / 字符串（按内容签名、可重试）、Web 可读流（UNSIGNED-PAYLOAD、不重试），
+   * 或一个返回新 Web 可读流的函数（每次尝试重新打开，所以可重试；配合 payloadHash 传文件的 sha256 就是签名载荷）。
+   * expectBody = 'stream' 时不把响应体读进内存，返回 { stream }（调用方负责消费）。
+   */
   async function request(method, key, { query = {}, headers = {}, body = null, payloadHash, op = method, expectBody = true, allow404 = false } = {}) {
     const t = target(key, query);
-    const hash = payloadHash || (body == null ? EMPTY_SHA256 : Buffer.isBuffer(body) || typeof body === 'string' ? sha256Hex(body) : UNSIGNED_PAYLOAD);
-    const replayable = body == null || Buffer.isBuffer(body) || typeof body === 'string'; // 流不能重放，只重试可重放的请求
+    const isFactory = typeof body === 'function';
+    const inline = body == null || Buffer.isBuffer(body) || typeof body === 'string';
+    const hash = payloadHash || (body == null ? EMPTY_SHA256 : inline ? sha256Hex(body) : UNSIGNED_PAYLOAD);
+    const replayable = inline || isFactory; // 一次性的流不能重放，只重试可重放的请求
     let attempt = 0;
     for (;;) {
       attempt++;
@@ -287,9 +302,10 @@ function createS3Client({
       const { host, ...sendHeaders } = signed.headers; // fetch 自己设置 Host
       let res;
       try {
+        const payload = isFactory ? body() : body;
         res = await doFetch(t.href, {
-          method, headers: sendHeaders, body: body == null ? undefined : body, redirect: 'manual',
-          signal: AbortSignal.timeout(timeoutMs), ...(body && !Buffer.isBuffer(body) && typeof body !== 'string' ? { duplex: 'half' } : {}),
+          method, headers: sendHeaders, body: payload == null ? undefined : payload, redirect: 'manual',
+          signal: AbortSignal.timeout(timeoutMs), ...(payload && !Buffer.isBuffer(payload) && typeof payload !== 'string' ? { duplex: 'half' } : {}),
         });
       } catch (e) {
         const timeout = e && (e.name === 'TimeoutError' || e.name === 'AbortError');
@@ -298,6 +314,7 @@ function createS3Client({
         throw err;
       }
       if (res.ok) {
+        if (expectBody === 'stream' && method !== 'HEAD') return { status: res.status, headers: res.headers, stream: res.body };
         const buf = expectBody && method !== 'HEAD' ? Buffer.from(await res.arrayBuffer()) : Buffer.alloc(0);
         return { status: res.status, headers: res.headers, body: buf };
       }
@@ -361,6 +378,49 @@ function createS3Client({
     };
   }
 
+  /**
+   * 从本机文件上传：不把文件读进内存。先流式算文件 sha256 作为签名载荷（x-amz-content-sha256），再以 fs 流发送；
+   * 每次重试重新打开文件，所以与 Buffer 上传一样可重试。返回 { etag, sha256, size }。
+   */
+  async function putFile(key, filePath, { contentType = 'application/octet-stream', sha256, metadata } = {}) {
+    if (!key) throw new S3Error('BACKUP_FAILED', 'putFile 需要 key', { status: 400 });
+    let size;
+    try { size = fs.statSync(filePath).size; } catch (e) { throw new S3Error('BACKUP_FAILED', `读不到待上传文件：${(e && e.message) || e}`, { status: 500, cause: e }); }
+    const hash = sha256 || await sha256File(filePath);
+    const headers = { 'content-type': contentType, 'content-length': String(size) };
+    if (metadata) for (const [k, v] of Object.entries(metadata)) headers[`x-amz-meta-${k.toLowerCase()}`] = String(v);
+    const open = () => Readable.toWeb(fs.createReadStream(filePath));
+    const r = await request('PUT', key, { headers, body: open, payloadHash: hash, op: 'PutObject', expectBody: false });
+    return { etag: (r.headers.get('etag') || '').replace(/^"|"$/g, '') || null, sha256: hash, size };
+  }
+
+  /**
+   * 下载对象到本机文件（流式，不进内存），边写边算 sha256。整次下载失败（含半途断开）按同样的退避重试，每次重写文件。
+   * 返回 { size, sha256, contentType, etag, lastModified }。不存在抛 S3Error(NOT_FOUND, 404)。
+   */
+  async function getObjectToFile(key, filePath) {
+    let attempt = 0;
+    for (;;) {
+      attempt++;
+      const r = await request('GET', key, { op: 'GetObject', expectBody: 'stream' }); // 连不上 / 4xx / 5xx 在这里面已按规则重试
+      const hash = crypto.createHash('sha256');
+      let size = 0;
+      const counter = new Transform({ transform(chunk, _enc, cb) { hash.update(chunk); size += chunk.length; cb(null, chunk); } });
+      try {
+        await pipeline(Readable.fromWeb(r.stream), counter, fs.createWriteStream(filePath));
+      } catch (e) {
+        try { fs.rmSync(filePath, { force: true }); } catch (_) {}
+        const err = new S3Error('BACKUP_UNREACHABLE', `下载中断（GetObject）：${(e && e.message) || 'unknown'}`, { status: 502, retriable: true, cause: e });
+        if (attempt < maxAttempts) { await sleep(backoffMs * 2 ** (attempt - 1)); continue; }
+        throw err;
+      }
+      return {
+        size, sha256: hash.digest('hex'), contentType: r.headers.get('content-type') || null,
+        etag: (r.headers.get('etag') || '').replace(/^"|"$/g, '') || null, lastModified: r.headers.get('last-modified') || null,
+      };
+    }
+  }
+
   /** 对象元信息；不存在返回 null。 */
   async function headObject(key) {
     const r = await request('HEAD', key, { op: 'HeadObject', expectBody: false, allow404: true });
@@ -400,12 +460,12 @@ function createS3Client({
   }
 
   return {
-    headBucket, createBucket, putObject, getObject, headObject, deleteObject, listObjectsV2, listAll,
+    headBucket, createBucket, putObject, putFile, getObject, getObjectToFile, headObject, deleteObject, listObjectsV2, listAll,
     endpoint: base.origin + basePath, bucket, region: rgn, pathStyle, insecure,
   };
 }
 
 module.exports = {
   createS3Client, S3Error, signV4, validateEndpoint, isLoopbackHost, isPrivateHost, uriEncode, canonicalQuery, canonicalPath,
-  parseXml, parseListObjects, parseErrorXml, sha256Hex, EMPTY_SHA256, UNSIGNED_PAYLOAD, DEFAULT_REGION, BUCKET_RE,
+  parseXml, parseListObjects, parseErrorXml, sha256Hex, sha256File, EMPTY_SHA256, UNSIGNED_PAYLOAD, DEFAULT_REGION, BUCKET_RE,
 };

@@ -79,14 +79,14 @@
 - **真实 MinIO**：本次沙箱连不上 Docker Hub，`backup-minio` CI 作业与 `test/backup.live.test.js` 一次都没跑过。签名算法对照了 AWS 公开的三组 SigV4 测试向量，假 S3 的服务端重算又是独立实现，所以协议层有把握；MinIO 对 `continuation-token`、`BucketAlreadyOwnedByYou`、虚拟主机式等细节的实际行为要看第一次 CI。
 - **Windows / 桌面壳**：密钥经 safeStorage 落盘、调度器随 `aiWorker.start()` 启动都走的是现成路径，但没在真机上点过。
 - **界面**：`BackupPage.vue` 只做了 `vite build` 通过和纯函数单测，没有在浏览器里打开过。
-- **大项目**：ZIP 整个在内存里（导出服务本来如此），几 GB 的项目会吃内存；`putObject` 支持可读流（`UNSIGNED-PAYLOAD`）但服务没有用到。
+- **大项目**（P3-C 加固后更新）：备份服务不再把 ZIP 整段放内存：`exportDrama(…, { outFile })` 把 ZIP 写到 `<storage.local_path>/tmp/backup/` 的临时文件，`sha256File` 流式算哈希，`putFile` 以文件流上传且**签名载荷就是文件 sha256**（不用 `UNSIGNED-PAYLOAD`，每次重试重新打开文件所以仍可重试）；恢复用 `getObjectToFile` 流式下载到临时文件、边下边算 sha256，校验通过后 `importDrama` 直接读临时文件。临时文件用完即删，服务启动时清理残留。测试里 65 MB 生成数据往返 sha256 一致、堆增长小于 1.5 倍包大小（假 S3 自己持有一份）。**仍未解决**：`adm-zip` 的 `writeZip` 和导入时的 `new AdmZip(path)` 内部还是整包在内存里组装 / 读取，所以导出 / 导入阶段的峰值内存仍约等于 ZIP 大小，只是不再叠加「上传 / 下载 / 哈希」那几份副本；真正的流式 ZIP 需要换库或自写 zip64 写入器，没做。假 S3 现在对载荷哈希不符按真实 S3 回 400 `XAmzContentSHA256Mismatch`（映射 `BACKUP_FAILED`，不重试），并校验 `content-length` 与实际字节数一致。
 - 第三方对象存储的地址 / 区域格式只按各家文档写了对照表，没有在真实账号上试过。
 - `after_export` 依赖界面轮询到 `done`：用户导出后立刻关掉导出页，这一次就不会触发自动备份。
 
 ## 8. 怎么测
 
 ```bash
-pnpm --filter ./packages/local test                        # 含 test/backup.test.js（30 条）；backup.live.test.js 无环境变量时跳过
+pnpm --filter ./packages/local test                        # 含 test/backup.test.js（33 条）；backup.live.test.js 无环境变量时跳过
 pnpm --filter @talekiln/renderer test                      # 含 test/backupView.test.js（8 条）
 pnpm --filter @talekiln/renderer build
 pnpm secrets:scan
