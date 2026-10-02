@@ -30,6 +30,9 @@
 ### 4. Windows 人工检查 —— 已完成（2026-10-02，见 windows-test-results/2026-10-02.md；托盘 / 通知 / 退出确认 / 连通测试 / 真实睡眠唤醒的人眼清单全部确认，顺带修了 B3、I1 暴露的 bug）
 对照 `docs/test-matrix.md`：托盘、系统通知、睡眠唤醒后任务恢复、退出确认、密钥安全存储（safeStorage）；每个页面打开一遍（含新加的剧本页、画布页、视图切换栏、花费页、登录页）；中文路径和带空格路径。结果写进 `docs/windows-test-results/<日期>.md`。
 
+### 5. 云端全部合并后本地独立验证 —— 已完成（2026-10-02，main aa117e1，见 windows-test-results/2026-10-02.md 末节）
+拉取 main 后独立跑全部包的测试、密钥扫描、内核一致性套件；并行跑 packages/local 全量时暴露两处问题（编码器检测 5 秒超时、kernelCompat 测试的 keep-alive 竞争），已在 `win/post-merge-verify` 分支修掉并补测试。
+
 ## 复制给本地 Claude Code 的提示词
 
 > 你在 Windows 上负责 talekiln-app 一期收尾。先读 `docs/local-session-tasks.md`、`docs/windows-collab.md`、`docs/kernel-design.md`。把 `origin/claude/phase1-foundation-mxao0h` 合并进 `win/testing`，按任务清单顺序做 1 到 4 项，每项带测试，业务写入走内核意图，改完跑 `pnpm test`、内核一致性报告和 `pnpm secrets:scan`。Key 只用本机环境变量，绝不写进文件或提交。每完成一项就推送 `win/testing` 并在结果文档里记录；遇到需要产品决定的问题先记录，不要自行改变范围。
