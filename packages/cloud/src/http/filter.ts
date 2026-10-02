@@ -10,6 +10,7 @@ const STATUS: Record<ErrorCode, number> = {
   device_limit: 403, conflict: 409, provider_unavailable: 503, invalid_signature: 401,
   // P2-C 登录
   invalid_code: 401, code_expired: 400, invite_required: 400, qr_expired: 410, sms_unavailable: 503, wechat_unavailable: 503,
+  seat_limit: 403, studio_suspended: 403,
 };
 export const errorStatus = (code: ErrorCode) => STATUS[code];
 

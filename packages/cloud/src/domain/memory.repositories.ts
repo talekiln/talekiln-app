@@ -3,7 +3,7 @@ import type {
   AdminAuditRecord, AdminRoleRecord, AnnouncementRecord, ReleaseRecord,
   Account, Device, FeedbackRecord, InvoiceRecord, InviteCode, LicenceUsageRecord, OrderRecord, PaymentRecord,
   Plan, PlanVersion, PluginRecord, PluginReviewRecord, PluginVersionRecord, RefreshTokenRecord, RefundRecord, Repositories, Subscription, TelemetryRow,
-  TemplateRecord, TemplateVersionRecord, SmsCodeRecord, WechatQrTicketRecord,
+  TemplateRecord, TemplateVersionRecord, SmsCodeRecord, WechatQrTicketRecord, StudioRecord, StudioMemberRecord, StudioInviteRecord,
 } from './repositories';
 
 // 内存实现：仅用于测试（单线程 JS 下每个方法体天然原子）。
@@ -36,6 +36,9 @@ export function createMemoryRepositories(): Repositories {
   const plugins = new Map<string, PluginRecord>();
   const pluginVersions = new Map<string, PluginVersionRecord>();
   const pluginReviews: PluginReviewRecord[] = [];
+  const studios = new Map<string, StudioRecord>();
+  const studioMembers = new Map<string, StudioMemberRecord>();
+  const studioInvites = new Map<string, StudioInviteRecord>();
   const clone = <T extends object>(x: T): T => structuredClone(x);
   const cloneOrNull = <T extends object>(x: T | undefined | null): T | null => (x ? structuredClone(x) : null);
   const byNewest = (a: { createdAt: Date; id: string }, b: { createdAt: Date; id: string }) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id);
@@ -82,6 +85,60 @@ export function createMemoryRepositories(): Repositories {
       async listPublished() {
         return [...templateVersions.values()].filter((v) => v.published)
           .sort((a, b) => (b.publishedAt!.getTime() - a.publishedAt!.getTime()) || byNewest(a, b)).map(clone);
+      },
+    },
+    studios: {
+      async create(s, now) {
+        const rec: StudioRecord = { ...s, id: randomUUID(), createdAt: now, updatedAt: now };
+        studios.set(rec.id, rec);
+        return clone(rec);
+      },
+      async update(id, patch, now) {
+        const r = studios.get(id);
+        if (!r) return null;
+        Object.assign(r, patch, { updatedAt: now });
+        return clone(r);
+      },
+      async findById(id) { return cloneOrNull(studios.get(id)); },
+      async list() { return [...studios.values()].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id)).map(clone); },
+      async listByMember(accountId) {
+        const ids = new Set([...studioMembers.values()].filter((m) => m.accountId === accountId && m.status === 'active').map((m) => m.studioId));
+        return [...studios.values()].filter((s) => ids.has(s.id)).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).map(clone);
+      },
+      async addMember(m, now) {
+        if (!studios.has(m.studioId)) throw new Error('fk:studioId');
+        for (const x of studioMembers.values()) if (x.studioId === m.studioId && x.accountId === m.accountId) throw new Error('unique:member');
+        const rec: StudioMemberRecord = { ...m, id: randomUUID(), createdAt: now, updatedAt: now };
+        studioMembers.set(rec.id, rec);
+        return clone(rec);
+      },
+      async updateMember(id, patch, now) {
+        const r = studioMembers.get(id);
+        if (!r) return null;
+        Object.assign(r, patch, { updatedAt: now });
+        return clone(r);
+      },
+      async findMember(studioId, accountId) {
+        return cloneOrNull([...studioMembers.values()].find((m) => m.studioId === studioId && m.accountId === accountId));
+      },
+      async listMembers(studioId) {
+        return [...studioMembers.values()].filter((m) => m.studioId === studioId).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id)).map(clone);
+      },
+      async createInvite(i, now) {
+        if (!studios.has(i.studioId)) throw new Error('fk:studioId');
+        for (const x of studioInvites.values()) if (x.code === i.code) throw new Error('unique:code');
+        const rec: StudioInviteRecord = { ...i, id: randomUUID(), usedAt: null, usedById: null, revokedAt: null, createdAt: now };
+        studioInvites.set(rec.id, rec);
+        return clone(rec);
+      },
+      async findInviteByCode(code) { return cloneOrNull([...studioInvites.values()].find((i) => i.code === code)); },
+      async findInvite(id) { return cloneOrNull(studioInvites.get(id)); },
+      async listInvites(studioId) { return [...studioInvites.values()].filter((i) => i.studioId === studioId).sort(byNewest).map(clone); },
+      async updateInvite(id, patch) {
+        const r = studioInvites.get(id);
+        if (!r) return null;
+        Object.assign(r, patch);
+        return clone(r);
       },
     },
     plugins: {

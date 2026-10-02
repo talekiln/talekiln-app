@@ -445,6 +445,16 @@
       "message": "支付回调签名无效",
       "action": "无需处理；如反复出现请联系管理员"
     },
+    "seat_limit": {
+      "scope": "cloud",
+      "message": "工作室席位已满",
+      "action": "请工作室所有者在后台申请调整席位数，或撤销多余的待处理邀请后再试"
+    },
+    "studio_suspended": {
+      "scope": "cloud",
+      "message": "工作室已被停用",
+      "action": "停用期间只能查看；请联系管理员恢复"
+    },
     "BATCH_BUDGET_EXCEEDED": {
       "scope": "local",
       "message": "批次预算上限低于预计费用，批次未创建",
@@ -619,6 +629,31 @@
       "scope": "local",
       "message": "账号已停用",
       "action": "联系管理员恢复账号"
+    },
+    "STUDIO_NOT_LOGGED_IN": {
+      "scope": "local",
+      "message": "工作室功能需要先登录账号",
+      "action": "到「账号」页登录后再打开「工作室」"
+    },
+    "STUDIO_NOT_MEMBER": {
+      "scope": "local",
+      "message": "你不是该工作室的成员",
+      "action": "请工作室所有者或管理员发邀请码给你，在「工作室」页接受邀请"
+    },
+    "STUDIO_FORBIDDEN": {
+      "scope": "local",
+      "message": "当前角色没有权限做这个操作",
+      "action": "发布与更新共享素材需要工作室所有者或管理员；普通成员只能拉取"
+    },
+    "STUDIO_INVALID_MANIFEST": {
+      "scope": "local",
+      "message": "共享库里的清单不合法",
+      "action": "该条目可能由更新版本的应用发布，或在对象存储里被改动；升级应用或让发布者重新发布"
+    },
+    "STUDIO_CHECKSUM": {
+      "scope": "local",
+      "message": "共享素材校验失败，已拒绝写入本机",
+      "action": "下载的文件与清单里的 sha256 不一致，可能被改动或损坏；让发布者重新发布后再拉取"
     }
   }
 }

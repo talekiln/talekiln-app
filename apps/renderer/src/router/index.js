@@ -172,6 +172,13 @@ const router = createRouter({
       name: 'backup',
       component: () => import('@/views/BackupPage.vue'),
       meta: { title: '云备份' }
+    },
+    // P3-S
+    {
+      path: '/settings/studio',
+      name: 'studio',
+      component: () => import('@/views/StudioPage.vue'),
+      meta: { title: '工作室' }
     }
   ]
 })

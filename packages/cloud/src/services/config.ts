@@ -35,6 +35,8 @@ export interface AppConfig {
   wechatProvider: LoginProviderKind;
   /** 非生产环境：/auth/sms/send 返回 debug_code，便于测试与联调。 */
   loginDebug: boolean;
+  /** P3-S：新建工作室的默认席位数（计费占位：定价待定，将来由订阅驱动；后台可改）。 */
+  studioDefaultSeatLimit: number;
 }
 
 export type LoginProviderKind = 'mock' | 'none';
@@ -145,6 +147,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     adminSecret,
     adminTtlSeconds: 2 * 3600,
     feedbackRateLimit: Number(env.FEEDBACK_RATE_LIMIT ?? 5),
+    studioDefaultSeatLimit: Math.max(0, Math.floor(Number(env.STUDIO_DEFAULT_SEAT_LIMIT ?? 3) || 0)),
     maxDiagnosticBytes: Number(env.MAX_DIAGNOSTIC_BYTES ?? 1_500_000),
     accessSecret: new TextEncoder().encode(secret),
     accessTtlSeconds: 15 * 60,
