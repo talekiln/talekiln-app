@@ -3,7 +3,7 @@ import type {
   AdminAuditRecord, AdminRoleRecord, AnnouncementRecord, ReleaseRecord,
   Account, Device, FeedbackRecord, InvoiceRecord, InviteCode, LicenceUsageRecord, OrderRecord, PaymentRecord,
   Plan, PlanVersion, PluginRecord, PluginReviewRecord, PluginVersionRecord, RefreshTokenRecord, RefundRecord, Repositories, Subscription, TelemetryRow,
-  TemplateRecord, TemplateVersionRecord,
+  TemplateRecord, TemplateVersionRecord, SmsCodeRecord, WechatQrTicketRecord,
 } from './repositories';
 
 // 内存实现：仅用于测试（单线程 JS 下每个方法体天然原子）。
@@ -28,6 +28,8 @@ export function createMemoryRepositories(): Repositories {
   const announcements = new Map<string, AnnouncementRecord>();
   const releases = new Map<string, ReleaseRecord>();
   const adminRoles = new Map<string, AdminRoleRecord>(); // key: accountId
+  const smsCodes = new Map<string, SmsCodeRecord>();
+  const qrTickets = new Map<string, WechatQrTicketRecord>(); // key: ticket
   const audits: AdminAuditRecord[] = [];
   const templates = new Map<string, TemplateRecord>();
   const templateVersions = new Map<string, TemplateVersionRecord>();
@@ -207,14 +209,29 @@ export function createMemoryRepositories(): Repositories {
     },
     accounts: {
       async create(a) {
-        for (const x of accounts.values()) if (x.email === a.email) throw new Error('unique:email');
-        const rec: Account = { ...a, disabledAt: a.disabledAt ?? null, id: randomUUID(), createdAt: new Date() };
+        for (const x of accounts.values()) {
+          if (x.email === a.email) throw new Error('unique:email');
+          if (a.phone && x.phone === a.phone) throw new Error('unique:phone');
+          if (a.wechatOpenId && x.wechatOpenId === a.wechatOpenId) throw new Error('unique:wechatOpenId');
+        }
+        const rec: Account = {
+          ...a, disabledAt: a.disabledAt ?? null, phone: a.phone ?? null, wechatOpenId: a.wechatOpenId ?? null,
+          id: randomUUID(), createdAt: new Date(),
+        };
         accounts.set(rec.id, rec);
         return { ...rec };
       },
       async findById(id) { const r = accounts.get(id); return r ? { ...r } : null; },
       async findByEmail(email) {
         for (const x of accounts.values()) if (x.email === email) return { ...x };
+        return null;
+      },
+      async findByPhone(phone) {
+        for (const x of accounts.values()) if (x.phone === phone) return { ...x };
+        return null;
+      },
+      async findByWechatOpenId(openId) {
+        for (const x of accounts.values()) if (x.wechatOpenId === openId) return { ...x };
         return null;
       },
       async list() { return [...accounts.values()].map((x) => ({ ...x })); },
@@ -548,6 +565,59 @@ export function createMemoryRepositories(): Repositories {
         refund.finishedAt = i.now;
         const order = orders.get(refund.orderId);
         if (order && order.status === 'REFUNDING') order.status = 'PAID';
+        return true;
+      },
+    },
+    // P2-C 登录：短信验证码与微信扫码票据
+    smsCodes: {
+      async create(c) {
+        const rec: SmsCodeRecord = { ...c, id: randomUUID(), attempts: 0, consumedAt: null };
+        smsCodes.set(rec.id, rec);
+        return { ...rec };
+      },
+      async findActive(phone, scene, now) {
+        let best: SmsCodeRecord | null = null;
+        for (const x of smsCodes.values()) {
+          if (x.phone !== phone || x.scene !== scene || x.consumedAt || x.expiresAt <= now) continue;
+          if (!best || x.createdAt > best.createdAt) best = x;
+        }
+        return best ? { ...best } : null;
+      },
+      async voidActive(phone, scene, now) {
+        for (const x of smsCodes.values()) if (x.phone === phone && x.scene === scene && !x.consumedAt) x.consumedAt = now;
+      },
+      async incrementAttempts(id) {
+        const x = smsCodes.get(id);
+        if (!x) return 0;
+        x.attempts += 1;
+        return x.attempts;
+      },
+      async consume(id, now) {
+        const x = smsCodes.get(id);
+        if (!x || x.consumedAt) return false;
+        x.consumedAt = now;
+        return true;
+      },
+    },
+    wechatQr: {
+      async create(t) {
+        if (qrTickets.has(t.ticket)) throw new Error('unique:ticket');
+        const rec: WechatQrTicketRecord = { ...t, status: 'pending', openId: null, consumedAt: null };
+        qrTickets.set(rec.ticket, rec);
+        return { ...rec };
+      },
+      async findByTicket(ticket) { const r = qrTickets.get(ticket); return r ? { ...r } : null; },
+      async transition(ticket, from, to, openId) {
+        const x = qrTickets.get(ticket);
+        if (!x || !from.includes(x.status)) return false;
+        x.status = to;
+        if (openId !== null) x.openId = openId;
+        return true;
+      },
+      async consume(ticket, now) {
+        const x = qrTickets.get(ticket);
+        if (!x || x.status !== 'confirmed' || x.consumedAt) return false;
+        x.consumedAt = now;
         return true;
       },
     },

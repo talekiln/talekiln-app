@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import type {
   AdminAuditRecord, AdminRoleRecord, AnnouncementRecord, Entitlements, PlanVersion, PluginReviewRecord, PluginVersionRecord, ReleaseRecord, Repositories,
-  TemplateRecord, TemplateVersionRecord,
+  TemplateRecord, TemplateVersionRecord, SmsCodeRecord, WechatQrTicketRecord,
 } from './repositories';
 
 // Prisma 实现（需要真实 PostgreSQL 才能验证）。
@@ -147,6 +147,8 @@ export function createPrismaRepositories(db: PrismaClient): Repositories {
       setDisabled: async (id, at) => { await db.account.update({ where: { id }, data: { disabledAt: at } }); },
       findById: (id) => db.account.findUnique({ where: { id } }),
       findByEmail: (email) => db.account.findUnique({ where: { email } }),
+      findByPhone: (phone) => db.account.findUnique({ where: { phone } }),
+      findByWechatOpenId: (wechatOpenId) => db.account.findUnique({ where: { wechatOpenId } }),
       delete: async (id) => { await db.account.delete({ where: { id } }); },
       setRole: async (id, role) => { await db.account.update({ where: { id }, data: { role } }); },
     },
@@ -447,6 +449,41 @@ export function createPrismaRepositories(db: PrismaClient): Repositories {
           await tx.order.updateMany({ where: { id: pre.orderId, status: 'REFUNDING' }, data: { status: 'PAID' } });
           return true;
         });
+      },
+    },
+    // P2-C 登录：短信验证码与微信扫码票据
+    smsCodes: {
+      create: (c) => db.smsCode.create({ data: c }) as Promise<SmsCodeRecord>,
+      findActive: (phone, scene, now) => db.smsCode.findFirst({
+        where: { phone, scene, consumedAt: null, expiresAt: { gt: now } },
+        orderBy: { createdAt: 'desc' },
+      }) as Promise<SmsCodeRecord | null>,
+      async voidActive(phone, scene, now) {
+        await db.smsCode.updateMany({ where: { phone, scene, consumedAt: null }, data: { consumedAt: now } });
+      },
+      async incrementAttempts(id) {
+        const r = await db.smsCode.update({ where: { id }, data: { attempts: { increment: 1 } }, select: { attempts: true } });
+        return r.attempts;
+      },
+      async consume(id, now) {
+        // 条件更新：并发下只有一个请求能把 consumedAt 从 NULL 改掉
+        const r = await db.smsCode.updateMany({ where: { id, consumedAt: null }, data: { consumedAt: now } });
+        return r.count === 1;
+      },
+    },
+    wechatQr: {
+      create: (t) => db.wechatQrTicket.create({ data: t }) as Promise<WechatQrTicketRecord>,
+      findByTicket: (ticket) => db.wechatQrTicket.findUnique({ where: { ticket } }) as Promise<WechatQrTicketRecord | null>,
+      async transition(ticket, from, to, openId) {
+        const r = await db.wechatQrTicket.updateMany({
+          where: { ticket, status: { in: from } },
+          data: { status: to, ...(openId !== null ? { openId } : {}) },
+        });
+        return r.count === 1;
+      },
+      async consume(ticket, now) {
+        const r = await db.wechatQrTicket.updateMany({ where: { ticket, status: 'confirmed', consumedAt: null }, data: { consumedAt: now } });
+        return r.count === 1;
       },
     },
   };
