@@ -268,6 +268,12 @@ const AUDIT_ACTIONS = {
   'POST /admin/admins': '授予管理员',
   'PUT /admin/admins/:accountId/role': '修改管理员角色',
   'DELETE /admin/admins/:accountId': '撤销管理员',
+  'POST /admin/templates': '新建模板',
+  'PUT /admin/templates/:id': '修改模板',
+  'DELETE /admin/templates/:id': '删除模板',
+  'POST /admin/templates/:id/versions': '新增模板版本',
+  'POST /admin/templates/:id/versions/:vid/publish': '发布模板版本',
+  'POST /admin/templates/:id/versions/:vid/unpublish': '下架模板版本',
 }
 export const auditActionLabel = (action) => AUDIT_ACTIONS[action] || action || '—'
 export const AUDIT_ACTION_OPTIONS = Object.entries(AUDIT_ACTIONS).map(([value, label]) => ({ value, label }))

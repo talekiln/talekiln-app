@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { AuthController, CatalogController, DeviceController, HealthController, LicenceController, ReferralController } from './http/controllers';
 import { AdminAuthController, AdminController, AdminOpsController, PublicController } from './http/admin.controllers';
 import { AdminBillingController, OrderController, PaymentNotifyController, PlanController, SubscriptionController } from './http/billing.controllers';
+import { AdminTemplateController, TemplateCatalogController } from './http/template.controllers';
 import { AuditInterceptor } from './http/audit.interceptor';
 import { AccessGuard, AdminGuard } from './http/guard';
 import { createProviders } from './payments/registry';
@@ -29,6 +30,7 @@ import { FeedbackService } from './services/feedback.service';
 import { LicenceService } from './services/licence.service';
 import { RateLimiter } from './services/rate-limiter';
 import { StatsService } from './services/stats.service';
+import { TemplateService } from './services/template.service';
 import { TokenService } from './services/token.service';
 
 export { CONFIG };
@@ -66,6 +68,7 @@ export function createAppModule(opts: ModuleOptions = {}) {
       HealthController, AuthController, DeviceController, LicenceController,
       AdminAuthController, AdminController, AdminOpsController, PublicController, CatalogController, ReferralController,
       PlanController, OrderController, SubscriptionController, PaymentNotifyController, AdminBillingController,
+      TemplateCatalogController, AdminTemplateController,
     ],
     providers: [
       ...infra,
@@ -93,6 +96,7 @@ export function createAppModule(opts: ModuleOptions = {}) {
       { provide: AnnouncementService, useFactory: (r: Repositories) => new AnnouncementService(r), inject: [REPOS] },
       { provide: ReleaseService, useFactory: (r: Repositories) => new ReleaseService(r), inject: [REPOS] },
       { provide: FunnelService, useFactory: (r: Repositories) => new FunnelService(r), inject: [REPOS] },
+      { provide: TemplateService, useFactory: (r: Repositories, c: AppConfig) => new TemplateService(r, c), inject: [REPOS, CONFIG] },
       AuditInterceptor,
       AccessGuard,
       AdminGuard,

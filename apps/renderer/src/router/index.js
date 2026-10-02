@@ -144,6 +144,13 @@ const router = createRouter({
       name: 'media-library',
       component: () => import('@/views/MediaLibrary.vue'),
       meta: { title: '媒体素材库' }
+    },
+    // P3-T
+    {
+      path: '/templates',
+      name: 'templates',
+      component: () => import('@/views/TemplateMarket.vue'),
+      meta: { title: '模板市场' }
     }
   ]
 })
