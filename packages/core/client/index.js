@@ -44,10 +44,11 @@ function connect(endpoint, { timeoutMs = 5000 } = {}) {
       sock.removeListener('error', reject);
       sock.on('error', () => {});
       resolve({
-        call(method, params) {
+        /** opts.timeoutMs overrides the connection default for this one call (e.g. encoder.detect runs several test-encodes). */
+        call(method, params, { timeoutMs: callTimeoutMs = timeoutMs } = {}) {
           const id = nextId++;
           return new Promise((res, rej) => {
-            const timer = setTimeout(() => { pending.delete(id); rej(new Error('timeout: ' + method)); }, timeoutMs);
+            const timer = setTimeout(() => { pending.delete(id); rej(new Error('timeout: ' + method)); }, callTimeoutMs);
             pending.set(id, { resolve: res, reject: rej, timer });
             sock.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
           });

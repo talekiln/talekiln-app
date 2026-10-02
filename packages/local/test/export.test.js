@@ -28,10 +28,11 @@ const DETECT = {
 /** In-memory stand-in for the lycore JSON-RPC client (same method names as packages/core/client). */
 function fakeCore() {
   const f = {
-    started: [], cancelled: [], statuses: [], detectCalls: 0, startError: null,
-    async call(method) {
+    started: [], cancelled: [], statuses: [], detectCalls: 0, detectOpts: null, startError: null,
+    async call(method, params, opts) {
       if (method !== 'encoder.detect') throw new Error('unexpected ' + method);
       f.detectCalls++;
+      f.detectOpts = opts || null;
       return DETECT;
     },
     async renderStart(params) {
@@ -287,6 +288,11 @@ describe('export service', () => {
     assert.equal(ctx.core.detectCalls, 1);
     await ctx.svc.detectEncoders({ refresh: true });
     assert.equal(ctx.core.detectCalls, 2);
+  });
+
+  it('gives encoder.detect a long RPC timeout (7 sequential ffmpeg probes can take tens of seconds)', async () => {
+    await ctx.svc.detectEncoders();
+    assert.ok(ctx.core.detectOpts && ctx.core.detectOpts.timeoutMs >= 60000, `expected timeoutMs >= 60000, got ${JSON.stringify(ctx.core.detectOpts)}`);
   });
 });
 
