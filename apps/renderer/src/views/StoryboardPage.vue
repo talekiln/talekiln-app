@@ -17,6 +17,7 @@
         @click="saveState === 'error' && retry()"
       >{{ saveStateText(saveState) }}</el-tag>
       <el-button plain @click="$router.push(`/project/${$route.params.dramaId}/library`)">角色与场景库</el-button>
+      <el-button plain :disabled="!episodeId" title="用一句话描述修改，先看计划与花费再执行（可整体撤销）" data-test="open-director" @click="openDirector(episodeId)">导演模式</el-button>
       <el-button type="success" plain :disabled="!rows.length || !episodeId" data-test="generate-all" @click="gen.ask({ shots: 'all', kind: 'both' })">
         生成全部首帧与视频
       </el-button>
@@ -87,6 +88,7 @@ import GenerateDialog from '@/components/GenerateDialog.vue'
 import ViewSwitcher from '@/components/ViewSwitcher.vue'
 import { useProjectViewsStore } from '@/stores/projectViews'
 import { useGeneration } from '@/composables/useGeneration'
+import { openDirector } from '@/composables/useDirectorPanel'
 import { failureText, isBusy } from '@/utils/generationView'
 import {
   createAutosaver, moveRow, patchFromRow, removeRow, rowFromApi, rowWarnings,

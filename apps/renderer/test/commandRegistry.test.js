@@ -194,6 +194,7 @@ function builtinHarness() {
     undo: () => calls.push(['undo']),
     redo: () => calls.push(['redo']),
     openHistory: () => calls.push(['history']),
+    openDirector: (ep) => calls.push(['director', ep]),
     select: (s) => calls.push(['select', s]),
     getViews: () => views,
   }
@@ -217,9 +218,9 @@ test('builtin commands: page-level ones are always there, episode-level ones nee
   const { r } = builtinHarness()
   const none = ids(r.search('', {}))
   for (const id of ['nav.list', 'project.new', 'nav.ai-config', 'nav.keyboard']) assert.ok(none.includes(id), id)
-  for (const id of ['view.script', 'view.storyboard', 'view.timeline', 'view.canvas', 'edit.undo', 'edit.redo', 'history.open', 'project.export']) assert.ok(!none.includes(id), id)
+  for (const id of ['view.script', 'view.storyboard', 'view.timeline', 'view.canvas', 'edit.undo', 'edit.redo', 'history.open', 'project.export', 'director.open']) assert.ok(!none.includes(id), id)
   const withEp = ids(r.search('', { episodeId: 5 }))
-  for (const id of ['view.script', 'view.storyboard', 'view.timeline', 'view.canvas', 'edit.undo', 'edit.redo', 'history.open', 'project.export']) assert.ok(withEp.includes(id), id)
+  for (const id of ['view.script', 'view.storyboard', 'view.timeline', 'view.canvas', 'edit.undo', 'edit.redo', 'history.open', 'project.export', 'director.open']) assert.ok(withEp.includes(id), id)
 })
 
 test('builtin commands: Chinese and English queries find the intended command first', () => {
@@ -233,6 +234,7 @@ test('builtin commands: Chinese and English queries find the intended command fi
   assert.equal(ids(r.search('设置', ctx))[0], 'nav.ai-config')
   assert.equal(ids(r.search('快捷键', ctx))[0], 'nav.keyboard')
   assert.equal(ids(r.search('history', ctx))[0], 'history.open')
+  assert.equal(ids(r.search('导演', ctx))[0], 'director.open')
 })
 
 test('builtin commands execute: view switch keeps episode and drama; undo/redo respect enabled; export path', async () => {
@@ -252,6 +254,8 @@ test('builtin commands execute: view switch keeps episode and drama; undo/redo r
   assert.deepEqual(calls[4], ['history'])
   await r.execute('project.new', {})
   assert.deepEqual(calls[5], ['go', '/new-project'])
+  await r.execute('director.open', ctx)
+  assert.deepEqual(calls[6], ['director', 5], 'the director drawer is opened for the current episode')
 })
 
 test('content provider: searches shots and script lines; empty query or no episode gives nothing', async () => {
