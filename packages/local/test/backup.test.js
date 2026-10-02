@@ -100,6 +100,27 @@ describe('s3 client: XML', () => {
     assert.deepEqual(r.commonPrefixes, ['talekiln/shared/']);
     assert.equal(s3.parseListObjects('<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>').nextContinuationToken, null);
   });
+  it('decodes Key / Prefix only when the response declares EncodingType=url (gofakes3 encodes unasked; raw keys stay raw)', () => {
+    // 从 rclone serve s3（gofakes3）抓到的真实响应形态：没请求 encoding-type 也一律按查询串规则编码并声明 <EncodingType>
+    const encoded = `<?xml version="1.0" encoding="UTF-8"?>
+<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>b</Name><IsTruncated>false</IsTruncated><Prefix>probe/</Prefix><MaxKeys>1000</MaxKeys>
+<Contents><Key>probe/a+b.txt</Key><Size>1</Size></Contents>
+<Contents><Key>probe/%E4%B8%AD%E6%96%87+%E5%90%8D.json</Key><Size>1</Size></Contents>
+<Contents><Key>probe/plus%2Bsign.txt</Key><Size>1</Size></Contents>
+<Contents><Key>probe/pct%2520lit.txt</Key><Size>1</Size></Contents>
+<CommonPrefixes><Prefix>probe/sub+dir/</Prefix></CommonPrefixes>
+<KeyCount>4</KeyCount><EncodingType>url</EncodingType></ListBucketResult>`;
+    const r = s3.parseListObjects(encoded);
+    assert.equal(r.encodingType, 'url');
+    assert.deepEqual(r.contents.map((c) => c.key), ['probe/a b.txt', 'probe/中文 名.json', 'probe/plus+sign.txt', 'probe/pct%20lit.txt']);
+    assert.deepEqual(r.commonPrefixes, ['probe/sub dir/']);
+    // 没有声明就不解码：字面 + 与 % 原样保留（MinIO / AWS 在未请求 encoding-type 时就是这样返回）
+    const raw = '<ListBucketResult><Contents><Key>probe/a+b %41.txt</Key></Contents><IsTruncated>false</IsTruncated></ListBucketResult>';
+    assert.equal(s3.parseListObjects(raw).encodingType, null);
+    assert.deepEqual(s3.parseListObjects(raw).contents.map((c) => c.key), ['probe/a+b %41.txt']);
+    // 非法百分号序列不抛错，整个键原样返回
+    assert.equal(s3.decodeListKey('bad%zz+x'), 'bad%zz+x');
+  });
   it('parses <Error> and tolerates non-XML; rejects malformed documents', () => {
     assert.deepEqual(s3.parseErrorXml('<Error><Code>NoSuchKey</Code><Message>gone</Message></Error>'), { code: 'NoSuchKey', message: 'gone', region: null });
     assert.equal(s3.parseErrorXml('<html>nope</html>'), null);
@@ -142,6 +163,26 @@ describe('s3 client: operations against the fake server', () => {
     await c.deleteObject('q/other.txt'); // 幂等
     assert.equal(await c.headObject('q/other.txt'), null);
     assert.equal((await c.createBucket()).created, false); // 已存在
+    // 列举按 AWS 的建议带 encoding-type=url，假服务端照 MinIO 的行为编码并声明，客户端解码后键仍是原文（上面的断言已经证明）
+    const lists = srv.requests.filter((r) => r.query['list-type'] === '2');
+    assert.ok(lists.length >= 3);
+    assert.ok(lists.every((r) => r.query['encoding-type'] === 'url'));
+  });
+
+  it('a server that always URL-encodes listing keys (gofakes3 / rclone serve s3) still round-trips spaces, CJK, plus and percent', async () => {
+    const always = await startFakeS3({ accessKey: AK, secretKey: SK, bucket: 'tk-enc', encodeListKeys: 'always' });
+    try {
+      const c = s3.createS3Client({ endpoint: always.url, bucket: 'tk-enc', accessKey: AK, secretKey: SK, sleep: noSleep });
+      const keys = ['p/a b.txt', 'p/中文 名.json', 'p/plus+sign.txt', 'p/pct%20lit.txt', 'p/sub dir/d.bin'];
+      for (const k of keys) await c.putObject(k, Buffer.from(k));
+      assert.deepEqual((await c.listAll('p/', { maxKeys: 2 })).map((o) => o.key).sort(), [...keys].sort());
+      // 列出来的键能直接再用：逐个取回、删掉
+      for (const o of await c.listAll('p/')) assert.equal((await c.getObject(o.key)).body.toString(), o.key);
+      for (const o of await c.listAll('p/')) await c.deleteObject(o.key);
+      assert.equal((await c.listAll('p/')).length, 0);
+    } finally {
+      await always.close();
+    }
   });
 
   it('the server rejects a wrong secret, a wrong access key and a wrong region as BACKUP_AUTH; none are retried', async () => {

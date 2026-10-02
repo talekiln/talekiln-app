@@ -42,17 +42,19 @@ describe('backup live (real S3-compatible storage)', () => {
   });
 
   it('client: put / get / head / list (paged) / delete, CJK and spaces in keys, wrong secret rejected', opts, async () => {
-    const keys = ['a.txt', 'b c.txt', '中文 名.json', 'sub/dir/d.bin'].map((k) => `${prefix}/client/${k}`);
+    // 空格、中文、字面 + 与 %：列举响应若按 encoding-type=url 编码（AWS / MinIO 按请求，gofakes3 一律），客户端必须还原出原键
+    const keys = ['a.txt', 'b c.txt', '中文 名.json', 'plus+sign.txt', 'pct%20lit.txt', 'sub/dir/d.bin'].map((k) => `${prefix}/client/${k}`);
     for (const k of keys) await client.putObject(k, Buffer.from(`live:${k}`), { contentType: 'text/plain' });
     assert.equal((await client.getObject(keys[2])).body.toString(), `live:${keys[2]}`);
     assert.equal((await client.headObject(keys[3])).contentLength, `live:${keys[3]}`.length);
     assert.equal(await client.headObject(`${prefix}/client/none`), null);
     await assert.rejects(client.getObject(`${prefix}/client/none`), (e) => e.code === 'NOT_FOUND' && e.s3Code === 'NoSuchKey');
-    const p1 = await client.listObjectsV2(`${prefix}/client/`, { maxKeys: 3 });
+    const p1 = await client.listObjectsV2(`${prefix}/client/`, { maxKeys: 4 });
     assert.equal(p1.isTruncated, true);
     assert.ok(p1.nextContinuationToken);
-    const p2 = await client.listObjectsV2(`${prefix}/client/`, { maxKeys: 3, continuationToken: p1.nextContinuationToken });
+    const p2 = await client.listObjectsV2(`${prefix}/client/`, { maxKeys: 4, continuationToken: p1.nextContinuationToken });
     assert.deepEqual([...p1.contents, ...p2.contents].map((o) => o.key).sort(), [...keys].sort());
+    for (const o of p2.contents) assert.equal((await client.getObject(o.key)).body.toString(), `live:${o.key}`); // 列出的键可以直接再用
     assert.deepEqual((await client.listAll(`${prefix}/client/`, { maxKeys: 2 })).map((o) => o.key).sort(), [...keys].sort());
     const bad = s3.createS3Client({ ...cfg, secretKey: 'definitely-wrong' });
     await assert.rejects(bad.listObjectsV2(`${prefix}/`), (e) => e.code === 'BACKUP_AUTH');
