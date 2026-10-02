@@ -10,5 +10,6 @@ export const ROUTE_META = {
   invites: { title: '邀请码', perm: 'read' },
   users: { title: '用户', perm: 'read' },
   content: { title: '模型目录', perm: 'read' },
+  templates: { title: '模板市场', perm: 'read' },
   admins: { title: '管理员与审计', perm: 'admins:manage' },
 }

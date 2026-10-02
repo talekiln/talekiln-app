@@ -27,6 +27,9 @@
           <el-button class="btn-library" title="媒体素材库" @click="$router.push('/media-library')">
             <el-icon><Files /></el-icon>素材库
           </el-button> -->
+          <el-button class="btn-library" title="模板市场：一键套用分镜模板" data-test="to-templates" @click="$router.push('/templates')">
+            模板
+          </el-button>
           <el-button class="btn-library" title="AI 任务中心" @click="$router.push('/task-center')">
             任务中心
           </el-button>

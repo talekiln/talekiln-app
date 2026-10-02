@@ -1,0 +1,108 @@
+{
+  "id": "official-guofeng-drama",
+  "name": "国风短剧 · 错嫁",
+  "version": "1.0.0",
+  "genre": "guofeng",
+  "tier": "free",
+  "description": "一集古风言情短剧的开场：误嫁、对峙、反转。八个镜头约 45 秒，角色槽位两主一配，适合竖屏连载的第一集。",
+  "cover": null,
+  "music_hint": "古筝与箫的慢板，前段清冷，反转处加入鼓点",
+  "style": {
+    "name": "古风写实",
+    "preset": "historical",
+    "prompt": "中国古装剧画面，唐宋美学，飘逸汉服，暖调电影级调色，浅景深，自然烛光与天光",
+    "aspect_ratio": "9:16"
+  },
+  "character_slots": [
+    { "id": "heroine", "name": "沈清辞", "role": "女主", "description": "将门孤女，被迫替姐出嫁", "appearance": "二十岁上下，眉眼清冷，素色嫁衣，发间一支银簪" },
+    { "id": "hero", "name": "顾长宁", "role": "男主", "description": "新科探花，表面冷淡，心有隐情", "appearance": "二十五岁，身形挺拔，墨色长袍，腰佩玉珏" },
+    { "id": "villain", "name": "柳姨娘", "role": "反派", "description": "沈家姨娘，一手促成错嫁", "appearance": "四十岁，妆容精致，绛紫绸衣，笑意不达眼底" }
+  ],
+  "shots": [
+    {
+      "title": "红绸落雨",
+      "group": "开场",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，细雨中红绸悬在门楣，{{heroine}}身着嫁衣立在檐下，望着雨幕出神",
+      "character_slots": ["heroine"],
+      "scene_slot": "沈府后院，黄昏小雨",
+      "camera": "全景缓推",
+      "lines": [{ "kind": "narration", "text": "那年春雨，她替姐姐嫁进了顾府。" }]
+    },
+    {
+      "title": "姨娘叮嘱",
+      "group": "开场",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{villain}}替{{heroine}}理了理盖头，嘴角含笑，眼神却冷",
+      "character_slots": ["heroine", "villain"],
+      "scene_slot": "沈府内室，烛光",
+      "camera": "中景过肩",
+      "lines": [
+        { "kind": "dialogue", "speaker": "villain", "text": "进了顾府，就把沈家的事忘干净。" },
+        { "kind": "dialogue", "speaker": "heroine", "text": "姨娘放心，我记性一向不好。" }
+      ]
+    },
+    {
+      "title": "花轿起行",
+      "group": "开场",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，红色花轿在青石巷中前行，轿帘微晃，{{heroine}}的侧脸在帘隙一闪",
+      "character_slots": ["heroine"],
+      "scene_slot": "江南青石巷，雨后傍晚",
+      "camera": "跟拍侧移"
+    },
+    {
+      "title": "新郎掀帘",
+      "group": "冲突",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{hero}}伸手掀开轿帘，与{{heroine}}四目相对，两人都怔住",
+      "character_slots": ["hero", "heroine"],
+      "scene_slot": "顾府门前，灯笼高挂",
+      "camera": "近景正反打",
+      "lines": [{ "kind": "dialogue", "speaker": "hero", "text": "你不是沈家大小姐。" }]
+    },
+    {
+      "title": "堂前对峙",
+      "group": "冲突",
+      "duration_ms": 7000,
+      "prompt_template": "{{scene}}，宾客肃立，{{hero}}背手而立神色冷峻，{{heroine}}握紧袖口直视着他",
+      "character_slots": ["hero", "heroine"],
+      "scene_slot": "顾府正堂，红烛高燃",
+      "camera": "中景环绕",
+      "lines": [
+        { "kind": "dialogue", "speaker": "heroine", "text": "探花郎若要退婚，现在就说。" },
+        { "kind": "dialogue", "speaker": "hero", "text": "……礼成。" }
+      ]
+    },
+    {
+      "title": "洞房独坐",
+      "group": "冲突",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{heroine}}独自坐在喜床边摘下银簪，窗外月色洒进来",
+      "character_slots": ["heroine"],
+      "scene_slot": "顾府新房，深夜",
+      "camera": "近景俯拍",
+      "lines": [{ "kind": "narration", "text": "她以为，这不过是一场谁也不想要的婚事。" }]
+    },
+    {
+      "title": "暗处的信",
+      "group": "反转",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{hero}}在书房展开一封旧信，信上是沈家的印章，他指尖微颤",
+      "character_slots": ["hero"],
+      "scene_slot": "顾府书房，一盏孤灯",
+      "camera": "特写缓推",
+      "lines": [{ "kind": "action", "text": "信纸上写着：清辞若嫁，务必护她周全。" }]
+    },
+    {
+      "title": "回眸",
+      "group": "反转",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{heroine}}推门而出，回头看见{{hero}}站在廊下，月光落在两人之间",
+      "character_slots": ["heroine", "hero"],
+      "scene_slot": "顾府回廊，月夜",
+      "camera": "远景定格",
+      "lines": [{ "kind": "narration", "text": "错嫁的，究竟是谁。" }]
+    }
+  ]
+}

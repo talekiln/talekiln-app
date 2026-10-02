@@ -32,6 +32,8 @@ export function createBuiltinCommands(deps) {
     { id: 'edit.redo', title: '重做', group: '编辑', keywords: ['redo'], hint: 'Ctrl+Shift+Z', when: hasEpisode, enabled: (c) => c.canRedo && !c.busy, run: () => deps.redo() },
     { id: 'history.open', title: '打开版本历史', group: '编辑', keywords: ['历史', '版本', 'history', 'versions', '操作记录'], when: hasEpisode, run: () => deps.openHistory() },
     { id: 'project.export', title: '导出视频', group: '项目', keywords: ['导出', 'export', '渲染', '成片'], when: hasEpisode, run: (ctx) => deps.go({ path: `/episodes/${ctx.episodeId}/export`, query: ctx.dramaId ? { drama: String(ctx.dramaId) } : {} }) },
+    // P3-T
+    page('nav.templates', '模板市场', '/templates', ['模板', '套用', '市场', 'template', 'templates']),
   ]
 }
 

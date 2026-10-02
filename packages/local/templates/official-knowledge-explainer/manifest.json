@@ -1,0 +1,91 @@
+{
+  "id": "official-knowledge-explainer",
+  "name": "知识讲解 · 一分钟看懂",
+  "version": "1.0.0",
+  "genre": "knowledge",
+  "tier": "pro",
+  "description": "一分钟科普短片的标准结构：设问、背景、三步讲解、反常识、总结。一个讲解人槽位，配大量旁白，适合知识类账号批量产出。",
+  "cover": null,
+  "music_hint": "轻度电子氛围垫乐，低音量，不抢旁白",
+  "style": {
+    "name": "清爽图解",
+    "preset": "2d animation",
+    "prompt": "扁平化科普插画风格，干净的浅色背景，清晰的图标与示意图，柔和的高饱和配色",
+    "aspect_ratio": "9:16"
+  },
+  "character_slots": [
+    { "id": "teacher", "name": "林老师", "role": "讲解人", "description": "语速平稳、擅长打比方的科普讲解人", "appearance": "三十五岁男性，黑框眼镜，深蓝衬衫，神情专注" }
+  ],
+  "shots": [
+    {
+      "title": "设问",
+      "group": "引入",
+      "duration_ms": 5000,
+      "prompt_template": "{{scene}}，{{teacher}}站在画面右侧，左侧浮现一个大大的问号图标",
+      "character_slots": ["teacher"],
+      "scene_slot": "浅灰渐变背景，顶部留白",
+      "camera": "中景正面",
+      "lines": [{ "kind": "dialogue", "speaker": "teacher", "text": "为什么飞机能飞起来？很多人其实说错了。" }]
+    },
+    {
+      "title": "背景",
+      "group": "引入",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，一架客机的简笔剖面图，机翼被高亮，气流用细线示意",
+      "character_slots": [],
+      "scene_slot": "浅色图解背景",
+      "camera": "全景定格",
+      "lines": [{ "kind": "narration", "text": "教科书常说，机翼上表面更长，空气跑得更快，压力就更低。" }]
+    },
+    {
+      "title": "第一步",
+      "group": "讲解",
+      "duration_ms": 7000,
+      "prompt_template": "{{scene}}，{{teacher}}用手比划机翼的迎角，旁边浮现气流被向下偏折的示意箭头",
+      "character_slots": ["teacher"],
+      "scene_slot": "浅灰渐变背景，右侧讲解人",
+      "camera": "中景侧面",
+      "lines": [{ "kind": "dialogue", "speaker": "teacher", "text": "第一，机翼把空气往下推，空气就把机翼往上推。" }]
+    },
+    {
+      "title": "第二步",
+      "group": "讲解",
+      "duration_ms": 7000,
+      "prompt_template": "{{scene}}，两条气流线贴着机翼上下表面流过，上方线条弯曲更明显，配色对比清晰",
+      "character_slots": [],
+      "scene_slot": "浅色图解背景",
+      "camera": "特写推进",
+      "lines": [{ "kind": "narration", "text": "第二，弯曲的上表面让气流转向，转向需要压力差，升力就来了。" }]
+    },
+    {
+      "title": "第三步",
+      "group": "讲解",
+      "duration_ms": 7000,
+      "prompt_template": "{{scene}}，一张纸被吹起的实验画面，{{teacher}}在旁边举着那张纸示范",
+      "character_slots": ["teacher"],
+      "scene_slot": "明亮的书桌前",
+      "camera": "中景正面",
+      "lines": [{ "kind": "dialogue", "speaker": "teacher", "text": "第三，你在家就能验证：对着纸面上方吹气，纸会飘起来。" }]
+    },
+    {
+      "title": "反常识",
+      "group": "讲解",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，一架倒飞的特技飞机，机翼倒置仍在空中，旁边打上一个醒目的感叹号",
+      "character_slots": [],
+      "scene_slot": "浅色图解背景，蓝天元素",
+      "camera": "全景横移",
+      "lines": [{ "kind": "narration", "text": "所以飞机倒着也能飞——只要迎角够，升力就在。" }]
+    },
+    {
+      "title": "总结",
+      "group": "收尾",
+      "duration_ms": 6000,
+      "prompt_template": "{{scene}}，{{teacher}}面向镜头，身旁依次亮起三个要点图标",
+      "character_slots": ["teacher"],
+      "scene_slot": "浅灰渐变背景，三栏要点",
+      "camera": "中景正面",
+      "lines": [{ "kind": "dialogue", "speaker": "teacher", "text": "记住三点：推空气、转气流、迎角够。下期见。" }]
+    }
+  ]
+}
