@@ -317,7 +317,7 @@ onMounted(reloadAll)
 .bk-card-title { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
 .bk-note { font-size: 12px; color: var(--el-text-color-secondary); line-height: 1.6; margin: 0 0 10px; }
 .bk-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
-.bk-hint { font-size: 12px; color: var(--el-text-color-secondary); margin-top: 4px; line-height: 1.5; }
+.bk-hint { flex-basis: 100%; font-size: 12px; color: var(--el-text-color-secondary); margin-top: 4px; line-height: 1.5; } /* 独占一行：el-form-item__content 是 flex 容器，否则会挤在数字框右边被截断 */
 .bk-hint.warn, .warn { color: var(--el-color-warning); }
 .bk-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
 .bk-test-result { font-size: 12px; }
