@@ -493,6 +493,7 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
     const { createDirectorService } = require('../director');
     const directorService = extras.director || createDirectorService({
       db, log, spend: aiQueue && aiQueue.spend, generation: extras.generation, config: cfg, listConfigs: extras.listConfigs,
+      ...(extras.directorDeps || {}), // 假厂商模式注入 resolveProvider / createProviders（见 providers/fakeVendor.js）
     });
     const director = require('./director')(directorService, log);
     r.post('/episodes/:id/director/plan', director.plan);
