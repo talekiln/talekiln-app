@@ -1,6 +1,6 @@
 # 三期 P3-K：可选云备份（MinIO / S3 兼容）
 
-状态：本地服务（S3 兼容客户端、备份 / 快照 / 恢复 / 保留策略 / 自动备份、REST）、渲染进程「云备份」页、服务器 MinIO 部署手册、CI 的真实 MinIO 作业已写完；本机与渲染层自动化测试全部通过（对象存储用进程内假 S3，服务端独立重算 SigV4 签名）。**没有对真实 MinIO 跑过**（本次会话的沙箱连不上 Docker Hub），**界面没有在浏览器里点过**，见第 7 节。本文不含任何密钥或真实地址。
+状态：本地服务（S3 兼容客户端、备份 / 快照 / 恢复 / 保留策略 / 自动备份、REST）、渲染进程「云备份」页、服务器 MinIO 部署手册、CI 的真实 MinIO 作业已写完；本机与渲染层自动化测试全部通过（对象存储用进程内假 S3，服务端独立重算 SigV4 签名）。随后 `test/backup.live.test.js` 对两个**第三方 S3 实现**（SeaweedFS 3.80 的 S3 网关、rclone 1.68 `serve s3`）跑通了整条链路，并修了一处列举键编码的兼容问题（第 4 节）；**MinIO 本身仍没有跑过**（沙箱连不上 Docker Hub 与 dl.min.io），**界面没有在浏览器里点过**，见第 7 节。本文不含任何密钥或真实地址。
 
 决定依据：Jay 定的「先自己搭 MinIO，后续再接第三方」。所以客户端只认 S3 协议，不认厂商：换阿里云 OSS（S3 兼容接口）/ 腾讯云 COS / Cloudflare R2 只改地址、区域、存储桶与寻址方式。
 
@@ -62,6 +62,7 @@
 - 校验：`region` 字母数字连字符；`bucket` 3–63 位小写字母 / 数字 / 点 / 连字符；`prefix` 去首尾斜杠、不含 `..`；`keep` 0–365（0 = 不清理）。
 - 错误映射：网络错误 / 超时 → `BACKUP_UNREACHABLE`；403 或 `SignatureDoesNotMatch / InvalidAccessKeyId / AccessDenied / AuthorizationHeaderMalformed`（区域填错时带正确区域提示）→ `BACKUP_AUTH`；404 → `NOT_FOUND`；5xx / 429 / `SlowDown` 重试后仍失败 → `BACKUP_FAILED`（502）；301/307 → `BACKUP_FAILED` 提示区域填错。
 - 重试：所有请求都幂等（PUT 同一内容、DELETE、GET、HEAD），网络错误与 5xx / 429 最多 3 次，退避 300 / 600 ms；单次超时 30 s；流式上传（`UNSIGNED-PAYLOAD`）不重试。
+- 列举键的编码：`listObjectsV2` 按 AWS 的建议带 `encoding-type=url`；响应里声明了 `<EncodingType>url</EncodingType>` 才把 `Key` / `CommonPrefixes` 按查询串规则解码（`+` 还原为空格，再百分号解码，与 AWS SDK 一致），没声明就原样。只看响应不看请求，因为 AWS / MinIO 只在被请求时编码，而 gofakes3（rclone `serve s3`）不管请求与否一律编码并声明——对 rclone 跑 live 测试时正是这一点让带空格 / 中文的键被列成了 `b+c.txt`、`%E4%B8%AD…`。备份服务自己的键只含 ASCII（前缀限制为字母、数字、`._-/`），所以这个问题影响不到已有备份，只影响客户端对带特殊字符键的通用正确性。
 
 ## 5. 自动备份
 
@@ -76,7 +77,7 @@
 
 ## 7. 未验证
 
-- **真实 MinIO**：本次沙箱连不上 Docker Hub，`backup-minio` CI 作业与 `test/backup.live.test.js` 一次都没跑过。签名算法对照了 AWS 公开的三组 SigV4 测试向量，假 S3 的服务端重算又是独立实现，所以协议层有把握；MinIO 对 `continuation-token`、`BucketAlreadyOwnedByYou`、虚拟主机式等细节的实际行为要看第一次 CI。
+- **真实 MinIO**：沙箱连不上 Docker Hub，也拉不到 dl.min.io 的二进制，`backup-minio` CI 作业一次都没跑过（Actions 配额也用光了）。作为替代，`test/backup.live.test.js` 在沙箱里对两个第三方 S3 实现跑通（都是 path-style、http 回环、SigV4 头部签名）：**SeaweedFS 3.80** 的 S3 网关（其鉴权代码源自 MinIO，建桶、分页 `continuation-token`、中文 / 空格 / `+` / `%` 键、错 Secret 拒绝、备份 → 列表 → 恢复 → 清理全部通过）和 **rclone 1.68 `serve s3`**（gofakes3；暴露并修了列举键编码问题后全部通过）。签名算法另对照了 AWS 公开的三组 SigV4 测试向量。MinIO 对 `BucketAlreadyOwnedByYou`、虚拟主机式等细节的实际行为仍要看第一次 CI。
 - **Windows / 桌面壳**：密钥经 safeStorage 落盘、调度器随 `aiWorker.start()` 启动都走的是现成路径，但没在真机上点过。
 - **界面**：`BackupPage.vue` 只做了 `vite build` 通过和纯函数单测，没有在浏览器里打开过。
 - **大项目**（P3-C 加固后更新）：备份服务不再把 ZIP 整段放内存：`exportDrama(…, { outFile })` 把 ZIP 写到 `<storage.local_path>/tmp/backup/` 的临时文件，`sha256File` 流式算哈希，`putFile` 以文件流上传且**签名载荷就是文件 sha256**（不用 `UNSIGNED-PAYLOAD`，每次重试重新打开文件所以仍可重试）；恢复用 `getObjectToFile` 流式下载到临时文件、边下边算 sha256，校验通过后 `importDrama` 直接读临时文件。临时文件用完即删，服务启动时清理残留。测试里 65 MB 生成数据往返 sha256 一致、堆增长小于 1.5 倍包大小（假 S3 自己持有一份）。**仍未解决**：`adm-zip` 的 `writeZip` 和导入时的 `new AdmZip(path)` 内部还是整包在内存里组装 / 读取，所以导出 / 导入阶段的峰值内存仍约等于 ZIP 大小，只是不再叠加「上传 / 下载 / 哈希」那几份副本；真正的流式 ZIP 需要换库或自写 zip64 写入器，没做。假 S3 现在对载荷哈希不符按真实 S3 回 400 `XAmzContentSHA256Mismatch`（映射 `BACKUP_FAILED`，不重试），并校验 `content-length` 与实际字节数一致。
@@ -96,6 +97,11 @@ docker run -d -p 9000:9000 -e MINIO_ROOT_USER=ci -e MINIO_ROOT_PASSWORD=ci-throw
 TALEKILN_TEST_S3_ENDPOINT=http://127.0.0.1:9000 TALEKILN_TEST_S3_BUCKET=talekiln-ci TALEKILN_TEST_S3_CREATE_BUCKET=1 \
 TALEKILN_TEST_S3_ACCESS_KEY=ci TALEKILN_TEST_S3_SECRET_KEY=ci-throwaway-minio \
   node --test --test-reporter=spec packages/local/test/backup.live.test.js
+
+# 没有 Docker 时，换任一第三方 S3 实现（下面两种都在沙箱里跑通过；凭据都是临时值）
+#   rclone：桶就是目录；SeaweedFS：s3.json 里写一个带 Admin/Read/Write/List 权限的身份，再加 TALEKILN_TEST_S3_CREATE_BUCKET=1
+mkdir -p /tmp/s3/talekiln-ci && rclone serve s3 --addr 127.0.0.1:9101 --auth-key ci,ci-throwaway /tmp/s3
+weed server -ip=127.0.0.1 -dir=/tmp/weed -filer -s3 -s3.port=9102 -s3.config=s3.json
 ```
 
 `test/backup.test.js` 覆盖：SigV4 三组公开向量、`uriEncode` / 规范化查询、地址策略（允许与拒绝各十余例）、XML（实体、命名空间、续传令牌、`<Error>`、畸形文档）、对假 S3 的全部操作（含中文与空格键、分页续传、幂等删除、建桶）、服务端拒绝错 Secret / 错 Access Key / 错区域 / 被改动的载荷、5xx / 429 的退避与放弃、网络错误与超时、流式上传不重试；服务层的设置校验与密钥隔离、未配置行为、测试连接、用内置示例项目做「备份 → 列表（本地记录与清单两种来源）→ 恢复为新项目（标题加「导入1」、5 个镜头与媒体文件齐全）」、被改动的对象与缺清单的 409、保留策略（按项目、zip 与清单一起删、手动 `prune`、`keep: 0`）、串行与状态、离线（列表回落本地、备份失败记录、每日 tick 不记完成、恢复后补跑、24 h 内跳过）、单项目失败不影响整轮、`after_export` 去重；调度器（假定时器）；导出服务 `onFinished` 只触发一次且钩子抛错不影响导出；REST 全部路径与错误码。

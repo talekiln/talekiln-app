@@ -6,6 +6,8 @@
  *    这里的规范化 / 编码是独立实现的，不从 src/backup/s3.js 引用，所以客户端与服务端互为对照。
  *  - 实现 HeadBucket / CreateBucket / PutObject / GetObject / HeadObject / DeleteObject / ListObjectsV2（含 prefix、max-keys、continuation-token）。
  *  - failNext(status, n)：接下来 n 个请求直接返回该状态（测重试）；requests 记录每个请求；objects 可直接改（测校验失败）。
+ *  - encodeListKeys：'requested'（默认，像 MinIO / AWS：请求带 encoding-type=url 才把键按查询串规则编码并声明 <EncodingType>）
+ *    或 'always'（像 gofakes3 / rclone serve s3：不管请求与否一律编码并声明）。
  */
 const http = require('http');
 const crypto = require('crypto');
@@ -14,6 +16,8 @@ const enc = (s) => encodeURIComponent(s).replace(/[!'()*]/g, (c) => '%' + c.char
 const sha256 = (d) => crypto.createHash('sha256').update(d).digest('hex');
 const hmac = (k, d) => crypto.createHmac('sha256', k).update(d, 'utf8').digest();
 const xmlEsc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+/** encoding-type=url 的键编码：查询串规则（空格 -> +，其余保留字百分号编码），与 AWS / MinIO / gofakes3 一致。 */
+const queryEsc = (s) => enc(s).replace(/%20/g, '+');
 
 function errorXml(res, status, code, message, extra = '') {
   res.writeHead(status, { 'content-type': 'application/xml' });
@@ -50,7 +54,7 @@ function verify(req, rawPath, query, body, { accessKey, secretKey, region }) {
 /**
  * 启动假 S3。返回 { url, port, objects: Map<key,{body,contentType,lastModified,etag}>, requests: [], failNext(status, n), buckets: Set, close() }。
  */
-async function startFakeS3({ accessKey = 'ci', secretKey = 'ci-throwaway-minio', bucket = 'talekiln-test', region = 'us-east-1', extraBuckets = [] } = {}) {
+async function startFakeS3({ accessKey = 'ci', secretKey = 'ci-throwaway-minio', bucket = 'talekiln-test', region = 'us-east-1', extraBuckets = [], encodeListKeys = 'requested' } = {}) {
   const objects = new Map();
   const buckets = new Set([bucket, ...extraBuckets]);
   const requests = [];
@@ -112,6 +116,8 @@ async function startFakeS3({ accessKey = 'ci', secretKey = 'ci-throwaway-minio',
     const maxKeys = Math.max(1, Math.min(1000, Number(q.get('max-keys')) || 1000));
     const token = q.get('continuation-token');
     const after = token ? Buffer.from(token, 'base64').toString('utf8') : null;
+    const encoded = encodeListKeys === 'always' || (encodeListKeys === 'requested' && q.get('encoding-type') === 'url');
+    const keyXml = (k) => xmlEsc(encoded ? queryEsc(k) : k);
     const keys = [...objects.keys()].filter((k) => k.startsWith(`${b}/`)).map((k) => k.slice(b.length + 1)).filter((k) => k.startsWith(prefix)).sort();
     const start = after ? keys.findIndex((k) => k > after) : 0;
     const slice = start < 0 ? [] : keys.slice(start, start + maxKeys);
@@ -119,10 +125,10 @@ async function startFakeS3({ accessKey = 'ci', secretKey = 'ci-throwaway-minio',
     const next = truncated ? Buffer.from(slice[slice.length - 1], 'utf8').toString('base64') : null;
     const items = slice.map((k) => {
       const o = objects.get(`${b}/${k}`);
-      return `<Contents><Key>${xmlEsc(k)}</Key><LastModified>${new Date(o.lastModified).toISOString()}</LastModified><ETag>&quot;${o.etag}&quot;</ETag><Size>${o.body.length}</Size><StorageClass>STANDARD</StorageClass></Contents>`;
+      return `<Contents><Key>${keyXml(k)}</Key><LastModified>${new Date(o.lastModified).toISOString()}</LastModified><ETag>&quot;${o.etag}&quot;</ETag><Size>${o.body.length}</Size><StorageClass>STANDARD</StorageClass></Contents>`;
     }).join('');
     res.writeHead(200, { 'content-type': 'application/xml' });
-    res.end(`<?xml version="1.0" encoding="UTF-8"?><ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>${xmlEsc(b)}</Name><Prefix>${xmlEsc(prefix)}</Prefix><KeyCount>${slice.length}</KeyCount><MaxKeys>${maxKeys}</MaxKeys><IsTruncated>${truncated}</IsTruncated>${items}${next ? `<NextContinuationToken>${xmlEsc(next)}</NextContinuationToken>` : ''}</ListBucketResult>`);
+    res.end(`<?xml version="1.0" encoding="UTF-8"?><ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>${xmlEsc(b)}</Name><Prefix>${keyXml(prefix)}</Prefix><KeyCount>${slice.length}</KeyCount><MaxKeys>${maxKeys}</MaxKeys><IsTruncated>${truncated}</IsTruncated>${items}${next ? `<NextContinuationToken>${xmlEsc(next)}</NextContinuationToken>` : ''}${encoded ? '<EncodingType>url</EncodingType>' : ''}</ListBucketResult>`);
   }
 
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
