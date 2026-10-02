@@ -17,6 +17,7 @@
         @click="saveState === 'error' && retry()"
       >{{ saveStateText(saveState) }}</el-tag>
       <el-button plain @click="$router.push(`/project/${$route.params.dramaId}/library`)">角色与场景库</el-button>
+      <el-button plain data-test="open-batch" @click="$router.push(`/project/${$route.params.dramaId}/batch`)">批量生成</el-button>
       <el-button type="success" plain :disabled="!rows.length || !episodeId" data-test="generate-all" @click="gen.ask({ shots: 'all', kind: 'both' })">
         生成全部首帧与视频
       </el-button>

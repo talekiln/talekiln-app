@@ -394,6 +394,21 @@
       "scope": "cloud",
       "message": "支付回调签名无效",
       "action": "无需处理；如反复出现请联系管理员"
+    },
+    "BATCH_BUDGET_EXCEEDED": {
+      "scope": "local",
+      "message": "批次预算上限低于预计费用，批次未创建",
+      "action": "提高预算上限、减少选中的集数，或改为只生成首帧图"
+    },
+    "BATCH_NOTHING_TO_DO": {
+      "scope": "local",
+      "message": "所选分集没有需要生成的镜头",
+      "action": "所选分集已全部是最新，或缺少分镜与提示词；先在分镜表里补齐再排批次"
+    },
+    "BATCH_STATE": {
+      "scope": "local",
+      "message": "批次当前状态不允许该操作",
+      "action": "刷新批次页查看最新状态后再操作"
     }
   }
 }

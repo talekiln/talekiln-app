@@ -7,10 +7,11 @@ const { getDb } = require('./db/index.js');
 const { loadConfig } = require('./config/index.js');
 const logger = require('./logger.js');
 const { setupRouter } = require('./routes/index.js');
-const { createAiTaskStore, createAiTaskQueue, createWorker, createDownloader, withDownloads, queueOptionsFromConfig, buildQueueProviders } = require('./queue');
+const { createAiTaskStore, createAiTaskQueue, createWorker, createDownloader, withDownloads, queueOptionsFromConfig, buildQueueProviders, resolveOptions } = require('./queue');
 const { createSpendService, createEstimator } = require('./spend');
 const { createCloud } = require('./cloud');
 const { createGenerationService } = require('./generation');
+const { createBatchService, createBatchScheduler, attachToWorker } = require('./batch');
 const { localTokenGuard } = require('./utils/localToken');
 
 function createAiQueue({ config, db, log, storageRoot, providers, onTaskFinished, cloud }) {
@@ -105,11 +106,13 @@ function createApp(opts = {}) {
   // 持久化 AI 任务队列 + worker（由 server.js / 桌面主进程调用 aiQueue.worker.start()）
   const cloud = opts.cloud || createCloud({ config, db, log: logger });
   let generation = null; // I1：任务成功后写回数据内核（在 aiQueue 之后创建，所以这里用闭包取）
+  let batch = null; // P3-B：批次调度（任务结束时唤醒）
   const aiQueue = createAiQueue({
     cloud, config, db, log, storageRoot,
     providers: opts.queueProviders || buildQueueProviders({ db, storageDir: storageRoot, listConfigs: opts.listConfigs }),
     onTaskFinished: (t) => {
       if (generation) { try { generation.onTaskFinished(t); } catch (e) { log.error && log.error('generation finish', { error: e && e.message }); } }
+      if (batch) { try { batch.onTaskFinished(t); } catch (e) { log.error && log.error('batch finish', { error: e && e.message }); } }
       if (opts.onTaskFinished) opts.onTaskFinished(t);
     },
   });
@@ -121,7 +124,13 @@ function createApp(opts = {}) {
     catalogModels: () => { try { return cloud.catalog.getCatalog().models || []; } catch (_) { return []; } },
   });
   generation.recoverFinished().catch((e) => log.error && log.error('generation recover', { error: e && e.message }));
-  app.use('/api/v1', setupRouter(config, db, log, aiQueue, cloud, { storageRoot, exporter: opts.exporter, getCore, generation }));
+  // P3-B：批量生成服务 + 调度器。调度器与队列 worker 同生命周期（worker.start/stop 由 server.js / 桌面主进程调用）
+  batch = opts.batch || createBatchService({ db, store: aiQueue.store, generation, spend: aiQueue.spend, worker: aiQueue.worker, limits: resolveOptions(config).limits, log });
+  const batchScheduler = createBatchScheduler({ service: batch, onError: (e) => log.error && log.error('batch scheduler', { error: e && e.message }) });
+  attachToWorker(aiQueue.worker, batchScheduler);
+  aiQueue.batch = batch;
+  aiQueue.batchScheduler = batchScheduler;
+  app.use('/api/v1', setupRouter(config, db, log, aiQueue, cloud, { storageRoot, exporter: opts.exporter, getCore, generation, batch }));
 
   // 前端静态资源（sxy：web/dist）；Electron 打包时可设 WEB_DIST_PATH
   const webDist = process.env.WEB_DIST_PATH || path.join(process.cwd(), '..', 'frontweb', 'dist');
