@@ -63,6 +63,10 @@ function connect(endpoint, { timeoutMs = 5000 } = {}) {
         renderStart(params) { return this.call('render.start', params); },
         renderStatus(jobId) { return this.call('render.status', { jobId }); },
         renderCancel(jobId) { return this.call('render.cancel', { jobId }); },
+        /** 参考图与生成结果的一致性评分：{ reference, target, sample_frames?, min_score? } -> { score, parts, frames, suggestion } */
+        consistencyScore(params) { return this.call('consistency.score', params); },
+        /** 候选参考图排序：{ candidates: [path], anchor? } -> { ranked: [{ path, score, sharpness, width, height, similarity }], skipped } */
+        pickReference(params) { return this.call('consistency.pick_reference', params); },
         /** Resolve with the final status (done|failed|cancelled); onProgress gets each render.progress payload. */
         renderWait(jobId, onProgress) {
           return new Promise((resolve, reject) => {

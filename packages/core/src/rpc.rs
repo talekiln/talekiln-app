@@ -102,6 +102,8 @@ pub async fn handle_line(line: &str) -> Option<Value> {
             Ok(v) => json!({ "jsonrpc": "2.0", "id": id, "result": v }),
             Err(m) => err(id, ERR_INVALID_PARAMS, &m, None),
         },
+        "consistency.score" => ff_result(id, crate::consistency::score(&params).await),
+        "consistency.pick_reference" => ff_result(id, crate::consistency::pick_reference(&params).await),
         _ => err(id, ERR_METHOD_NOT_FOUND, &format!("method not found: {method}"), None),
     })
 }
@@ -144,8 +146,8 @@ mod tests {
 
     #[tokio::test]
     async fn ffmpeg_missing_is_recoverable_error() {
-        for (m, tool) in [("media.probe", "ffprobe"), ("encoder.detect", "ffmpeg")] {
-            let req = json!({"jsonrpc":"2.0","id":1,"method":m,"params":{"path":"x.mp4","ffmpegDir":"/nonexistent-lycore-dir"}});
+        for (m, tool) in [("media.probe", "ffprobe"), ("encoder.detect", "ffmpeg"), ("consistency.score", "ffmpeg"), ("consistency.pick_reference", "ffmpeg")] {
+            let req = json!({"jsonrpc":"2.0","id":1,"method":m,"params":{"path":"x.mp4","reference":"r.png","target":"t.mp4","candidates":["a.png"],"ffmpegDir":"/nonexistent-lycore-dir"}});
             let r = call(&req.to_string()).await;
             assert_eq!(r["error"]["code"], crate::ffmpeg::ERR_FFMPEG_MISSING);
             assert_eq!(r["error"]["data"]["recoverable"], true);
@@ -157,6 +159,14 @@ mod tests {
     #[tokio::test]
     async fn probe_requires_path() {
         let r = call(r#"{"jsonrpc":"2.0","id":1,"method":"media.probe","params":{}}"#).await;
+        assert_eq!(r["error"]["code"], ERR_INVALID_PARAMS);
+    }
+
+    #[tokio::test]
+    async fn consistency_methods_validate_params() {
+        let r = call(r#"{"jsonrpc":"2.0","id":1,"method":"consistency.score","params":{"reference":"a.png"}}"#).await;
+        assert_eq!(r["error"]["code"], ERR_INVALID_PARAMS);
+        let r = call(r#"{"jsonrpc":"2.0","id":1,"method":"consistency.pick_reference","params":{"candidates":[]}}"#).await;
         assert_eq!(r["error"]["code"], ERR_INVALID_PARAMS);
     }
 }
