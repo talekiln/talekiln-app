@@ -112,8 +112,8 @@
 
         <footer class="dr-actions">
           <el-button-group>
-            <el-button type="primary" size="small" :disabled="!t.canApply || acting" :loading="acting === `apply:${t.id}`" data-test="director-apply" @click="doApply(t)">执行</el-button>
-            <el-button size="small" :disabled="!t.canUndo || acting" :loading="acting === `undo:${t.id}`" data-test="director-undo" @click="doUndo(t)">撤销</el-button>
+            <el-button type="primary" size="small" :disabled="!t.canApply || !!acting" :loading="acting === `apply:${t.id}`" data-test="director-apply" @click="doApply(t)">执行</el-button>
+            <el-button size="small" :disabled="!t.canUndo || !!acting" :loading="acting === `undo:${t.id}`" data-test="director-undo" @click="doUndo(t)">撤销</el-button>
           </el-button-group>
           <span v-if="t.status.note" class="dr-muted">{{ t.status.note }}</span>
           <span v-else-if="t.status.key === 'applied'" class="dr-muted">已作为一步写入历史，顶栏撤销也能回退</span>
