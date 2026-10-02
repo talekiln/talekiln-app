@@ -540,6 +540,25 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
     r.get('/backup/status', bk.status);
     r.get('/backup/runs', bk.runs);
   }
+  // P3-S 工作室版基础：身份 / 成员管理转发云端，共享角色库与模板在对象存储 shared/<studio_id>/ 下
+  if (extras.studio) {
+    const st = require('./studio')(extras.studio, log);
+    r.get('/studio/identity', st.identity);
+    r.put('/studio/current', st.setCurrent);
+    r.post('/studio/studios', st.createStudio);
+    r.get('/studio/studios/:id', st.detail);
+    r.post('/studio/studios/:id/invites', st.invite);
+    r.delete('/studio/studios/:id/invites/:inviteId', st.revokeInvite);
+    r.post('/studio/accept', st.accept);
+    r.delete('/studio/studios/:id/members/:accountId', st.removeMember);
+    r.put('/studio/studios/:id/members/:accountId/role', st.setRole);
+    r.get('/studio/shared/:kind', st.listShared);
+    r.post('/studio/shared/characters/publish', st.publishCharacter);
+    r.post('/studio/shared/characters/pull', st.pullCharacter);
+    r.post('/studio/shared/templates/publish', st.publishTemplate);
+    r.post('/studio/shared/templates/pull', st.pullTemplate);
+    r.get('/studio/records', st.records);
+  }
 
   return r;
 }
