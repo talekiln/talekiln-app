@@ -3,6 +3,7 @@ const constants = require('./constants');
 const errors = require('./errors');
 const manifest = require('./manifest');
 const adapter = require('./adapter');
+const signing = require('./signing');
 
 /** Identity helpers: give plugin authors type inference without a runtime cost. */
 const defineManifest = (m) => m;
@@ -13,6 +14,7 @@ module.exports = {
   ...errors,
   ...manifest,
   ...adapter,
+  ...signing,
   defineManifest,
   defineAdapter,
 };

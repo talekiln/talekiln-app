@@ -158,6 +158,13 @@ const router = createRouter({
       name: 'templates',
       component: () => import('@/views/TemplateMarket.vue'),
       meta: { title: '模板市场' }
+    },
+    // P3-P
+    {
+      path: '/settings/plugins',
+      name: 'plugins',
+      component: () => import('@/views/PluginsPage.vue'),
+      meta: { title: '插件与服务商' }
     }
   ]
 })

@@ -12,6 +12,8 @@ export const PERMISSIONS = [
   'billing:plans',        // 套餐与价格版本
   'admins:manage',        // 管理员与角色
   'audit:read',           // 查看审计日志
+  'plugins:review',       // 插件版本审核（通过/驳回）
+  'plugins:sign',         // 用官方密钥给插件版本签名（签出去的包在所有客户端都算官方）
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -19,7 +21,7 @@ export const ADMIN_ROLES = ['ADMIN', 'OPERATOR', 'READONLY'] as const;
 
 export const ROLE_PERMISSIONS: Record<AdminRoleName, readonly Permission[]> = {
   READONLY: ['read'],
-  OPERATOR: ['read', 'ops:write', 'feedback:diagnostic'],
+  OPERATOR: ['read', 'ops:write', 'feedback:diagnostic', 'plugins:review'],
   ADMIN: PERMISSIONS,
 };
 

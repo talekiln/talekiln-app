@@ -101,12 +101,16 @@ curl localhost:3000/health
 ### `GET /catalog[?since=<version>]`
 公开。返回 `{ version, kid, signature, issued_at, catalog: { providers, models, prices, announcements } }`。`version` 为目录规范化 JSON 的 sha256 前缀，`signature` 是对 `version` 的 ES256 JWS（与许可证同一密钥，公钥见 JWKS），客户端先校验哈希再验签。`since` 等于当前版本时只回 `{ version, unchanged: true }`。默认价格为示例价；用 `CATALOG_FILE`（JSON 路径）覆盖。
 
+### 插件注册表（P3-P）
+公开 `GET /plugins/catalog`：已通过审核的插件版本（含官方签名后的 `manifest`、包指纹 `hash`、`packageUrl`、`sha256`、`reviewedAt`）。
+管理：`POST /admin/plugins`（登记，`ops:write`）、`GET /admin/plugins[?status=]`、`GET /admin/plugins/:id`、`POST /admin/plugins/:id/approve|reject`（`plugins:review`，OPERATOR 以上）、`POST /admin/plugins/:id/sign`（`plugins:sign`，仅 ADMIN；用许可证同一把 ES256 私钥签名，返回 `signedManifest`）。云端不存插件包本身；信任模型、签名载荷与审核流程见 `docs/phase3-plugins.md`。
+
 ### `GET /r/:code[?src=]`
 推广跳转：记录点击（`ReferralClick`）后 302 到配置中的目标。目标仅来自配置（默认各平台密钥页，`REFERRAL_LINKS` JSON `{code: url}` 覆盖），必须是 https、无内嵌凭据、主机在白名单（默认三个平台主机 + `REFERRAL_ALLOWED_HOSTS` 逗号分隔追加），配置不合规则启动失败；未知码返回 404，没有开放重定向。
 
 ## 数据库
 
-Schema：`prisma/schema.prisma`；迁移已检入 `prisma/migrations/`（`pnpm prisma migrate deploy` 应用）。表：`Account`、`InviteCode`、`Device`、`RefreshToken`、`Setting`、`TelemetryEvent`、`Feedback`、`ReferralClick`。
+Schema：`prisma/schema.prisma`；迁移已检入 `prisma/migrations/`（`pnpm prisma migrate deploy` 应用）。表：`Account`、`InviteCode`、`Device`、`RefreshToken`、`Setting`、`TelemetryEvent`、`Feedback`、`ReferralClick`，收费与后台扩展的表见各期文档，插件注册表：`Plugin`、`PluginVersion`、`PluginReview`。
 
 ## 已知限制 / 后续
 

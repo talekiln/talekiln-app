@@ -21,6 +21,9 @@ export declare class PluginError extends Error {
 /** `network:<host>` (host or `*.domain`) or `secret:apiKey`. At least one network permission is required. */
 export type Permission = `network:${string}` | 'secret:apiKey';
 
+/** ES256 signature over canonicalJson({ manifest without `signature`, files: { path: sha256 } }); `kid` names the official key. */
+export interface ManifestSignature { alg: 'ES256'; kid: string; value: string }
+
 export interface Manifest {
   /** ^[a-z][a-z0-9-]{1,39}$ ; becomes the provider id */
   name: string;
@@ -34,7 +37,28 @@ export interface Manifest {
   label?: string;
   description?: string;
   homepage?: string;
+  /** Relative paths (inside the plugin folder) whose sha256 the signature covers; must include `entry`. */
+  files?: string[];
+  signature?: ManifestSignature;
 }
+
+export type SignatureStatus = 'official' | 'unsigned' | 'invalid';
+export declare const SIGNATURE_STATUSES: readonly ['official', 'unsigned', 'invalid'];
+
+export interface SignatureResult {
+  ok: boolean;
+  status: SignatureStatus;
+  /** Why it is not 'official' (e.g. 'no signature', 'unknown kid', 'bad signature', 'missing file: x', 'unlisted file: y'). */
+  reason: string | null;
+  kid: string | null;
+  /** sha256 of the signing payload: the fingerprint shown in the UI (also computed for unsigned folders when readable). */
+  hash: string | null;
+  files: string[];
+}
+
+export interface Jwk { kty: string; kid?: string; [k: string]: unknown }
+/** A JWKS, an array of JWKs, one JWK, a public key (KeyObject / PEM) or a resolver by kid. */
+export type KeySource = { keys: Jwk[] } | Jwk[] | Jwk | import('node:crypto').KeyObject | string | ((kid: string) => Jwk | import('node:crypto').KeyObject | string | null | undefined);
 
 export interface ChatMessage { role: 'system' | 'user' | 'assistant'; content: string }
 export interface Usage { [key: string]: unknown }
@@ -97,8 +121,23 @@ export declare function validateManifest(input: unknown): Validation & { manifes
 export declare function validateAdapter(adapter: unknown, manifest: Manifest): Validation;
 export declare function allowedHosts(manifest: Manifest): string[];
 export declare function hostAllowed(hostname: string, patterns: string[]): boolean;
+export declare function safeRelativePath(p: unknown): boolean;
 export declare function createGuardedFetch(fetchImpl: AdapterContext['fetch'], manifest: Manifest, onRequest?: (u: URL) => void): AdapterContext['fetch'];
+/** Reads and validates manifest.json without running any plugin code (verify the signature before loadPlugin). */
+export declare function readPluginManifest(dir: string): { root: string; manifest: Readonly<Manifest>; raw: unknown };
 export declare function loadPlugin(dir: string): { manifest: Readonly<Manifest>; createAdapter: CreateAdapter };
+export declare function canonicalJson(v: unknown): string;
+export declare function listPluginFiles(dir: string): { files: string[]; symlinks: string[] };
+export declare function hashFiles(dir: string, files: string[]): Record<string, string>;
+export declare function signingPayload(manifest: object, hashes: Record<string, string>): string;
+export declare function payloadHash(payload: string): string;
+export declare function resolveKey(keys: KeySource, kid: string): import('node:crypto').KeyObject | null;
+/** Sign a plugin folder with an EC P-256 private key (KeyObject or PKCS8 PEM); returns the manifest to write back. */
+export declare function signManifest(
+  manifest: Manifest | object, dir: string, privateKey: import('node:crypto').KeyObject | string, opts: { kid: string; files?: string[] },
+): { manifest: Manifest & { files: string[]; signature: ManifestSignature }; hash: string; files: string[] };
+/** Verify `manifest.signature` against the folder contents and the given keys. strict (default) also rejects unlisted files and symlinks. */
+export declare function verifySignature(manifest: Manifest | object, dir: string, keys: KeySource, opts?: { strict?: boolean }): SignatureResult;
 export declare function instantiate(
   plugin: { manifest: Manifest; createAdapter: CreateAdapter },
   cfg?: { apiKey?: string; baseUrl?: string; fetch?: AdapterContext['fetch']; log?: AdapterContext['log']; onRequest?: (u: URL) => void },

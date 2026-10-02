@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@talekiln/kernel": "workspace:*",
+    "@talekiln/plugin-sdk": "workspace:*",
     "@volcengine/openapi": "^1.36.1",
     "adm-zip": "^0.5.16",
     "better-sqlite3": "^12.0.0",

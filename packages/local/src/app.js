@@ -7,9 +7,11 @@ const { getDb } = require('./db/index.js');
 const { loadConfig } = require('./config/index.js');
 const logger = require('./logger.js');
 const { setupRouter } = require('./routes/index.js');
-const { createAiTaskStore, createAiTaskQueue, createWorker, createDownloader, withDownloads, queueOptionsFromConfig, buildQueueProviders, resolveOptions } = require('./queue');
+const { createAiTaskStore, createAiTaskQueue, createWorker, createDownloader, withDownloads, queueOptionsFromConfig, buildQueueProviders, resolveOptions, createQueueProvider } = require('./queue');
 const { createSpendService, createEstimator } = require('./spend');
 const { createCloud } = require('./cloud');
+const { createJwksProvider } = require('./cloud/jwks');
+const { createPluginHost } = require('./plugins');
 const { createGenerationService } = require('./generation');
 const { createBatchService, createBatchScheduler, attachToWorker } = require('./batch');
 const { localTokenGuard } = require('./utils/localToken');
@@ -19,9 +21,10 @@ function createAiQueue({ config, db, log, storageRoot, providers, onTaskFinished
   // 价格表：已验证的云端目录优先，否则内置 prices.json（刷新后下次启动生效）
   const spend = createSpendService(db, { estimator: createEstimator(cloud.catalog.effectivePrices()) });
   const downloader = createDownloader({ storageDir: storageRoot });
+  const live = withDownloads(providers, downloader); // the queue reads this map lazily, so plugins installed later can be added
   const queue = createAiTaskQueue({
     store,
-    providers: withDownloads(providers, downloader),
+    providers: live,
     ...queueOptionsFromConfig(config),
     spendGuard: (t) => spend.guardTask(t),
     hooks: { onRateLimit: (e) => log.warn && log.warn('ai queue rate limited', e) },
@@ -34,7 +37,9 @@ function createAiQueue({ config, db, log, storageRoot, providers, onTaskFinished
     },
     onError: (e) => log.error && log.error('ai queue worker', { error: e && e.message }),
   });
-  return { store, queue, worker, downloader, spend };
+  const hasProvider = (name) => Object.prototype.hasOwnProperty.call(live, name);
+  const addProvider = (name, p) => { live[name] = withDownloads({ [name]: p }, downloader)[name]; };
+  return { store, queue, worker, downloader, spend, hasProvider, addProvider };
 }
 
 function createApp(opts = {}) {
@@ -105,6 +110,12 @@ function createApp(opts = {}) {
 
   // 持久化 AI 任务队列 + worker（由 server.js / 桌面主进程调用 aiQueue.worker.start()）
   const cloud = opts.cloud || createCloud({ config, db, log: logger });
+  // P3-P 插件：启动时扫描插件目录、用离线缓存的官方公钥验签并注册为服务商；缺公钥的在后台联网补验
+  let ensureQueueProviders = () => {};
+  const pluginHost = opts.pluginHost || createPluginHost({
+    db, config, log, jwks: createJwksProvider({ db, http: cloud.http }), cloudHttp: cloud.http, onChange: () => ensureQueueProviders(),
+  });
+  pluginHost.scan();
   let generation = null; // I1：任务成功后写回数据内核（在 aiQueue 之后创建，所以这里用闭包取）
   let batch = null; // P3-B：批次调度（任务结束时唤醒）
   const aiQueue = createAiQueue({
@@ -116,6 +127,13 @@ function createApp(opts = {}) {
       if (opts.onTaskFinished) opts.onTaskFinished(t);
     },
   });
+  // 运行中安装的插件也要有队列适配器（缺的任务会以 PROVIDER_NOT_AVAILABLE 失败，不会崩）
+  ensureQueueProviders = () => {
+    for (const id of pluginHost.installedIds()) {
+      if (!aiQueue.hasProvider(id)) aiQueue.addProvider(id, createQueueProvider(id, { storageDir: storageRoot, listConfigs: opts.listConfigs || ((type) => require('./services/aiConfigService').listConfigsInternal(db, type)) }));
+    }
+  };
+  ensureQueueProviders();
 
   const coreProvider = opts.getCore ? null : require('./export/coreProvider').createCoreProvider({ endpoint: process.env.LYCORE_ENDPOINT });
   const getCore = opts.getCore || (coreProvider && coreProvider.getCore);
@@ -140,7 +158,7 @@ function createApp(opts = {}) {
     db, spend: aiQueue.spend, log, cloud, listConfigs: opts.listConfigs,
     catalogModels: () => { try { return cloud.catalog.getCatalog().models || []; } catch (_) { return []; } },
   });
-  app.use('/api/v1', setupRouter(config, db, log, aiQueue, cloud, { storageRoot, exporter: opts.exporter, getCore, generation, batch, templates, consistency }));
+  app.use('/api/v1', setupRouter(config, db, log, aiQueue, cloud, { storageRoot, exporter: opts.exporter, getCore, generation, batch, templates, consistency, pluginHost }));
 
   // 前端静态资源（sxy：web/dist）；Electron 打包时可设 WEB_DIST_PATH
   const webDist = process.env.WEB_DIST_PATH || path.join(process.cwd(), '..', 'frontweb', 'dist');
@@ -188,10 +206,13 @@ function createApp(opts = {}) {
     }
   });
 
-  // 启动时尽力刷新一次目录（云端未配置/离线都静默跳过）
-  if (cloud.isConfigured() && opts.cloudAutoSync !== false) cloud.catalog.refresh().catch(() => {});
+  // 启动时尽力刷新一次目录（云端未配置/离线都静默跳过）；签名插件缺公钥时顺带拉取 JWKS 复验，再对一次插件目录取审核日期
+  if (cloud.isConfigured() && opts.cloudAutoSync !== false) {
+    cloud.catalog.refresh().catch(() => {});
+    pluginHost.refreshKeys().catch(() => {}).then(() => pluginHost.refreshCatalog()).catch(() => {});
+  }
 
-  return { app, config, db, aiQueue, cloud };
+  return { app, config, db, aiQueue, cloud, pluginHost };
 }
 
 module.exports = { createApp };

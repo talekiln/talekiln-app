@@ -51,8 +51,11 @@ function createGuardedFetch(fetchImpl, manifest, onRequest) {
   };
 }
 
-/** Read and validate a plugin folder (manifest.json + entry). Does not run any plugin code until instantiate(). */
-function loadPlugin(dir) {
+/**
+ * Read and validate manifest.json only. Runs no plugin code, so a host can verify the signature
+ * (see signing.js) before loadPlugin() requires the entry file.
+ */
+function readPluginManifest(dir) {
   const root = fs.realpathSync(dir);
   let raw;
   try { raw = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8')); } catch (e) {
@@ -60,6 +63,13 @@ function loadPlugin(dir) {
   }
   const v = validateManifest(raw);
   if (!v.ok) throw new Error(`invalid manifest: ${v.errors.join('; ')}`);
+  return { root, manifest: v.manifest, raw };
+}
+
+/** Read and validate a plugin folder (manifest.json + entry). Requires the entry file; does not call createAdapter(). */
+function loadPlugin(dir) {
+  const { root, manifest } = readPluginManifest(dir);
+  const v = { manifest };
   const entryPath = fs.realpathSync(path.join(root, v.manifest.entry));
   if (entryPath !== root && !entryPath.startsWith(root + path.sep)) throw new Error('entry escapes the plugin folder');
   // eslint-disable-next-line global-require, import/no-dynamic-require
@@ -90,4 +100,4 @@ function instantiate(plugin, cfg = {}) {
   return { manifest, adapter, id: manifest.name, label: manifest.label || adapter.label || manifest.name };
 }
 
-module.exports = { validateAdapter, createGuardedFetch, loadPlugin, instantiate };
+module.exports = { validateAdapter, createGuardedFetch, readPluginManifest, loadPlugin, instantiate };
