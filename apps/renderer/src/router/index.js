@@ -165,6 +165,13 @@ const router = createRouter({
       name: 'plugins',
       component: () => import('@/views/PluginsPage.vue'),
       meta: { title: '插件与服务商' }
+    },
+    // P3-K
+    {
+      path: '/settings/backup',
+      name: 'backup',
+      component: () => import('@/views/BackupPage.vue'),
+      meta: { title: '云备份' }
     }
   ]
 })

@@ -524,6 +524,36 @@
       "scope": "local",
       "message": "这轮计划之后还有别的修改，不能单独撤销",
       "action": "先在顶栏撤销后面的修改，或在版本历史里回到这一步"
+    },
+    "BACKUP_NOT_CONFIGURED": {
+      "scope": "local",
+      "message": "尚未配置云备份",
+      "action": "到「云备份」页填写对象存储地址、存储桶、Access Key 与 Secret Key 后再试"
+    },
+    "BACKUP_ENDPOINT_INVALID": {
+      "scope": "local",
+      "message": "对象存储地址不合法",
+      "action": "地址必须是 https://，或指向本机 / 局域网（10.x、172.16–31.x、192.168.x）的 http://"
+    },
+    "BACKUP_UNREACHABLE": {
+      "scope": "local",
+      "message": "连不上对象存储",
+      "action": "检查网络、地址与端口；家庭 NAS 上的 MinIO 需要在同一局域网内"
+    },
+    "BACKUP_AUTH": {
+      "scope": "local",
+      "message": "对象存储拒绝了访问凭据",
+      "action": "核对 Access Key / Secret Key、区域（region）以及该账号对存储桶的权限"
+    },
+    "BACKUP_FAILED": {
+      "scope": "local",
+      "message": "备份操作失败",
+      "action": "查看错误详情后重试；反复出现请在反馈中附上日志"
+    },
+    "BACKUP_CHECKSUM": {
+      "scope": "local",
+      "message": "快照校验失败，已拒绝恢复",
+      "action": "下载的文件与清单里的 sha256 不一致，可能被改动或损坏；换一个快照恢复"
     }
   }
 }

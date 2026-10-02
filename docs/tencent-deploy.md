@@ -194,3 +194,85 @@ curl -fsS https://api.你的域名.com/.well-known/licence-jwks.json   # 应同�
 6. 每一步都进审计日志（「管理员与审计」页：登记插件版本 / 通过插件审核 / 驳回插件版本 / 官方签名插件版本），运营越权点签名也会被记录。
 
 待决（Jay）：离线备份与解密口令由谁持有；是否定期轮换（例如每年）；审核员名单。
+
+## 8. 对象存储（MinIO）
+
+决定：先自己搭 MinIO，后续再接第三方。桌面端的「云备份」（P3-K，`docs/phase3-backup.md`）走 S3 兼容接口，所以今天指向这台 MinIO，以后换阿里云 OSS（S3 兼容接口）、腾讯云 COS 或 Cloudflare R2 只要改地址 / 区域 / 存储桶，客户端代码不动。同一套桶布局也是工作室版共享素材库（前缀 `shared/`）的基础。
+
+### 8.1 启动
+
+```bash
+cd packages/cloud
+# .env 里加：MINIO_ROOT_USER=<管理员账号>  MINIO_ROOT_PASSWORD=<至少 8 位的随机口令>
+#            MINIO_SERVER_URL=https://s3.你的域名.com  MINIO_BROWSER_REDIRECT_URL=https://s3.你的域名.com/console（可选）
+docker compose -f docker-compose.yml -f docker-compose.minio.yml up -d
+curl -fsS http://127.0.0.1:9000/minio/health/live && echo ok
+```
+
+`docker-compose.minio.yml` 只把 9000（S3 API）和 9001（控制台）绑到 `127.0.0.1`：对外只走下面的 Caddy。数据在卷 `miniodata`。大陆机房拉不到 Docker Hub 时在 `.env` 里把 `MINIO_IMAGE` 换成镜像站地址（同 2.5 节）。
+
+### 8.2 Caddy：`s3.你的域名.com` -> 127.0.0.1:9000
+
+```
+s3.你的域名.com {
+  reverse_proxy 127.0.0.1:9000
+  request_body {
+    max_size 2GB
+  }
+}
+```
+
+`sudo systemctl reload caddy` 后 `curl -fsS https://s3.你的域名.com/minio/health/live`。ICP 的注意事项与 API 域名一样（第 0 节）：大陆服务器上没备案的域名 80/443 会被拦，证书也签不下来。路径式寻址（MinIO 默认）下不需要通配符证书；桌面端默认就是路径式。控制台不对公网开放，需要时 `ssh -L 9001:127.0.0.1:9001 服务器` 后本机打开 `http://127.0.0.1:9001`。
+
+### 8.3 存储桶与最小权限的访问密钥（给桌面端）
+
+管理员账号只用来建桶和建用户，**不要**填进桌面端。在服务器上用容器自带的 `mc`：
+
+```bash
+alias mc='docker compose -f docker-compose.yml -f docker-compose.minio.yml exec minio mc'
+mc alias set local http://127.0.0.1:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
+mc mb local/talekiln-backup
+mc anonymous set none local/talekiln-backup           # 不允许匿名访问
+
+# 只能读写 talekiln-backup 桶里 talekiln/ 前缀的策略
+cat > /tmp/backup-policy.json <<'JSON'
+{ "Version": "2012-10-17", "Statement": [
+  { "Effect": "Allow", "Action": ["s3:ListBucket", "s3:GetBucketLocation"], "Resource": ["arn:aws:s3:::talekiln-backup"],
+    "Condition": { "StringLike": { "s3:prefix": ["talekiln/*", "talekiln"] } } },
+  { "Effect": "Allow", "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"], "Resource": ["arn:aws:s3:::talekiln-backup/talekiln/*"] }
+] }
+JSON
+docker compose -f docker-compose.yml -f docker-compose.minio.yml cp /tmp/backup-policy.json minio:/tmp/backup-policy.json
+mc admin policy create local talekiln-backup-rw /tmp/backup-policy.json
+mc admin user add local <桌面端AccessKey> <桌面端SecretKey>       # 用随机串，各 20+ 位
+mc admin policy attach local talekiln-backup-rw --user <桌面端AccessKey>
+```
+
+每个用户（或每台机器）一把 Key，泄露就 `mc admin user remove` 单独吊销。`ListBucket` 必须放开 `talekiln/` 前缀：客户端的「测试连接」会 `HEAD bucket` 加一次前缀列举，快照列表与保留策略也靠它。
+
+### 8.4 桌面端设置
+
+「云备份」页填：地址 `https://s3.你的域名.com`，区域 `us-east-1`（MinIO 默认；没特意配就是它），存储桶 `talekiln-backup`，前缀 `talekiln`，Access Key / Secret Key 用上一步建的用户，勾选「路径式寻址」。「测试连接」通过后再保存；Secret Key 保存在系统密钥存储里，设置文件里没有。家里 NAS 上的 MinIO 可以直接用 `http://192.168.x.x:9000`（客户端只对本机 / 局域网地址放行 http）。
+
+### 8.5 备份 MinIO 自己的数据
+
+对象存储是用户项目的异地副本，它自己也要有副本：
+
+```bash
+docker run --rm --volumes-from "$(docker compose -f docker-compose.yml -f docker-compose.minio.yml ps -q minio)" -v "$PWD:/backup" alpine \
+  tar czf /backup/minio-data-$(date +%F).tgz /data
+```
+
+每天一次，和 PostgreSQL 的 `pg_dump` 一起拷到机外；更省事的是 `mc mirror local/talekiln-backup <另一台机器或第三方桶>`。每个快照是独立的 zip + json 一对，拷到一半的快照在恢复时会被 sha256 校验拒绝，不会悄悄恢复出坏数据。
+
+### 8.6 换第三方对象存储
+
+任何 S3 兼容服务都行，桌面端只改设置：
+
+| 服务 | 地址 | 区域 | 寻址 |
+|---|---|---|---|
+| 阿里云 OSS（S3 兼容接口） | `https://s3.oss-cn-hangzhou.aliyuncs.com` 之类 | `oss-cn-hangzhou` | 虚拟主机式（取消勾选「路径式」） |
+| 腾讯云 COS | `https://cos.ap-shanghai.myqcloud.com` 之类 | `ap-shanghai` | 虚拟主机式 |
+| Cloudflare R2 | `https://<账号id>.r2.cloudflarestorage.com` | `auto` | 路径式 |
+
+以上地址格式按各家当前文档为准，这里没有在真实账号上验证过。第三方的 Key 同样只给单桶、单前缀的最小权限。
