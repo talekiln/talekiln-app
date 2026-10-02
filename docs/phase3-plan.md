@@ -38,10 +38,17 @@
 
 自动化：内核一致性套件保持 0 失败；一致性评分对“同图”“换色”“完全不同”三类样例的分数单调；选镜改片的降级路径对样例视频拼接后时长误差小于 1 帧；批量生成在并发上限与预算上限下的调度用假厂商测；模板套用后内核图通过校验且估价等于逐镜估价之和；插件签名错误、权限越界、SDK 版本不符都被拒；导演模式对录制的计划能干跑、执行、整体撤销后图与执行前一致。人工：Windows 真机跑一遍每个页面，真 Key 跑一次选镜改片与导演模式。
 
-## 进度
+## 进度（2026-10-02 上午）
 
-（随合入更新）
+第一批六个工作包已全部合入 `claude/phase3-foundation-mxao0h`（草稿 PR #6，base 二期分支）。合入后全量测试通过：local 592、renderer 255、kernel 198（含一致性套件）、cloud 99、plugin-sdk 64、desktop 69、admin 37、core（cargo）65；renderer 与 admin 都能 `vite build`；密钥扫描通过。合并时解决的冲突只在路由挂载、迁移编号、错误码表、命令面板、Prisma 模型列表这几处；两处语义修正：模板套用也给视频节点写参考图哈希（一致性包改了输入同步规则），`editShotRegion` 进共享意图表但对导演模式排除（改片要先估价确认）。
 
-- P3-C 角色一致性：分支 `p3-consistency`，自动化测试通过；真 Key 分数分布、Windows 真机未验证。见 `docs/phase3-consistency.md`。
-- P3-P 插件适配器：分支 `p3-plugins`。SDK 签名/验签与 `sign-plugin.mjs`，本地迁移 32 `installed_plugins`、插件宿主（扫描、离线验签、开发者模式、安装/删除、接入注册表与队列）与 `/plugins` 接口，云端 PluginRegistry（登记/审核/签名/公开目录，迁移 `20261005000000_plugin_registry`），插件页 `/settings/plugins`。详见 `docs/phase3-plugins.md`；真实厂商插件未写，真机未验。
-- P3-R 选镜改片：分支 `p3-region-edit`，见 docs/phase3-region-edit.md。内核意图 `editShotRegion` / `adoptShotVersion`（edit 进 cacheKey）、迁移 29 `edit_regions`、服务 `packages/local/src/regionEdit/`（估算只算重做的那一段；厂商能力位 `video.edit`，百炼 / 方舟未实现则走“截两帧 -> 首尾帧生视频 -> ffmpeg 拼接”的降级路径；结果作为新版本入图、不自动采用）、路由 `POST /shots/:id/edit-region`、`GET /shots/:id/edit-regions`、`POST /shots/:id/adopt-version`、分镜工作台「选镜改片」面板与基于内核版本的 V1..Vn / A/B 对比 / 采用。自动化：拼接后时长误差在一帧内（lavfi 样例）。未验证：百炼是否有带遮罩的视频编辑模型、降级路径接缝效果（真机）。
+| 包 | 状态 | 未验证 |
+|---|---|---|
+| P3-C 角色一致性 | lycore `consistency.score` / `consistency.pick_reference`（感知哈希 + 直方图 + 主色调）、迁移 28、生成写回后自动评分、`GET /episodes/:id/consistency`、参考图自动挑选、视频请求带锁定参考图，见 `docs/phase3-consistency.md` | 真实出图的分数分布（阈值 60/40 来自合成样例）；算法认不出人脸，是否引入小模型待定；Windows |
+| P3-R 选镜改片 | 内核意图 `editShotRegion` / `adoptShotVersion`、迁移 29、估算只算重做的一段、能力位 `video.edit`、降级拼接路径、工作台改片面板与内核版本 A/B，见 `docs/phase3-region-edit.md` | 百炼 / 方舟是否有带遮罩的视频编辑模型；拼接接缝的真机效果 |
+| P3-B 批量生成 | 迁移 30、批次服务与调度器（按厂商并发、预算上限、夜间时段、重试/跳过/暂停）、`/batches` 接口、批次页，见 `docs/phase3-batch.md` | 真 Key 多集批次；在途 1.2 倍预算系数是否过于保守 |
+| P3-T 模板市场 | 模板包格式与三套内置模板、迁移 31、估价与一键套用（一笔内核事务）、官方签名校验、专业版门槛、云端 Template 模块与后台页、模板市场页，见 `docs/phase3-templates.md` | 两个页面未在浏览器里点过；云端 Prisma 实现只在 CI 的 Postgres 作业跑；模板文案需运营填充 |
+| P3-P 插件适配器 | SDK 签名/验签与 `sign-plugin.mjs`、迁移 32、插件宿主（扫描、离线验签、开发者模式、安装/删除、接入注册表与队列）、`/plugins` 接口、云端 PluginRegistry、插件页，见 `docs/phase3-plugins.md` | 真实厂商插件（可灵、Vidu、MiniMax）未写；签名私钥保管与轮换是经营决定；插件仍在进程内运行 |
+| P3-D 导演模式 | 迁移 33、计划 / 校验 / 干跑 / 影响与花费 / 一笔事务执行 / 撤销、`/episodes/:id/director/*` 接口、右侧导演面板，见 `docs/phase3-director.md` | 从未对真实文本模型跑过（计划质量、修复轮次、长剧集上下文） |
+
+下一批：Windows 真机过一遍六个页面；真 Key 跑选镜改片与导演模式并调阈值和提示词；等 Jay 决定的项见上文。
