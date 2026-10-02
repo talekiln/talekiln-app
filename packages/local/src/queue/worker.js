@@ -102,7 +102,7 @@ function createWorker({ queue, store, config, setTimer = setTimeout, clearTimer 
     if (!running) return;
     try {
       const r = await runOnce();
-      delay = nextLoopDelay(delay, !!(r && (r.submitted || r.polled)), o);
+      delay = nextLoopDelay(delay, !!(r && (r.submitted || r.polled || r.downloaded)), o);
     } catch (e) {
       onError(e);
       delay = o.idle_max_ms;
