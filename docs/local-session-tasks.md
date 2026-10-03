@@ -33,6 +33,9 @@
 ### 5. 云端全部合并后本地独立验证 —— 已完成（2026-10-02，main aa117e1，见 windows-test-results/2026-10-02.md 末节）
 拉取 main 后独立跑全部包的测试、密钥扫描、内核一致性套件；并行跑 packages/local 全量时暴露两处问题（编码器检测 5 秒超时、kernelCompat 测试的 keep-alive 竞争），已在 `win/post-merge-verify` 分支修掉并补测试。
 
+### 6. 旧测试目录的空镜头导出问题 —— 已完成（2026-10-03，分支 win/empty-shot-precheck，见 windows-test-results/2026-10-02.md「空镜头前置检查」）
+分镜页插入后没生成画面的空镜头投影成 `asset_ref=null` 的视频片段，导出只报「部分素材文件不存在」。改法：导出前置检查指名「第 N 镜还没有画面素材」（方案 a），不动内核投影；黑场占位（方案 b）待产品决定。打包版用旧测试目录实测通过。
+
 ## 复制给本地 Claude Code 的提示词
 
 > 你在 Windows 上负责 talekiln-app 一期收尾。先读 `docs/local-session-tasks.md`、`docs/windows-collab.md`、`docs/kernel-design.md`。把 `origin/claude/phase1-foundation-mxao0h` 合并进 `win/testing`，按任务清单顺序做 1 到 4 项，每项带测试，业务写入走内核意图，改完跑 `pnpm test`、内核一致性报告和 `pnpm secrets:scan`。Key 只用本机环境变量，绝不写进文件或提交。每完成一项就推送 `win/testing` 并在结果文档里记录；遇到需要产品决定的问题先记录，不要自行改变范围。

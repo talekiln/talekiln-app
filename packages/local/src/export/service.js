@@ -102,6 +102,20 @@ function createExportService(db, {
     return out;
   }
 
+  /** 给带 storyboard_id 的问题条目补上分镜页显示的镜号（storyboard_number），错误文案就能说「第 N 镜」。 */
+  function labelShots(problems) {
+    const ids = [...new Set(problems.map((p) => p.storyboard_id).filter((id) => Number.isInteger(id)))];
+    if (!ids.length) return;
+    let rows = [];
+    try {
+      rows = db.prepare(`SELECT id, storyboard_number FROM storyboards WHERE id IN (${ids.map(() => '?').join(',')})`).all(...ids);
+    } catch (_) { /* 老库没有 storyboards 表时退回「镜头 id」 */ }
+    const byId = new Map(rows.map((r) => [r.id, r.storyboard_number]));
+    for (const p of problems) {
+      if (byId.has(p.storyboard_id) && byId.get(p.storyboard_id) != null) p.storyboard_number = byId.get(p.storyboard_id);
+    }
+  }
+
   /** Validate params, build the render.start request, start the job. Returns { job_id, ... }. */
   async function start(req = {}) {
     const episodeId = Number(req.episode_id);
@@ -128,7 +142,10 @@ function createExportService(db, {
     if (!usable.includes(encoder)) throw new ExportError(`编码器 ${encoder} 在本机不可用`, 400, 'ENCODER_UNAVAILABLE');
 
     const { timeline: resolved, problems } = resolveTimelineAssets(tl, storageRoot);
-    if (problems.length) throw new ExportError(describeProblems(problems), 400, 'EXPORT_ASSETS', { problems });
+    if (problems.length) {
+      labelShots(problems);
+      throw new ExportError(describeProblems(problems), 400, 'EXPORT_ASSETS', { problems });
+    }
 
     const settings = aigc.getSettings(db);
     const produceId = newId();
