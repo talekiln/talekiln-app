@@ -8,6 +8,9 @@ import {
   getStylePromptEn,
   getStylePromptZh,
 } from '../src/constants/styleOptions.js'
+import { setLocale } from '../src/i18n/index.js'
+
+setLocale('zh-CN')
 
 test('preset returns zh/en prompts', () => {
   const m = stylePromptMetadataForSave('realistic')
@@ -62,4 +65,20 @@ test('findStyleOption does not treat custom as preset', () => {
 test('getStylePrompt helpers do not return literal custom', () => {
   assert.equal(getStylePromptEn(CUSTOM_STYLE_VALUE), undefined)
   assert.equal(getStylePromptZh(CUSTOM_STYLE_VALUE), undefined)
+})
+
+test('style names follow the language; prompts stay as sent to the model', async () => {
+  const { generationStyleOptions } = await import('../src/constants/styleOptions.js')
+  try {
+    setLocale('en')
+    assert.equal(getStyleLabel('realistic'), 'Realistic')
+    assert.equal(getStyleLabel('2d gufeng'), '2D Gufeng')
+    assert.equal(getStyleLabel(CUSTOM_STYLE_VALUE), 'Custom')
+    assert.equal(generationStyleOptions[0].label, 'Realistic / Film')
+    assert.ok(findStyleOption('realistic').label)
+    assert.ok(findStyleOption('realistic').prompt.includes('写实'))
+    assert.ok(generationStyleOptions.every((g) => g.label && g.options.every((o) => o.label && o.label !== o.value)))
+  } finally {
+    setLocale('zh-CN')
+  }
 })

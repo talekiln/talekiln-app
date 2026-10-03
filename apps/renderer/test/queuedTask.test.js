@@ -1,6 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { makeQueuedId, parseQueuedId, toLegacyTask } from '../src/utils/queuedTask.js'
+import { setLocale } from '../src/i18n/index.js'
+
+setLocale('zh-CN')
 
 test('queued id round-trips; non-queued ids are ignored', () => {
   const id = makeQueuedId({ taskId: 'abc-1', episodeId: 3, storyboardId: 9, kind: 'video' })

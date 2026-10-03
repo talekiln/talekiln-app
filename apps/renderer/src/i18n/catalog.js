@@ -13,8 +13,10 @@ import timeline from './messages/timeline.js'
 import history from './messages/history.js'
 import director from './messages/director.js'
 import commands from './messages/commands.js'
+import style from './messages/style.js'
+import generation from './messages/generation.js'
 
-const all = [common, shell, script, assets, storyboard, generate, exportMsgs, canvas, home, backup, routes, timeline, history, director, commands]
+const all = [common, shell, script, assets, storyboard, generate, exportMsgs, canvas, home, backup, routes, timeline, history, director, commands, style, generation]
 const catalog = { 'zh-CN': {}, en: {} }
 for (const m of all) {
   Object.assign(catalog['zh-CN'], m['zh-CN'])
