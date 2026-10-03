@@ -25,6 +25,8 @@ const timelineRoutes = require('./timelines');
 const scriptgenRoutes = require('./scriptgen');
 const workbenchRoutes = require('./workbench');
 const onboardingRoutes = require('./onboarding');
+const episodeRoutes = require('./episodes');
+const legacyGapsRoutes = require('./legacyGaps');
 
 function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
   const r = express.Router();
@@ -54,6 +56,8 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
   const scriptgen = scriptgenRoutes(db, log, extras.scriptgenDeps);
   const workbench = workbenchRoutes(db, log);
   const onboarding = onboardingRoutes(db, log, cfg);
+  const episodes = episodeRoutes(db, cfg, log);
+  const legacyGaps = legacyGapsRoutes(db, log, extras.studio);
 
   // ---------- dramas ----------
   r.get('/dramas', drama.listDramas);
@@ -94,6 +98,7 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
   r.put('/dramas/:id/progress', drama.saveProgress);
   r.put('/dramas/:id/canvas-layout', drama.saveCanvasLayout);
   r.get('/dramas/:id/props', drama.listProps);
+  r.get('/dramas/:id/scenes', legacyGaps.dramaScenes); // 必须在 /dramas/:id 之前
   r.get('/dramas/:id', drama.getDrama);
   r.put('/dramas/:id', drama.updateDrama);
   r.delete('/dramas/:id', drama.deleteDrama);
@@ -179,6 +184,7 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
   r.put('/characters/:id/image', characters.putImage);
   r.put('/characters/:id/image-from-library', characters.imageFromLibrary);
   r.post('/characters/:id/add-to-library', characters.addToLibrary);
+  r.post('/characters/:id/add-to-team-library', legacyGaps.addCharacterToTeamLibrary);
   r.post('/characters/:id/add-to-material-library', characters.addToMaterialLibrary);
   r.post('/characters/:id/sd2-certify', characters.sd2Certify);
   r.post('/characters/:id/sd2-certify/refresh', characters.sd2CertifyRefresh);
@@ -222,7 +228,7 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
   // 之前可能有部分路由指向了 storyboards.episodeStoryboardsGenerate，这可能导致参数解析不一致
   r.post('/episodes/:episode_id/storyboards', drama.generateStoryboard);
   r.post('/episodes/:episode_id/props/extract', prop.extractProps);
-  r.post('/episodes/:episode_id/characters/extract', stub.episodeCharactersExtract);
+  r.post('/episodes/:episode_id/characters/extract', episodes.extractCharacters);
   r.get('/episodes/:episode_id/storyboards', storyboards.episodeStoryboardsGet);
   r.post('/episodes/:episode_id/finalize', drama.finalizeEpisode);
   r.get('/episodes/:episode_id/download', drama.downloadEpisodeVideo);
@@ -353,6 +359,7 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
 
   // ---------- data kernel: project graph / views / tx / intents ----------
   const kernelRoutes = require('./kernel')(db, log);
+  r.get('/episodes/:id', episodes.getOne);
   r.get('/episodes/:id/graph', kernelRoutes.getGraph);
   r.get('/episodes/:id/views/:view', kernelRoutes.getView);
   r.get('/episodes/:id/history', kernelRoutes.getHistory);

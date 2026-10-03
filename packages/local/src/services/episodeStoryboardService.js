@@ -2,7 +2,7 @@
 const taskService = require('./taskService');
 const aiClient = require('./aiClient');
 const promptI18n = require('./promptI18n');
-const { syncStoryboardCharacters } = require('./imageService');
+const backupHooks = require('../backup/hooks');
 const safeJson = require('../utils/safeJson');
 const { safeParseAIJSON, extractJsonCandidate, repairTruncatedJsonArray, extractFirstArray } = safeJson;
 const loadConfig = require('../config').loadConfig;
@@ -477,98 +477,11 @@ function deriveStoryboardFieldsFromAi(sb, style, videoRatio, opts = {}) {
   };
 }
 
-/** 用最终解析的分镜对象覆盖已存在的行（修正流式增量先入库时缺 narration 等字段的问题） */
-function updateStoryboardRowFromDerived(db, existingId, episodeIdNum, d, sb, now) {
-  db.prepare(
-    `UPDATE storyboards SET
-      scene_id = ?, title = ?, description = ?, location = ?, time = ?, duration = ?,
-      dialogue = ?, narration = ?, action = ?, result = ?, atmosphere = ?,
-      image_prompt = ?, video_prompt = ?, characters = ?,
-      shot_type = ?, angle = ?, angle_h = ?, angle_v = ?, angle_s = ?, movement = ?,
-      lighting_style = ?, depth_of_field = ?, segment_index = ?, segment_title = ?,
-      creation_mode = ?, universal_segment_text = ?,
-      updated_at = ?
-     WHERE id = ? AND episode_id = ? AND deleted_at IS NULL`
-  ).run(
-    d.sceneId,
-    d.title || null,
-    d.description,
-    sb.location ?? null,
-    sb.time ?? null,
-    sb.duration ?? 5,
-    d.dialogue || null,
-    d.narration || null,
-    d.action || null,
-    d.result || null,
-    sb.atmosphere ?? null,
-    d.imagePrompt,
-    d.videoPrompt,
-    d.charactersJson,
-    d.shotType || null,
-    d.angle,
-    d.angleH,
-    d.angleV,
-    d.angleS,
-    d.movement || null,
-    d.lightingStyle,
-    d.depthOfField,
-    d.segmentIndex,
-    d.segmentTitle,
-    d.creationMode || 'classic',
-    d.universalSegmentText != null ? d.universalSegmentText : null,
-    now,
-    existingId,
-    episodeIdNum
-  );
-  try {
-    db.prepare('DELETE FROM storyboard_props WHERE storyboard_id = ?').run(existingId);
-    if (d.propIds.length > 0) {
-      const insProp = db.prepare('INSERT OR IGNORE INTO storyboard_props (storyboard_id, prop_id) VALUES (?, ?)');
-      for (const pid of d.propIds) insProp.run(existingId, pid);
-    }
-  } catch (_) {}
-}
-
 /**
- * 将单个分镜对象插入 DB，供增量流式保存使用。
- * 返回插入后的 id，出错则返回 null（不抛异常）。
+ * 在流式输出过程中，从已积累的文本里解析出已完整闭合的分镜，登记到内存 Map（镜号 -> 分镜对象）。
+ * 只在内存里收集：库和项目图在最终那次内核事务之前一字不动；连接中断 / 解析失败时用它恢复已流出的部分。
  */
-function insertOneStoryboard(db, episodeIdNum, sb, style, videoRatio, now, deriveOpts = {}) {
-  const d = deriveStoryboardFieldsFromAi(sb, style, videoRatio, deriveOpts);
-  const shotNumber = d.shotNumber;
-  try {
-    db.prepare(
-      `INSERT INTO storyboards (episode_id, scene_id, storyboard_number, title, description, location, time, duration, dialogue, narration, action, result, atmosphere, image_prompt, video_prompt, characters, shot_type, angle, angle_h, angle_v, angle_s, movement, lighting_style, depth_of_field, segment_index, segment_title, creation_mode, universal_segment_text, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
-    ).run(
-      episodeIdNum, d.sceneId, shotNumber, d.title || null, d.description,
-      sb.location ?? null, sb.time ?? null, sb.duration ?? 5,
-      d.dialogue || null, d.narration || null, d.action || null, d.result || null, sb.atmosphere ?? null,
-      d.imagePrompt, d.videoPrompt, d.charactersJson,
-      d.shotType || null, d.angle, d.angleH, d.angleV, d.angleS,
-      d.movement || null, d.lightingStyle, d.depthOfField, d.segmentIndex, d.segmentTitle,
-      d.creationMode || 'classic',
-      d.universalSegmentText != null ? d.universalSegmentText : null,
-      now, now
-    );
-    const newId = db.prepare('SELECT last_insert_rowid() as id').get().id;
-    if (d.propIds.length > 0) {
-      try {
-        const insProp = db.prepare('INSERT OR IGNORE INTO storyboard_props (storyboard_id, prop_id) VALUES (?, ?)');
-        for (const pid of d.propIds) insProp.run(newId, pid);
-      } catch (_) {}
-    }
-    return newId;
-  } catch (_) {
-    return null;
-  }
-}
-
-/**
- * 在流式输出过程中，从已积累的文本尝试解析并保存尚未保存的分镜。
- * savedNums：已保存的 storyboard_number Set，用于去重。
- */
-function tryIncrementalSave(db, log, episodeIdNum, accumulated, savedNums, style, videoRatio, deriveOpts = {}) {
+function collectStreamed(log, episodeIdNum, accumulated, collected) {
   try {
     let cleaned = accumulated.trim()
       .replace(/^```json\s*/gm, '').replace(/^```\s*/gm, '').replace(/```\s*$/gm, '').trim();
@@ -598,196 +511,109 @@ function tryIncrementalSave(db, log, episodeIdNum, accumulated, savedNums, style
     if (!parsed) return;
     const items = Array.isArray(parsed) ? parsed : extractFirstArray(parsed);
     if (!items || items.length === 0) return;
-    const now = new Date().toISOString();
     let newCount = 0;
     for (const sb of items) {
       const shotNumber = normalizeStoryboardShotNumber(sb);
-      if (shotNumber > 0 && savedNums.has(shotNumber)) continue;
-      const id = insertOneStoryboard(db, episodeIdNum, sb, style, videoRatio, now, deriveOpts);
-      if (id !== null) {
-        savedNums.add(shotNumber);
-        newCount++;
-      }
+      if (!(shotNumber > 0) || collected.has(shotNumber)) continue;
+      collected.set(shotNumber, sb);
+      newCount++;
     }
     if (newCount > 0) {
-      log.info('Storyboard incremental save', { episode_id: episodeIdNum, new_count: newCount, total_saved: savedNums.size });
+      log.info('Storyboard streamed items collected', { episode_id: episodeIdNum, new_count: newCount, total_collected: collected.size });
     }
   } catch (_) { /* 流式解析错误静默忽略，等待最终完整解析 */ }
 }
 
+const asText = (v) => (v == null ? '' : typeof v === 'string' ? v : String(v));
+
+/** 分镜角色补全（字符串匹配，无 AI）：把动作 / 对白 / 结果 / 描述里出现的剧集角色名补进镜头的 characters。与 imageService.syncStoryboardCharacters 同一规则，但在入库前完成，进同一次内核事务。 */
+function completeCharacters(charList, dramaChars, texts) {
+  const list = Array.isArray(charList) ? [...charList] : [];
+  const scanText = texts.filter(Boolean).join(' ').toLowerCase();
+  if (!scanText) return list;
+  const covered = new Set(list.map((c) => Number(typeof c === 'object' && c != null ? c.id : c)));
+  for (const ch of dramaChars) {
+    if (!ch.name || covered.has(ch.id) || !scanText.includes(ch.name.toLowerCase())) continue;
+    list.push({ id: ch.id, name: ch.name });
+    covered.add(ch.id);
+  }
+  return list;
+}
+
 /**
- * @param {Set|null} skipShotNumbers - 已通过增量流式保存的 storyboard_number 集合，跳过重复插入
+ * 整集替换分镜：派生每个分镜的字段 -> 一次内核事务（compat.replaceEpisodeShots：加入新镜头、删除全部旧镜头，同事务物化到旧表）
+ * -> 同一个 SQLite 事务里补写图里没有的列（scene_id / result / 角度分量 / 灯光 / 景深 / 创作模式 / 道具）。
+ * 事务可被 POST /episodes/:id/undo 一步撤销；不重置图、不清日志。
+ * @returns {{ saved: object[], tx: { tx_id: string, can_undo: boolean, applied: boolean } }}
  */
-function saveStoryboards(db, log, episodeId, storyboards, cfg, styleOverride, skipShotNumbers = null, deriveOpts = {}) {
+function saveStoryboards(db, log, episodeId, storyboards, cfg, styleOverride, deriveOpts = {}, opts = {}) {
   const episodeIdNum = Number(episodeId);
   if (storyboards.length === 0) {
     throw new Error('AI生成分镜失败：返回的分镜数量为0');
   }
   const style = (styleOverride && String(styleOverride).trim()) || cfg?.style?.default_style || '';
   const videoRatio = cfg?.style?.default_video_ratio || '16:9';
-  const now = new Date().toISOString();
+  const epRow = db.prepare('SELECT drama_id FROM episodes WHERE id = ? AND deleted_at IS NULL').get(episodeIdNum);
+  const dramaChars = epRow
+    ? db.prepare('SELECT id, name FROM characters WHERE drama_id = ? AND deleted_at IS NULL').all(Number(epRow.drama_id))
+    : [];
 
-  // 仅在非增量模式下才删除旧数据（增量模式时已在流式开始前删除）
-  if (skipShotNumbers === null) {
-    const existing = db.prepare('SELECT id FROM storyboards WHERE episode_id = ? AND deleted_at IS NULL').all(episodeIdNum);
-    if (existing.length > 0) {
-      db.prepare('UPDATE storyboards SET deleted_at = ? WHERE episode_id = ?').run(now, episodeIdNum);
-      require('../kernel/compat').resetGraph(db, episodeIdNum); // 整集重建：旧项目图作废，下次写入从新分镜重新导入
-    }
-  }
-
-  const saved = [];
-  const processedInSave = new Set();
+  const items = [];
+  const extras = [];
+  const processed = new Set();
   for (const sb of storyboards) {
     const shotNumber = normalizeStoryboardShotNumber(sb);
-    if (shotNumber > 0 && processedInSave.has(shotNumber)) {
+    if (shotNumber > 0 && processed.has(shotNumber)) {
       log.warn('Duplicate storyboard_number in final AI batch, skipping extra row', {
         episode_id: episodeIdNum,
         storyboard_number: shotNumber,
       });
       continue;
     }
-
-    // 已由增量流式保存过的分镜：必须用**最终完整 JSON** 再 UPDATE 一行（否则首镜常在流式阶段缺 narration 等字段且永不修正）
-    if (skipShotNumbers && skipShotNumbers.has(shotNumber)) {
-      const existing = db.prepare(
-        'SELECT * FROM storyboards WHERE episode_id = ? AND storyboard_number = ? AND deleted_at IS NULL'
-      ).get(episodeIdNum, shotNumber);
-      if (existing) {
-        const d = deriveStoryboardFieldsFromAi(sb, style, videoRatio, deriveOpts);
-        updateStoryboardRowFromDerived(db, existing.id, episodeIdNum, d, sb, now);
-        log.info('Storyboard merged from final parse after incremental save', {
-          episode_id: episodeIdNum,
-          storyboard_id: existing.id,
-          storyboard_number: shotNumber,
-        });
-        const refreshed = db.prepare(
-          'SELECT * FROM storyboards WHERE id = ? AND deleted_at IS NULL'
-        ).get(existing.id);
-        let propIds = [];
-        try {
-          const propLinks = db.prepare('SELECT prop_id FROM storyboard_props WHERE storyboard_id = ?').all(refreshed.id);
-          propIds = propLinks.map((p) => p.prop_id);
-        } catch (_) {}
-        saved.push({
-          id: refreshed.id,
-          episode_id: episodeIdNum,
-          scene_id: refreshed.scene_id,
-          storyboard_number: shotNumber,
-          title: refreshed.title,
-          description: refreshed.description,
-          location: refreshed.location,
-          time: refreshed.time,
-          duration: refreshed.duration,
-          dialogue: refreshed.dialogue,
-          narration: refreshed.narration ?? null,
-          action: refreshed.action,
-          result: refreshed.result,
-          atmosphere: refreshed.atmosphere,
-          image_prompt: refreshed.image_prompt,
-          video_prompt: refreshed.video_prompt,
-          shot_type: refreshed.shot_type,
-          angle: refreshed.angle,
-          movement: refreshed.movement,
-          segment_index: refreshed.segment_index ?? 0,
-          segment_title: refreshed.segment_title ?? null,
-          creation_mode: refreshed.creation_mode === 'universal' ? 'universal' : 'classic',
-          universal_segment_text: refreshed.universal_segment_text ?? null,
-          characters: (() => { try { return JSON.parse(refreshed.characters || '[]'); } catch (_) { return []; } })(),
-          prop_ids: propIds,
-          status: refreshed.status,
-          created_at: refreshed.created_at,
-          updated_at: refreshed.updated_at,
-        });
-        if (shotNumber > 0) processedInSave.add(shotNumber);
-        continue;
-      }
-      // 流式阶段已登记镜号但库中无行（竞态/异常）：不再 INSERT 重复行
-      if (shotNumber > 0) {
-        log.warn('Incremental shot missing in DB at final save, skipping insert', {
-          episode_id: episodeIdNum,
-          storyboard_number: shotNumber,
-        });
-        continue;
-      }
-    }
-
+    if (shotNumber > 0) processed.add(shotNumber);
     const d = deriveStoryboardFieldsFromAi(sb, style, videoRatio, deriveOpts);
-
-    try {
-      db.prepare(
-        `INSERT INTO storyboards (episode_id, scene_id, storyboard_number, title, description, location, time, duration, dialogue, narration, action, result, atmosphere, image_prompt, video_prompt, characters, shot_type, angle, angle_h, angle_v, angle_s, movement, lighting_style, depth_of_field, segment_index, segment_title, creation_mode, universal_segment_text, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
-      ).run(
-        episodeIdNum, d.sceneId, shotNumber, d.title || null, d.description,
-        sb.location ?? null, sb.time ?? null, sb.duration ?? 5,
-        d.dialogue || null, d.narration || null, d.action || null, d.result || null, sb.atmosphere ?? null,
-        d.imagePrompt, d.videoPrompt, d.charactersJson,
-        d.shotType || null, d.angle, d.angleH, d.angleV, d.angleS,
-        d.movement || null, d.lightingStyle, d.depthOfField, d.segmentIndex, d.segmentTitle,
-        d.creationMode || 'classic',
-        d.universalSegmentText != null ? d.universalSegmentText : null,
-        now, now
-      );
-    } catch (e) {
-      if ((e.message || '').includes('shot_type') || (e.message || '').includes('angle') || (e.message || '').includes('movement') || (e.message || '').includes('result') || (e.message || '').includes('segment') || (e.message || '').includes('narration')) {
-        db.prepare(
-          `INSERT INTO storyboards (episode_id, scene_id, storyboard_number, title, description, location, time, duration, dialogue, action, atmosphere, image_prompt, video_prompt, characters, creation_mode, universal_segment_text, status, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
-        ).run(
-          episodeIdNum, d.sceneId, shotNumber, d.title || null, d.description,
-          sb.location ?? null, sb.time ?? null, sb.duration ?? 5,
-          d.dialogue || null, d.action || null, sb.atmosphere ?? null,
-          d.imagePrompt, d.videoPrompt, d.charactersJson,
-          d.creationMode || 'classic',
-          d.universalSegmentText != null ? d.universalSegmentText : null,
-          now, now
-        );
-      } else {
-        throw e;
-      }
-    }
-    const id = db.prepare('SELECT last_insert_rowid() as id').get().id;
-    if (d.propIds.length > 0) {
-      try {
-        const insProp = db.prepare('INSERT OR IGNORE INTO storyboard_props (storyboard_id, prop_id) VALUES (?, ?)');
-        for (const pid of d.propIds) insProp.run(id, pid);
-      } catch (_) {}
-    }
-    saved.push({
-      id,
-      episode_id: episodeIdNum,
-      scene_id: d.sceneId,
-      storyboard_number: shotNumber,
-      title: d.title || null,
-      description: d.description,
-      location: sb.location ?? null,
-      time: sb.time ?? null,
-      duration: sb.duration ?? 5,
-      dialogue: d.dialogue || null,
-      narration: d.narration || null,
-      action: d.action || null,
-      result: d.result || null,
-      atmosphere: sb.atmosphere ?? null,
-      image_prompt: d.imagePrompt,
-      video_prompt: d.videoPrompt,
-      shot_type: d.shotType || null,
-      angle: d.angle,
-      movement: d.movement || null,
+    let own = [];
+    try { own = JSON.parse(d.charactersJson || '[]'); } catch (_) { own = []; }
+    const characters = completeCharacters(own, dramaChars, [d.action, d.dialogue, d.result, d.description]);
+    items.push({
       segment_index: d.segmentIndex,
       segment_title: d.segmentTitle,
-      creation_mode: d.creationMode || 'classic',
-      universal_segment_text: d.universalSegmentText != null ? d.universalSegmentText : null,
-      characters: Array.isArray(sb.characters) ? sb.characters : [],
-      prop_ids: d.propIds,
-      status: 'pending',
-      created_at: now,
-      updated_at: now,
+      body: {
+        title: asText(d.title), description: asText(d.description), location: asText(sb.location), time: asText(sb.time),
+        duration: sb.duration ?? 5,
+        dialogue: asText(d.dialogue), narration: asText(d.narration), action: asText(d.action), atmosphere: asText(sb.atmosphere),
+        image_prompt: asText(d.imagePrompt), video_prompt: asText(d.videoPrompt),
+        shot_type: asText(d.shotType), angle: asText(d.angle), movement: asText(d.movement),
+        characters,
+      },
     });
-    if (shotNumber > 0) processedInSave.add(shotNumber);
+    extras.push(d);
   }
-  log.info('Storyboards saved', { episode_id: episodeId, count: saved.length });
-  return saved;
+
+  const tx = db.transaction(() => {
+    const r = require('../kernel/compat').replaceEpisodeShots(db, episodeIdNum, items, { txId: opts.txId });
+    const now = new Date().toISOString();
+    const upd = db.prepare(
+      `UPDATE storyboards SET scene_id = ?, result = ?, angle_h = ?, angle_v = ?, angle_s = ?, lighting_style = ?, depth_of_field = ?,
+        creation_mode = ?, universal_segment_text = ?, updated_at = ? WHERE id = ?`
+    );
+    const insProp = db.prepare('INSERT OR IGNORE INTO storyboard_props (storyboard_id, prop_id) VALUES (?, ?)');
+    r.legacy_ids.forEach((id, i) => {
+      const d = extras[i];
+      upd.run(d.sceneId, d.result || null, d.angleH, d.angleV, d.angleS, d.lightingStyle, d.depthOfField,
+        d.creationMode || 'classic', d.universalSegmentText != null ? d.universalSegmentText : null, now, id);
+      try { for (const pid of d.propIds) insProp.run(id, pid); } catch (_) {}
+    });
+    return r;
+  })();
+
+  const saved = getStoryboardsForEpisode(db, episodeIdNum).map((row) => {
+    let propIds = [];
+    try { propIds = db.prepare('SELECT prop_id FROM storyboard_props WHERE storyboard_id = ?').all(row.id).map((p) => p.prop_id); } catch (_) {}
+    return { ...row, prop_ids: propIds };
+  });
+  log.info('Storyboards saved', { episode_id: episodeIdNum, count: saved.length, tx_id: tx.tx_id });
+  return { saved, tx };
 }
 
 /**
@@ -843,17 +669,42 @@ ${lastCtx}
 ${originalUserPrompt}`;
 }
 
-async function processStoryboardGeneration(db, log, cfg, taskId, episodeId, model, style, userPrompt, systemPrompt, includeNarration, universalOmni, targetClipDurationSec = null) {
-  // 增量保存状态放在 try 外，catch 里可用于部分恢复
+async function processStoryboardGeneration(db, log, cfg, taskId, episodeId, model, style, userPrompt, systemPrompt, includeNarration, universalOmni, targetClipDurationSec = null, txId = null) {
+  // 流式已解析出的分镜只在内存里收集（镜号 -> 分镜），catch 里可用于部分恢复；库与项目图直到最终那次内核事务才改动
   const episodeIdNum = Number(episodeId);
-  const streamSavedNums = new Set();
-  const streamStyle = (style && String(style).trim()) || cfg?.style?.default_style || '';
-  const streamVideoRatio = cfg?.style?.default_video_ratio || '16:9';
+  const streamItems = new Map();
+  let committing = false;
   const deriveOpts = {
     universalOmni: !!universalOmni,
     targetClipDuration: targetClipDurationSec != null && Number(targetClipDurationSec) > 0 ? Number(targetClipDurationSec) : null,
   };
   let streamThrottle = 0;
+
+  // 整集重建是一次可撤销的内核事务（finish -> saveStoryboards -> compat.replaceEpisodeShots）：
+  // 生成期间旧分镜原样保留，生成失败也不会丢旧分镜；只有拿到新分镜才一次性替换。
+  const sortedStreamed = () => [...streamItems.entries()].sort((a, b) => a[0] - b[0]).map((e) => e[1]);
+  const finish = async (boards, extra = {}) => {
+    committing = true;
+    taskService.updateTaskStatus(db, taskId, 'processing', 70, '正在保存分镜头...');
+    // 破坏性替换之前先给备份钩子一个机会（Task 5；默认空操作、永不抛错）
+    await backupHooks.beforeDestructive(episodeIdNum, 'regenerate-storyboard');
+    const { saved, tx } = saveStoryboards(db, log, episodeId, boards, cfg, style, deriveOpts, { txId });
+    taskService.updateTaskStatus(db, taskId, 'processing', 90, '正在更新剧集时长...');
+    const totalDuration = saved.reduce((sum, sb) => sum + (Number(sb.duration) || 0), 0);
+    const durationMinutes = Math.ceil((totalDuration + 59) / 60);
+    db.prepare('UPDATE episodes SET duration = ?, updated_at = ? WHERE id = ?').run(durationMinutes, new Date().toISOString(), episodeIdNum);
+    taskService.updateTaskResult(db, taskId, {
+      storyboards: saved,
+      total: saved.length,
+      total_duration: totalDuration,
+      duration_minutes: durationMinutes,
+      truncated: false,
+      ...extra,
+      tx_id: tx.tx_id,
+      can_undo: tx.can_undo,
+    });
+    log.info('Storyboard generation completed', { task_id: taskId, episode_id: episodeId, count: saved.length, tx_id: tx.tx_id });
+  };
 
   try {
     taskService.updateTaskStatus(db, taskId, 'processing', 10, '开始生成分镜头...');
@@ -865,11 +716,6 @@ async function processStoryboardGeneration(db, log, cfg, taskId, episodeId, mode
     });
     logDebugStoryboardPrompts(log, `task-${taskId}-initial`, userPrompt, systemPrompt);
 
-    // 提前删除旧分镜，为增量流式保存腾出位置
-    const deleteNow = new Date().toISOString();
-    db.prepare('UPDATE storyboards SET deleted_at = ? WHERE episode_id = ? AND deleted_at IS NULL').run(deleteNow, episodeIdNum);
-    require('../kernel/compat').resetGraph(db, episodeIdNum); // 整集重建：旧项目图作废，下次写入从新分镜重新导入
-
     // 不使用 json_mode：response_format:json_object 要求返回 JSON 对象而非数组，会导致模型包装成
     // {"storyboards":[...]} 或产生乱码 key，改由 extractFirstArray 统一处理任意包装格式。
     const text = await generateTextForStoryboard(db, log, userPrompt, systemPrompt, {
@@ -878,11 +724,11 @@ async function processStoryboardGeneration(db, log, cfg, taskId, episodeId, mode
       streamCallback: (accumulated) => {
         if (accumulated.length - streamThrottle < 400) return;
         streamThrottle = accumulated.length;
-        tryIncrementalSave(db, log, episodeIdNum, accumulated, streamSavedNums, streamStyle, streamVideoRatio, deriveOpts);
-        // 同步更新任务进度（根据已保存分镜数量）
-        if (streamSavedNums.size > 0) {
+        collectStreamed(log, episodeIdNum, accumulated, streamItems);
+        // 同步更新任务进度（根据已解析分镜数量）
+        if (streamItems.size > 0) {
           taskService.updateTaskStatus(db, taskId, 'processing', 30,
-            `已解析 ${streamSavedNums.size} 个分镜，生成中...`);
+            `已解析 ${streamItems.size} 个分镜，生成中...`);
         }
       },
     });
@@ -911,23 +757,16 @@ async function processStoryboardGeneration(db, log, cfg, taskId, episodeId, mode
       });
 
       // 解析失败时，若流式增量保存已有部分分镜，视为截断的部分成功
-      if (streamSavedNums.size > 0) {
-        const partialBoards = getStoryboardsForEpisode(db, episodeIdNum);
-        if (partialBoards.length > 0) {
-          const totalDuration = partialBoards.reduce((s, sb) => s + (Number(sb.duration) || 0), 0);
-          log.warn('Parse failed but partial storyboards already saved incrementally, treating as truncated success', {
-            task_id: taskId, recovered_count: partialBoards.length, parse_error: e.message,
-          });
-          taskService.updateTaskResult(db, taskId, {
-            storyboards: partialBoards,
-            total: partialBoards.length,
-            total_duration: totalDuration,
-            duration_minutes: Math.ceil((totalDuration + 59) / 60),
-            truncated: true,
-            error_message: `AI输出含JSON格式缺陷（${e.message}），已恢复 ${partialBoards.length} 个分镜`,
-          });
-          return;
-        }
+      if (streamItems.size > 0) {
+        const partialBoards = sortedStreamed();
+        log.warn('Parse failed but partial storyboards were streamed, treating as truncated success', {
+          task_id: taskId, recovered_count: partialBoards.length, parse_error: e.message,
+        });
+        await finish(partialBoards, {
+          truncated: true,
+          error_message: `AI输出含JSON格式缺陷（${e.message}），已恢复 ${partialBoards.length} 个分镜`,
+        });
+        return;
       }
 
       taskService.updateTaskError(db, taskId, '解析分镜头结果失败: ' + (e.message || ''));
@@ -936,22 +775,13 @@ async function processStoryboardGeneration(db, log, cfg, taskId, episodeId, mode
 
     if (storyboards.length === 0) {
       // 最终解析为空，但流式已保存了内容，同样回退使用增量结果
-      if (streamSavedNums.size > 0) {
-        const partialBoards = getStoryboardsForEpisode(db, episodeIdNum);
-        if (partialBoards.length > 0) {
-          const totalDuration = partialBoards.reduce((s, sb) => s + (Number(sb.duration) || 0), 0);
-          log.warn('Final parse returned 0 items but incremental saves exist, using those', {
-            task_id: taskId, recovered_count: partialBoards.length,
-          });
-          taskService.updateTaskResult(db, taskId, {
-            storyboards: partialBoards,
-            total: partialBoards.length,
-            total_duration: totalDuration,
-            duration_minutes: Math.ceil((totalDuration + 59) / 60),
-            truncated: true,
-          });
-          return;
-        }
+      if (streamItems.size > 0) {
+        const partialBoards = sortedStreamed();
+        log.warn('Final parse returned 0 items but streamed items exist, using those', {
+          task_id: taskId, recovered_count: partialBoards.length,
+        });
+        await finish(partialBoards, { truncated: true });
+        return;
       }
       log.error('AI returned 0 storyboards', { task_id: taskId });
       taskService.updateTaskError(db, taskId, 'AI生成分镜失败：返回的分镜数量为0');
@@ -991,7 +821,7 @@ async function processStoryboardGeneration(db, log, cfg, taskId, episodeId, mode
           streamCallback: (accumulated) => {
             if (accumulated.length - streamThrottle < 400) return;
             streamThrottle = accumulated.length;
-            tryIncrementalSave(db, log, episodeIdNum, accumulated, streamSavedNums, streamStyle, streamVideoRatio, deriveOpts);
+            collectStreamed(log, episodeIdNum, accumulated, streamItems);
           },
         });
       } catch (e) {
@@ -1039,61 +869,26 @@ async function processStoryboardGeneration(db, log, cfg, taskId, episodeId, mode
     }
     log.info('Storyboard generated', { task_id: taskId, episode_id: episodeId, count: storyboards.length, total_duration_seconds: totalDuration, truncated: parseMeta.truncated || false, continuation_attempts: contAttempt });
 
-    taskService.updateTaskStatus(db, taskId, 'processing', 70, '正在保存分镜头...');
-
-    // 传入 streamSavedNums：已增量保存的项目直接从 DB 读取，跳过重复 INSERT
-    const saved = saveStoryboards(db, log, episodeId, storyboards, cfg, style, streamSavedNums, deriveOpts);
-
-    // ── 分镜角色补全（字符串匹配，无 AI，极快）──────────────────────────────────
-    taskService.updateTaskStatus(db, taskId, 'processing', 75, '正在校验分镜角色关联...');
-    let totalCharAdded = 0;
-    for (const sb of saved) {
-      if (!sb?.id) continue;
-      const { added } = syncStoryboardCharacters(db, log, sb.id);
-      totalCharAdded += added.length;
-    }
-    if (totalCharAdded > 0) {
-      log.info('[分镜] 角色补全完成', { episode_id: episodeId, total_added: totalCharAdded });
-    }
-
-    taskService.updateTaskStatus(db, taskId, 'processing', 90, '正在更新剧集时长...');
-
-    const durationMinutes = Math.ceil((totalDuration + 59) / 60);
-    db.prepare('UPDATE episodes SET duration = ?, updated_at = ? WHERE id = ?').run(durationMinutes, new Date().toISOString(), Number(episodeId));
-    log.info('Episode duration updated', { episode_id: episodeId, duration_seconds: totalDuration, duration_minutes: durationMinutes });
-
-    const resultData = {
-      storyboards: saved,
-      total: saved.length,
-      total_duration: totalDuration,
-      duration_minutes: durationMinutes,
-      truncated: parseMeta.truncated || false,
-    };
-    taskService.updateTaskResult(db, taskId, resultData);
-    log.info('Storyboard generation completed', { task_id: taskId, episode_id: episodeId });
+    await finish(storyboards, { truncated: parseMeta.truncated || false });
   } catch (err) {
     log.error('Storyboard generation failed', { error: err.message, task_id: taskId });
 
     // 若连接中断（ECONNRESET 等）但已通过增量流式保存了部分分镜，视为部分成功而非彻底失败
-    if (streamSavedNums.size > 0) {
+    // 已进入提交阶段则不再恢复：提交本身失败时内核事务整体回滚，旧分镜保持不变
+    if (!committing && streamItems.size > 0) {
       try {
-        const partialBoards = getStoryboardsForEpisode(db, episodeIdNum);
-        if (partialBoards.length > 0) {
-          const totalDuration = partialBoards.reduce((s, sb) => s + (Number(sb.duration) || 0), 0);
-          log.warn('Partial storyboards recovered after error, treating as truncated success', {
-            task_id: taskId, recovered_count: partialBoards.length, error: err.message,
-          });
-          taskService.updateTaskResult(db, taskId, {
-            storyboards: partialBoards,
-            total: partialBoards.length,
-            total_duration: totalDuration,
-            duration_minutes: Math.ceil((totalDuration + 59) / 60),
-            truncated: true,
-            error_message: `连接中断（${err.message}），已恢复 ${partialBoards.length} 个分镜`,
-          });
-          return;
-        }
-      } catch (_) {}
+        const partialBoards = [...streamItems.entries()].sort((a, b) => a[0] - b[0]).map((e) => e[1]);
+        log.warn('Partial storyboards recovered after error, treating as truncated success', {
+          task_id: taskId, recovered_count: partialBoards.length, error: err.message,
+        });
+        await finish(partialBoards, {
+          truncated: true,
+          error_message: `连接中断（${err.message}），已恢复 ${partialBoards.length} 个分镜`,
+        });
+        return;
+      } catch (e2) {
+        log.error('Partial storyboard recovery failed', { error: e2.message, task_id: taskId });
+      }
     }
 
     taskService.updateTaskError(db, taskId, (err.message || '生成分镜头失败'));
@@ -1295,6 +1090,7 @@ The user enabled narrator voice-over for the whole episode. Every shot object MU
     universal_omni_storyboard: wantUniversalOmni,
   });
 
+  const txId = require('node:crypto').randomUUID();
   setImmediate(() => {
     // 传入 imageRatio 同时覆盖 default_video_ratio 和 default_image_ratio，
     // 确保分镜图/视频提示词、场景提取提示词都使用项目设定的比例
@@ -1314,11 +1110,13 @@ The user enabled narrator voice-over for the whole episode. Every shot object MU
       systemPrompt,
       wantNarration,
       wantUniversalOmni,
-      clipSec
+      clipSec,
+      txId
     );
   });
 
-  return { task_id: task.id, status: 'pending', message: '分镜生成任务已创建，正在后台处理...' };
+  // 整集重建是一次可撤销的内核事务；tx_id 预先分配（POST /episodes/:id/undo 撤销的就是它），完成后的实际结果在任务结果里
+  return { task_id: task.id, status: 'pending', message: '分镜生成任务已创建，正在后台处理...', tx_id: txId, can_undo: true };
 }
 
 

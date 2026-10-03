@@ -3,6 +3,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { characterAPI } from '@/api/characters'
 import { characterLibraryAPI } from '@/api/characterLibrary'
 import { dramaAPI } from '@/api/drama'
+import request from '@/utils/request'
 import { generationAPI } from '@/api/generation'
 import { uploadAPI } from '@/api/upload'
 import { useGenerationTaskStore, GEN_RESOURCE } from '@/stores/generationTaskStore'
@@ -405,7 +406,8 @@ export function useCharacters(deps) {
     }
     dramaAllCharLoading.value = true
     try {
-      const res = await dramaAPI.getCharacters(dramaId.value)
+      // dramaAPI 上没有 getCharacters；直接取 GET /dramas/:id/characters（与 api/studio.js 的 dramaCharacters 同一接口）
+      const res = await request.get(`/dramas/${encodeURIComponent(dramaId.value)}/characters`)
       let list = Array.isArray(res) ? res : (res?.characters ?? res?.items ?? [])
       const kw = (dramaAllCharKeyword.value || '').trim().toLowerCase()
       if (kw) {
