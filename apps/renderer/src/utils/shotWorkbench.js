@@ -29,10 +29,6 @@ export function pickableAt(slots, n) {
   return isPlayable(c) ? c : null
 }
 
-export function canRegenerate({ busy, shot, model }) {
-  return !busy && !!shot && !!model
-}
-
 /**
  * A/B 对比状态：a/b 为槽位号（1 起），showing 为当前显示侧。
  * toggle 在 'a' / 'b' 之间切换；没有可对比的第二个候选时保持 'a'。
@@ -64,24 +60,6 @@ export function defaultCompare(slots, adoptedId) {
 /** 当前应显示的槽位号。 */
 export function shownSlot(state) {
   return state.showing === 'b' ? state.b : state.a
-}
-
-/** 视频生成请求体（首帧由镜头图片决定；锁定参考图由后端自动并入）。 */
-export function buildRegenerateBody({ shot, model, firstFrameUrl, aspectRatio, resolution }) {
-  const body = {
-    drama_id: shot.drama_id,
-    storyboard_id: shot.id,
-    prompt: shot.video_prompt || shot.description || '',
-    model,
-    duration: shot.duration > 0 ? shot.duration : undefined,
-    aspect_ratio: aspectRatio || undefined,
-    resolution: resolution || undefined,
-  }
-  if (firstFrameUrl) {
-    body.image_url = firstFrameUrl
-    body.first_frame_url = firstFrameUrl
-  }
-  return body
 }
 
 /** 动作 -> 处理函数。ctx: { regenerate, pick(n), toggleCompare, markIn, markOut }；供 createKeyHandler 使用。 */

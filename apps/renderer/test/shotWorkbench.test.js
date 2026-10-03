@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import {
   toSlots, pickableAt, defaultCompare, toggleCompare, setCompareSide, createCompare, shownSlot,
-  buildRegenerateBody, buildWorkbenchHandlers, candidateVideoSrc, canRegenerate,
+  buildWorkbenchHandlers, candidateVideoSrc,
 } from '../src/utils/shotWorkbench.js'
 import {
   buildCandidateRequest, isLockable, lockBody, isLockedCandidate, indexLocks, candidateImageSrc,
@@ -49,21 +49,6 @@ test('setCompareSide clears the other side when equal', () => {
   const st = setCompareSide({ ...createCompare(), a: 1, b: 2 }, 'a', 2)
   assert.equal(st.a, 2)
   assert.equal(st.b, null)
-})
-
-test('buildRegenerateBody carries first frame, duration and model', () => {
-  const b = buildRegenerateBody({ shot: { id: 5, drama_id: 2, video_prompt: 'run', duration: 4 }, model: 'm1', firstFrameUrl: '/static/a.png', aspectRatio: '16:9' })
-  assert.equal(b.storyboard_id, 5)
-  assert.equal(b.first_frame_url, '/static/a.png')
-  assert.equal(b.image_url, '/static/a.png')
-  assert.equal(b.duration, 4)
-  assert.equal(b.reference_image_urls, undefined) // locked refs are added server side
-  const c = buildRegenerateBody({ shot: { id: 5, drama_id: 2, description: 'd', duration: 0 }, model: 'm' })
-  assert.equal(c.prompt, 'd')
-  assert.equal(c.first_frame_url, undefined)
-  assert.equal(c.duration, undefined)
-  assert.equal(canRegenerate({ busy: false, shot: {}, model: '' }), false)
-  assert.equal(canRegenerate({ busy: false, shot: {}, model: 'm' }), true)
 })
 
 test('workbench keys R / Alt+1..4 / Tab resolve to real handlers', () => {

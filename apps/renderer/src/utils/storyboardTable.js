@@ -8,16 +8,11 @@ export const ASPECT_RATIOS = ['9:16', '16:9', '1:1']
 export const DURATION_RANGE = { min: 30, max: 60 }
 export const STORY_MAX_CHARS = 8000
 
-const STATUS_LABELS = {
-  pending: '待生成',
-  processing: '生成中',
-  generating: '生成中',
-  completed: '已完成',
-  failed: '失败',
-}
+const STATUS_KEYS = ['pending', 'processing', 'generating', 'completed', 'failed']
 
-export function statusLabel(status) {
-  return STATUS_LABELS[status] || '待生成'
+/** i18n key for a legacy shot status (unknown -> pending). */
+export function statusKey(status) {
+  return `storyboard.status.${STATUS_KEYS.includes(status) ? status : 'pending'}`
 }
 
 /** 「添加镜头」的创建参数：追加到末尾，描述留空（用占位提示引导填写，不预填需要手动清掉的文字）。 */
@@ -72,13 +67,13 @@ export function spokenLength(text) {
   return m ? m.length : 0
 }
 
-/** 单行校验：返回提示数组（空 = 正常）。仅提示，不阻止保存。 */
+/** 单行校验：返回提示数组（空 = 正常），每项 { key, params }（i18n key）。仅提示，不阻止保存。 */
 export function rowWarnings(row) {
   const out = []
   const d = Number(row.duration)
-  if (!Number.isFinite(d) || d < SHOT_MIN_SEC || d > SHOT_MAX_SEC) out.push(`时长应在 ${SHOT_MIN_SEC}-${SHOT_MAX_SEC} 秒`)
-  else if (spokenLength(row.dialogue) > Math.ceil(d * CHARS_PER_SEC)) out.push('台词偏长，时长内念不完')
-  if (!String(row.description || '').trim()) out.push('画面描述为空')
+  if (!Number.isFinite(d) || d < SHOT_MIN_SEC || d > SHOT_MAX_SEC) out.push({ key: 'storyboard.warn.duration', params: { min: SHOT_MIN_SEC, max: SHOT_MAX_SEC } })
+  else if (spokenLength(row.dialogue) > Math.ceil(d * CHARS_PER_SEC)) out.push({ key: 'storyboard.warn.dialogueLong', params: {} })
+  if (!String(row.description || '').trim()) out.push({ key: 'storyboard.warn.noDescription', params: {} })
   return out
 }
 
@@ -165,22 +160,22 @@ export function createAutosaver({ delay = 800, onState = () => {}, timers = defa
   }
 }
 
-/** 保存状态文案。 */
-export function saveStateText(state) {
-  return { saved: '已保存', dirty: '有未保存的修改', saving: '保存中…', error: '保存失败，点击重试' }[state] || ''
+/** 保存状态的 i18n key（未知状态返回空串）。 */
+export function saveStateKey(state) {
+  return ['saved', 'dirty', 'saving', 'error'].includes(state) ? `storyboard.save.${state}` : ''
 }
 
-/** 新建项目表单校验：返回 { ok, errors, body }。body 对应 POST /scriptgen/projects。 */
+/** 新建项目表单校验：返回 { ok, errors, body }。errors 是 { key, params } 列表；body 对应 POST /scriptgen/projects。 */
 export function buildProjectRequest(form) {
   const errors = []
   const story = String(form.story || '').trim()
-  if (!story) errors.push('请输入故事内容')
-  else if (story.length > STORY_MAX_CHARS) errors.push(`故事内容不能超过 ${STORY_MAX_CHARS} 字`)
-  if (!form.templateId) errors.push('请选择题材模板')
-  if (!ASPECT_RATIOS.includes(form.aspectRatio)) errors.push('请选择画幅')
+  if (!story) errors.push({ key: 'storyboard.form.noStory', params: {} })
+  else if (story.length > STORY_MAX_CHARS) errors.push({ key: 'storyboard.form.storyTooLong', params: { max: STORY_MAX_CHARS } })
+  if (!form.templateId) errors.push({ key: 'storyboard.form.noTemplate', params: {} })
+  if (!ASPECT_RATIOS.includes(form.aspectRatio)) errors.push({ key: 'storyboard.form.noRatio', params: {} })
   const durationSec = Number(form.durationSec)
   if (!Number.isFinite(durationSec) || durationSec < DURATION_RANGE.min || durationSec > DURATION_RANGE.max) {
-    errors.push(`目标时长需在 ${DURATION_RANGE.min}-${DURATION_RANGE.max} 秒`)
+    errors.push({ key: 'storyboard.form.durationRange', params: { min: DURATION_RANGE.min, max: DURATION_RANGE.max } })
   }
   const body = {
     story,
