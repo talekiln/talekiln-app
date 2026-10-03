@@ -201,28 +201,35 @@ describe('export service', () => {
     assert.equal(ctx.core.started.length, 0);
   });
 
-  it('names the shot when a video clip has no asset yet (empty storyboard shot)', async () => {
-    // An empty shot (no generated image/video) is projected onto the timeline as a video clip with asset_ref=null;
-    // the pre-check must say which shot instead of letting lycore fail with missingAssets: [""].
+  it('exports an empty storyboard shot as a black placeholder and names it in the warning', async () => {
+    // An empty shot (no generated image/video) is projected onto the timeline as a video clip with asset_ref=null.
+    // lycore renders such a clip as a gap scene (black + silence, subtitles/narration still on top); the service
+    // lets it through and tells the user which shots are black instead of failing the export.
     const sb = ctx.db.prepare("INSERT INTO storyboards (episode_id, storyboard_number, title) VALUES (5, 3, '')").run().lastInsertRowid;
-    tl.addClip(ctx.db, ctx.timelineId, 'video', { start_ms: 10000, duration_ms: 5000, asset_ref: null, asset_kind: 'video', storyboard_id: Number(sb) });
-    await assert.rejects(ctx.svc.start(REQ(ctx.out)), (e) => {
-      assert.equal(e.code, 'EXPORT_ASSETS');
-      assert.match(e.message, /第 3 镜/);
-      assert.match(e.message, /画面/);
-      assert.equal(e.details.problems.length, 1);
-      assert.equal(e.details.problems[0].error, 'no_asset');
-      assert.equal(e.details.problems[0].storyboard_id, Number(sb));
-      assert.equal(e.details.problems[0].storyboard_number, 3);
-      return true;
-    });
-    assert.equal(ctx.core.started.length, 0);
+    const { clip_id } = tl.addClip(ctx.db, ctx.timelineId, 'video', { start_ms: 10000, duration_ms: 5000, asset_ref: null, asset_kind: 'video', storyboard_id: Number(sb) });
+    const r = await ctx.svc.start(REQ(ctx.out));
+    assert.equal(ctx.core.started.length, 1);
+    assert.match(r.warning, /第 3 镜/);
+    assert.match(r.warning, /黑场/);
+    assert.deepEqual(r.placeholders.map((p) => [p.clip_id, p.storyboard_id, p.storyboard_number, p.start_ms, p.duration_ms]), [[clip_id, Number(sb), 3, 10000, 5000]]);
+    // the clip itself goes to lycore unchanged (asset_ref null), which is what makes it a black gap scene
+    const sent = ctx.core.started[0].timeline.tracks.find((t) => t.kind === 'video').clips.find((c) => c.id === clip_id);
+    assert.equal(sent.asset_ref, null);
+    // the warning stays visible through status polling
+    ctx.core.statuses = [{ status: 'running', percent: 10, stage: 'segment 1/3' }];
+    const s = await ctx.svc.status(r.job_id);
+    assert.equal(s.warning, r.warning);
+    assert.equal(s.placeholders.length, 1);
   });
 
-  it('falls back to the clip id when an empty video clip has no storyboard', async () => {
-    tl.addClip(ctx.db, ctx.timelineId, 'video', { start_ms: 10000, duration_ms: 5000, asset_ref: null, asset_kind: 'video' });
-    await assert.rejects(ctx.svc.start(REQ(ctx.out)), (e) => e.code === 'EXPORT_ASSETS' && /镜头|片段/.test(e.message) && e.details.problems[0].error === 'no_asset');
-    assert.equal(ctx.core.started.length, 0);
+  it('names a placeholder by clip id when it has no storyboard, and sends no warning when there is none', async () => {
+    const clean = await ctx.svc.start(REQ(ctx.out));
+    assert.equal(clean.warning, null);
+    assert.deepEqual(clean.placeholders, []);
+    const { clip_id } = tl.addClip(ctx.db, ctx.timelineId, 'video', { start_ms: 10000, duration_ms: 5000, asset_ref: null, asset_kind: 'video' });
+    const r = await ctx.svc.start(REQ(ctx.out));
+    assert.match(r.warning, new RegExp('片段 ' + clip_id));
+    assert.equal(ctx.core.started.length, 2);
   });
 
   it('still lets subtitle / audio clips without asset_ref through', async () => {

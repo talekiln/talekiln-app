@@ -41,14 +41,16 @@ function resolveAssetRef(ref, storageRoot, { exists = fs.existsSync } = {}) {
  */
 function resolveTimelineAssets(timeline, storageRoot, opts) {
   const problems = [];
+  const placeholders = [];
   const tracks = timeline.tracks.map((t) => ({
     ...t,
     clips: t.clips.map((c) => {
       if (!c.asset_ref) {
         // Subtitle / narration / music clips may legitimately carry no asset (text-only, muted). A video clip
-        // without one is an empty storyboard shot projected onto the timeline: lycore would treat the null as
-        // "" and fail with -32031 missingAssets: [""], so name the shot here instead.
-        if (t.kind === 'video') problems.push({ clip_id: c.id, track: t.kind, storyboard_id: c.storyboard_id ?? null, asset_ref: null, error: 'no_asset' });
+        // without one is an empty storyboard shot projected onto the timeline: lycore renders it as a gap scene
+        // (black + silence, subtitles and narration still on top). List it so the caller can tell the user
+        // which shots are black.
+        if (t.kind === 'video') placeholders.push({ clip_id: c.id, track: t.kind, storyboard_id: c.storyboard_id ?? null, start_ms: c.start_ms, duration_ms: c.duration_ms });
         return { ...c };
       }
       const r = resolveAssetRef(c.asset_ref, storageRoot, opts);
@@ -59,22 +61,29 @@ function resolveTimelineAssets(timeline, storageRoot, opts) {
       return { ...c, asset_ref: r.path };
     }),
   }));
-  return { timeline: { ...timeline, tracks }, problems };
+  return { timeline: { ...timeline, tracks }, problems, placeholders };
 }
 
 const PROBLEM_TEXT = {
   remote: '是网络地址，请先下载到本地',
   missing: '文件不存在',
   outside: '路径不在素材目录内',
-  no_asset: '还没有画面素材，请在分镜页生成画面或删除该镜头',
 };
 
-/** 问题条目的名字：有素材路径用路径；空镜头用「第 N 镜」（service 层补的 storyboard_number），再退到镜头 id / 片段 id。 */
+/** 条目的名字：有素材路径用路径；空镜头用「第 N 镜」（service 层补的 storyboard_number），再退到镜头 id / 片段 id。 */
 function problemLabel(p) {
   if (p.asset_ref) return p.asset_ref;
   if (p.storyboard_number != null) return `第 ${p.storyboard_number} 镜`;
   if (p.storyboard_id != null) return `镜头 ${p.storyboard_id}`;
   return `片段 ${p.clip_id}`;
+}
+
+/** 空镜头黑场占位的提示；list 条目同 placeholders（service 层已补 storyboard_number）。没有则返回空串。 */
+function describePlaceholders(list) {
+  if (!list || !list.length) return '';
+  const names = list.slice(0, 5).map(problemLabel).join('、');
+  const more = list.length > 5 ? `等共 ${list.length} 个镜头` : '';
+  return `${names}${more}还没有画面素材，已用黑场占位；要补上画面，请在分镜页生成后重新导出`;
 }
 
 function describeProblems(problems) {
@@ -83,4 +92,4 @@ function describeProblems(problems) {
   return `以下素材无法导出：${shown.join('；')}${more}`;
 }
 
-module.exports = { resolveAssetRef, resolveTimelineAssets, describeProblems, problemLabel, inside };
+module.exports = { resolveAssetRef, resolveTimelineAssets, describeProblems, describePlaceholders, problemLabel, inside };
