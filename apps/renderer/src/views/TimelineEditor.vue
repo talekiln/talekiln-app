@@ -1,6 +1,5 @@
 <template>
   <div class="timeline-editor">
-    <ViewSwitcher />
     <header class="te-header">
       <el-button size="small" @click="goBack">
         <el-icon><ArrowLeft /></el-icon> 返回
@@ -110,7 +109,6 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, VideoPlay, VideoPause } from '@element-plus/icons-vue'
 import { useTimelineStore } from '@/stores/timeline'
 import MusicPanel from '@/components/MusicPanel.vue'
-import ViewSwitcher from '@/components/ViewSwitcher.vue'
 import { useProjectViewsStore } from '@/stores/projectViews'
 import { fromKernelClipId, toKernelClipId } from '@/utils/projectViews'
 import VoiceoverPanel from '@/components/VoiceoverPanel.vue'

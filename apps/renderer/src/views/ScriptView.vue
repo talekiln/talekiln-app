@@ -1,6 +1,5 @@
 <template>
   <div class="script-view" data-test="script-view">
-    <ViewSwitcher />
     <div class="body">
       <div v-if="views.loading && !views.ready" class="empty">加载中…</div>
       <div v-else-if="!groups.length" class="empty">这个剧集的项目图里还没有剧本行。</div>
@@ -92,7 +91,6 @@ import { computed, nextTick, onMounted, reactive, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowDown, ArrowUp, Delete, Plus } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import ViewSwitcher from '@/components/ViewSwitcher.vue'
 import { useProjectViewsStore } from '@/stores/projectViews'
 import { LINE_KIND_LABEL, lineStaleInfo, reorderedIds, shotNumbers, validSplitAt } from '@/utils/projectViews'
 

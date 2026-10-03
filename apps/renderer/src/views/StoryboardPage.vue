@@ -1,6 +1,5 @@
 <template>
   <div class="sb-shell">
-  <ViewSwitcher />
   <div class="storyboard-page">
     <div class="page-header">
       <el-button text @click="$router.push('/')">
@@ -92,7 +91,6 @@ import { storyboardsAPI } from '@/api/storyboards'
 import { scriptgenAPI } from '@/api/scriptgen'
 import { consistencyAPI } from '@/api/consistency'
 import GenerateDialog from '@/components/GenerateDialog.vue'
-import ViewSwitcher from '@/components/ViewSwitcher.vue'
 import { useProjectViewsStore } from '@/stores/projectViews'
 import { useGeneration } from '@/composables/useGeneration'
 import { openDirector } from '@/composables/useDirectorPanel'

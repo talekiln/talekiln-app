@@ -1,6 +1,5 @@
 <template>
   <div class="canvas-view" data-test="canvas-view">
-    <ViewSwitcher />
     <div class="work">
       <div class="flow-wrap">
         <VueFlow
@@ -97,7 +96,6 @@ import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/controls/dist/style.css'
 import '@vue-flow/minimap/dist/style.css'
-import ViewSwitcher from '@/components/ViewSwitcher.vue'
 import CanvasNodeCard from '@/components/canvas/CanvasNodeCard.vue'
 import SceneGroupBox from '@/components/canvas/SceneGroupBox.vue'
 import { useProjectViewsStore } from '@/stores/projectViews'
