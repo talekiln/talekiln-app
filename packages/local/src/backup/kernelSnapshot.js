@@ -123,17 +123,25 @@ function transform(snapshot, idMap, episodeId) {
 // ---------------------------------------------------------------- 导入
 
 /** 撤销栈能在映射后的图上走一圈：重做到头、撤销到底、重做到头，再退回原来的深度，图必须回到起点。 */
+// legacy_id 不是日志的一部分：重做 addShot 会得到没有 legacy_id 的镜头，物化时再重新绑定。比较时忽略它，
+// 否则任何用“添加镜头”建过镜头的项目，恢复时都会被误判为撤销栈对不上而降级成只还原图。
+const sameShape = (g) => {
+  const c = structuredClone(g);
+  for (const n of Object.values(c.nodes || {})) delete n.legacy_id;
+  return canonicalJSON(c);
+};
+
 function verifyHistory(graph, past, future) {
   const h = new History(structuredClone(graph));
   h.past = structuredClone(past);
   h.future = structuredClone(future);
-  const before = canonicalJSON(h.graph);
+  const before = sameShape(h.graph);
   const nFuture = h.future.length;
   h.redoAll();
   h.undoAll();
   h.redoAll();
   for (let i = 0; i < nFuture; i++) h.undo();
-  if (canonicalJSON(h.graph) !== before) throw invalid('undo history does not round-trip after id remapping');
+  if (sameShape(h.graph) !== before) throw invalid('undo history does not round-trip after id remapping');
 }
 
 function write(db, ep, t, mode) {

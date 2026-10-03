@@ -191,6 +191,20 @@ describe('kernelSnapshot.importEpisode', () => {
     assert.equal(store.openProject(db, ep2).canUndo, true);
   });
 
+  it('keeps the full history when the source has shots added with addShot (legacy_id is not part of the log)', async () => {
+    const { db, episodeId } = await buildSource();
+    const g0 = store.openProject(db, episodeId).graph;
+    const group = g0.group_order[0];
+    store.commit(db, episodeId, (g) => kernel.intents.shot.addShot(g, { group, params: { title: 'added', duration_ms: 2000 } }, { tx_id: 'add1' }), { tx_id: 'add1' });
+    const a = store.openProject(db, episodeId).graph;
+    const added = kernel.shotOrder(a).find((id) => a.nodes[id].params.title === 'added');
+    assert.ok(a.nodes[added].legacy_id != null, 'the commit bound the new shot to a legacy row');
+    const { ep2, idMap } = makeTarget(db, episodeId);
+    const r = snap.importEpisode(db, ep2, snap.exportEpisode(db, episodeId), idMap);
+    assert.equal(r.mode, 'full');
+    assert.equal(store.openProject(db, ep2).canUndo, true);
+  });
+
   it('rejects an unknown snapshot format and an episode that already has a graph', async () => {
     const { db, episodeId } = await buildSource();
     const { ep2, idMap } = makeTarget(db, episodeId);
