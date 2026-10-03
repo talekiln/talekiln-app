@@ -7,6 +7,8 @@ import ElementPlus from 'element-plus'
 import { ElConfigProvider } from 'element-plus'
 import 'element-plus/dist/index.css'
 import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
+import elEn from 'element-plus/dist/locale/en.mjs'
+import { locale as appLocale } from './i18n/index.js'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import App from './App.vue'
 import router from './router'
@@ -17,6 +19,8 @@ const app = createApp({
     return h(
       ElConfigProvider,
       {
+        // 读取 appLocale.value：语言切换时根组件重新渲染，Element Plus 文案随之切换
+        locale: appLocale.value === 'en' ? elEn : zhCn,
         message: {
           duration: 5000,
           showClose: true,
@@ -35,5 +39,6 @@ for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
 
 app.use(pinia)
 app.use(router)
-app.use(ElementPlus, { locale: zhCn })
+app.use(ElementPlus, { locale: appLocale.value === 'en' ? elEn : zhCn })
+document.documentElement.lang = appLocale.value
 app.mount('#app')

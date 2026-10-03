@@ -746,8 +746,65 @@ function assembleTimeline(db, episodeId, opts = {}) {
   })();
 }
 
+// ---------------------------------------------------------------- 整集替换分镜
+
+/**
+ * 整集替换分镜（POST /episodes/:id/storyboards 重新生成用，docs/kernel-design.md §12.5）：
+ * 一次内核事务里加入新段落 + 新镜头（带各自的台词 / 旁白 / 动作行），再删除全部旧镜头、只属于旧镜头的行、清空后的旧段落。
+ * 先加后删：新节点的 id 一定不与旧节点相撞（旧镜头在 graph_legacy_map 里的映射不会被新镜头误用）。
+ * 事务由 store.commit 在同一个 SQLite 事务里物化到旧表；撤销 = 旧镜头（连同首帧 / 视频版本与采用关系）原样回来，重做 = 新分镜回来。
+ * 不重置图、不清日志：日志里只多一条 apply，seq 单调增加。
+ *
+ * items: [{ segment_index, segment_title, body }]，body 与 POST /storyboards 的请求体同形（title / description / duration（秒）/ characters /
+ * dialogue / narration / action ...）；连续且 (segment_index, segment_title) 相同的条目归入同一个新段落。
+ * opts.txId（别名 tx_id）：幂等键，重放为空操作。
+ * 返回 { applied, tx_id, seq, can_undo, can_redo, legacy_ids（按新镜头顺序的 storyboards.id）, removed_ids（被替换的旧 storyboards.id） }。
+ */
+function replaceEpisodeShots(db, episodeId, items, opts = {}) {
+  if (!Array.isArray(items) || !items.length) throw new KernelError('INTENT', 'replaceEpisodeShots needs at least one new shot');
+  const ep = Number(episodeId);
+  const txId = opts.txId || opts.tx_id || undefined;
+  return db.transaction(() => {
+    ensureGraph(db, ep);
+    const r = run(db, ep, 'regenerateStoryboards', (c) => {
+      const oldShots = kernel.shotOrder(c.g);
+      const oldGroups = [...c.g.group_order];
+      const oldLines = new Set(oldShots.flatMap((s) => kernel.linesOfShot(c.g, s)));
+      const removed = oldShots.map((s) => c.g.nodes[s].legacy_id).filter((x) => x != null);
+      const added = [];
+      let lastKey = null;
+      let group = null;
+      for (const it of items) {
+        const b = it.body || {};
+        const title = it.segment_title == null ? '' : String(it.segment_title);
+        const key = `${Number(it.segment_index) || 0}|${title}`;
+        if (key !== lastKey) {
+          let n = 1;
+          while (c.g.groups[`grp_${n}`]) n++;
+          group = `grp_${n}`;
+          c.raw([{ op: 'addGroup', group: { id: group, title, children: [] } }]);
+          lastKey = key;
+        }
+        const params = effectivePatch({ params: {} }, paramsFromBody(b));
+        const specs = LINE_COLUMNS.flatMap((k) => (b[k] !== undefined ? lineSpecs(k, b[k]) : []));
+        added.push(addShotWithLines(c, { group, params, specs }));
+      }
+      for (const s of oldShots) c.add(I.shot.deleteShot(c.g, s));
+      for (const l of oldLines) if (c.g.nodes[l] && !kernel.shotsOfLine(c.g, l).length) c.add(I.script.deleteLine(c.g, l));
+      for (const gid of oldGroups) if (c.g.groups[gid] && !c.g.groups[gid].children.length) c.raw([{ op: 'removeGroup', id: gid }]);
+      return { added, removed };
+    }, { tx_id: txId });
+    if (!r.result) return { applied: false, tx_id: txId, seq: r.seq, can_undo: !!r.canUndo, can_redo: !!r.canRedo, legacy_ids: [], removed_ids: [] };
+    return {
+      applied: r.applied, tx_id: r.tx_id, seq: r.seq, can_undo: r.canUndo, can_redo: r.canRedo,
+      legacy_ids: r.result.added.map((id) => r.graph.nodes[id].legacy_id),
+      removed_ids: r.result.removed,
+    };
+  })();
+}
+
 module.exports = {
-  handleError, ensureGraph, resetGraph, run, Chain,
+  handleError, ensureGraph, resetGraph, run, Chain, replaceEpisodeShots,
   createStoryboard, insertBeforeStoryboard, updateStoryboard, deleteStoryboard, setShotFields, reorderStoryboards, reorderShotsGlobal,
   splitShotByPlans, saveTimelineViaGraph, editTimeline, assembleTimeline, translateTimeline,
 };

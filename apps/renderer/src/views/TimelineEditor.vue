@@ -1,21 +1,20 @@
 <template>
   <div class="timeline-editor">
-    <ViewSwitcher />
     <header class="te-header">
       <el-button size="small" @click="goBack">
-        <el-icon><ArrowLeft /></el-icon> 返回
+        <el-icon><ArrowLeft /></el-icon> {{ t('common.back') }}
       </el-button>
-      <h1 class="te-title">时间线编辑</h1>
+      <h1 class="te-title">{{ t('timeline.title') }}</h1>
       <span class="te-save" :class="'is-' + store.saveState">{{ saveText }}</span>
       <div class="te-spacer" />
       <template v-if="store.timeline">
-        <el-button size="small" :disabled="!selectedClip" @click="onSplit">切分 (S)</el-button>
-        <el-button size="small" :disabled="!selectedClip" @click="onDelete">删除 (Del)</el-button>
-        <el-button size="small" :loading="store.loading" @click="onReassemble">重新组装</el-button>
-        <el-button size="small" data-test="open-voiceover" @click="voiceoverOpen = true">旁白配音</el-button>
-        <el-button size="small" data-test="open-music" @click="musicOpen = true">音乐与混音</el-button>
-        <el-button size="small" type="primary" data-test="open-export" @click="goExport">导出</el-button>
-        <el-button size="small" @click="router.push('/settings/shortcuts')">快捷键</el-button>
+        <el-button size="small" :disabled="!selectedClip" @click="onSplit">{{ t('timeline.split') }}</el-button>
+        <el-button size="small" :disabled="!selectedClip" @click="onDelete">{{ t('timeline.delete') }}</el-button>
+        <el-button size="small" :loading="store.loading" @click="onReassemble">{{ t('timeline.reassemble') }}</el-button>
+        <el-button size="small" data-test="open-voiceover" @click="voiceoverOpen = true">{{ t('timeline.voiceover') }}</el-button>
+        <el-button size="small" data-test="open-music" @click="musicOpen = true">{{ t('timeline.music') }}</el-button>
+        <el-button size="small" type="primary" data-test="open-export" @click="goExport">{{ t('timeline.export') }}</el-button>
+        <el-button size="small" @click="router.push('/settings/shortcuts')">{{ t('timeline.shortcuts') }}</el-button>
         <el-button-group>
           <el-button size="small" @click="zoom(1 / 1.25)">-</el-button>
           <el-button size="small" disabled>{{ Math.round(pxPerSec) }} px/s</el-button>
@@ -24,18 +23,18 @@
       </template>
     </header>
 
-    <el-drawer v-model="musicOpen" title="音乐与混音" size="400px" append-to-body>
+    <el-drawer v-model="musicOpen" :title="t('timeline.music')" size="400px" append-to-body>
       <MusicPanel v-if="store.timeline" />
     </el-drawer>
 
-    <el-drawer v-model="voiceoverOpen" title="旁白配音" size="400px" append-to-body>
+    <el-drawer v-model="voiceoverOpen" :title="t('timeline.voiceover')" size="400px" append-to-body>
       <VoiceoverPanel v-if="store.timeline" :episode-id="episodeId" @done="onVoiceoverDone" />
     </el-drawer>
 
-    <div v-if="store.loading && !store.timeline" class="te-empty">加载中…</div>
+    <div v-if="store.loading && !store.timeline" class="te-empty">{{ t('common.loading') }}</div>
     <div v-else-if="!store.timeline" class="te-empty">
-      <p>该剧集尚未组装时间线</p>
-      <el-button type="primary" :loading="store.loading" @click="onAssemble">从分镜组装时间线</el-button>
+      <p>{{ t('timeline.notAssembled') }}</p>
+      <el-button type="primary" :loading="store.loading" @click="onAssemble">{{ t('timeline.assemble') }}</el-button>
     </div>
 
     <template v-else>
@@ -49,7 +48,7 @@
             preload="auto"
           />
           <img v-if="previewKind === 'image'" class="te-media" :src="previewUrl" alt="" />
-          <div v-if="previewKind === 'none'" class="te-screen-empty">无画面</div>
+          <div v-if="previewKind === 'none'" class="te-screen-empty">{{ t('timeline.noPicture') }}</div>
           <div v-if="subtitleText" class="te-subtitle">{{ subtitleText }}</div>
         </div>
         <div class="te-transport">
@@ -57,7 +56,7 @@
             <el-icon><VideoPause v-if="playing" /><VideoPlay v-else /></el-icon>
           </el-button>
           <span class="te-time">{{ formatTime(playhead) }} / {{ formatTime(store.durationMs) }}</span>
-          <span class="te-hint">空格 播放/暂停 · S 切分 · Del 删除 · Ctrl+Z 撤销 · ←/→ 逐帧 · M 静音</span>
+          <span class="te-hint">{{ t('timeline.hint') }}</span>
         </div>
       </section>
 
@@ -67,14 +66,14 @@
             <div class="te-row te-ruler-row">
               <div class="te-label" />
               <div class="te-ruler" :style="{ width: contentWidth + 'px' }" @pointerdown="onRulerDown">
-                <div v-for="t in ticks" :key="t.ms" class="te-tick" :style="{ left: t.x + 'px' }">
-                  <span>{{ t.label }}</span>
+                <div v-for="tk in ticks" :key="tk.ms" class="te-tick" :style="{ left: tk.x + 'px' }">
+                  <span>{{ tk.label }}</span>
                 </div>
               </div>
             </div>
 
             <div v-for="track in store.tracks" :key="track.id" class="te-row">
-              <div class="te-label">{{ TRACK_NAMES[track.kind] || track.kind }}</div>
+              <div class="te-label">{{ trackName(track.kind) }}</div>
               <div class="te-track" :class="'kind-' + track.kind" :style="{ width: contentWidth + 'px' }" @pointerdown.self="onTrackDown($event)">
                 <div
                   v-for="clip in track.clips"
@@ -107,12 +106,13 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useI18n } from '@/i18n'
 import { ArrowLeft, VideoPlay, VideoPause } from '@element-plus/icons-vue'
 import { useTimelineStore } from '@/stores/timeline'
 import MusicPanel from '@/components/MusicPanel.vue'
-import ViewSwitcher from '@/components/ViewSwitcher.vue'
 import { useProjectViewsStore } from '@/stores/projectViews'
 import { fromKernelClipId, toKernelClipId } from '@/utils/projectViews'
+import { shotLabelsByLegacy, clipDisplayLabel } from '@/utils/clipLabel'
 import VoiceoverPanel from '@/components/VoiceoverPanel.vue'
 import { useKeymap } from '@/composables/useKeymap'
 import { SCOPE_TIMELINE, SCOPE_WORKBENCH } from '@/utils/keymap'
@@ -123,15 +123,17 @@ import {
 
 const LABEL_W = 72
 const SNAP_PX = 8
-const TRACK_NAMES = { video: '视频', subtitle: '字幕', narration: '旁白', music: '音乐' }
+const TRACK_KINDS = ['video', 'subtitle', 'narration', 'music']
 
+const { t } = useI18n()
+const trackName = (kind) => (TRACK_KINDS.includes(kind) ? t(`timeline.track.${kind}`) : kind)
 const route = useRoute()
 const router = useRouter()
 const store = useTimelineStore()
 // 四视图共享状态（选择 / 播放头 / 历史）。时间线编辑器自己的编辑走旧接口（已改道经内核），保存后刷新共享 store
 const views = useProjectViewsStore()
 
-const episodeId = computed(() => Number(route.params.id))
+const episodeId = computed(() => Number(route.params.episodeId))
 const pxPerSec = ref(DEFAULT_ZOOM)
 const playhead = ref(0)
 const playing = ref(false)
@@ -145,7 +147,7 @@ const scrollEl = ref(null)
 const selectedClip = computed(() => store.selected?.clip ?? null)
 const contentWidth = computed(() => Math.max(msToPx(store.durationMs + 10000, pxPerSec.value), 600))
 const ticks = computed(() => rulerTicks(store.durationMs + 10000, pxPerSec.value))
-const saveText = computed(() => ({ idle: '', dirty: '未保存…', saving: '保存中…', error: '保存失败，已重新加载' }[store.saveState] || ''))
+const saveText = computed(() => (['dirty', 'saving', 'error'].includes(store.saveState) ? t(`timeline.save.${store.saveState}`) : ''))
 
 const videoTrack = computed(() => store.tracks.find((t) => t.kind === 'video'))
 const subtitleTrack = computed(() => store.tracks.find((t) => t.kind === 'subtitle'))
@@ -159,13 +161,14 @@ const previewKind = computed(() => {
 })
 
 function goBack() {
-  const dramaId = route.query.drama
-  router.push(dramaId ? { path: `/film/${dramaId}`, query: { episode: String(episodeId.value) } } : '/')
+  router.push({ name: 'episode-storyboard', params: { dramaId: route.params.dramaId, episodeId: episodeId.value } })
 }
 
 async function goExport() {
   await store.flushPending()
-  router.push({ path: `/episodes/${episodeId.value}/export`, query: route.query })
+  // 导出已改为对话框（export.video）；先落盘再开，避免导出读到旧时间线
+  const { openDialog } = await import('@/shell/dialogs')
+  openDialog('export.video', { dramaId: Number(route.params.dramaId), episodeId: Number(episodeId.value) })
 }
 
 function zoom(factor) {
@@ -184,10 +187,10 @@ async function loadAll() {
   try {
     await store.load(episodeId.value)
   } catch (e) {
-    ElMessage.error(e.message || '加载时间线失败')
+    ElMessage.error(e.message || t('timeline.loadFailed'))
   }
   await maybeRecover()
-  await views.load(episodeId.value, { drama: route.query.drama })
+  await views.load(episodeId.value, { drama: route.params.dramaId })
   applySharedFocus()
 }
 
@@ -217,7 +220,7 @@ async function kernelUndo(which) {
 }
 
 async function onVoiceoverDone() {
-  try { await store.load(episodeId.value) } catch (e) { ElMessage.error(e.message || '重新加载时间线失败') }
+  try { await store.load(episodeId.value) } catch (e) { ElMessage.error(e.message || t('timeline.reloadFailed')) }
 }
 
 async function onAssemble() {
@@ -228,7 +231,7 @@ async function onAssemble() {
 
 async function onReassemble() {
   try {
-    await ElMessageBox.confirm('重新组装会丢弃当前所有时间线编辑，是否继续？', '重新组装', { type: 'warning' })
+    await ElMessageBox.confirm(t('timeline.reassemble.confirm'), t('timeline.reassemble.title'), { type: 'warning' })
   } catch (_) {
     return
   }
@@ -249,10 +252,10 @@ function clipStyle(clip) {
   return { left: msToPx(c.start_ms, pxPerSec.value) + 'px', width: Math.max(msToPx(c.duration_ms, pxPerSec.value), 4) + 'px' }
 }
 
+// 片段属于某个镜头时显示“镜 5 · 标题”，不是素材哈希（见 utils/clipLabel.js）
+const shotLabels = computed(() => shotLabelsByLegacy(views.views.shots))
 function clipLabel(clip) {
-  if (clip.text) return clip.text
-  const ref = clip.asset_ref ? String(clip.asset_ref).split('/').pop() : ''
-  return ref || (clip.storyboard_id ? `分镜 ${clip.storyboard_id}` : '片段')
+  return clipDisplayLabel(clip, shotLabels.value, t('timeline.clip.default'))
 }
 
 function clipTitle(clip) {
@@ -337,7 +340,7 @@ function onTrackDown(e) {
 // ---------- 编辑操作 ----------
 
 function onSplit() {
-  if (!store.splitAt(playhead.value)) ElMessage.warning('播放头不在可切分的片段内')
+  if (!store.splitAt(playhead.value)) ElMessage.warning(t('timeline.splitFail'))
 }
 
 function onDelete() {
@@ -353,10 +356,10 @@ function seek(ms) {
 }
 
 function onToggleMute() {
-  if (!store.toggleMute()) ElMessage.warning('请先选中一个片段以指定轨道')
+  if (!store.toggleMute()) ElMessage.warning(t('timeline.muteNeedClip'))
 }
 
-const stub = (name) => () => { ElMessage.info(`${name}：请在分镜工作台页面使用`) }
+const stub = (name) => () => { ElMessage.info(t('timeline.stub', { name: typeof name === 'function' ? name() : name })) }
 
 const onKeydown = createKeyHandler({
   'play.toggle': () => togglePlay(),
@@ -374,12 +377,12 @@ const onKeydown = createKeyHandler({
   'zoom.out': () => zoom(1 / 1.25),
   'track.mute': () => onToggleMute(),
   // 工作台 AI 快捷键：仅注册动作，处理逻辑为占位
-  'shot.regenerate': stub('重新生成'),
-  'shot.pick1': stub('选用候选 V1'),
-  'shot.pick2': stub('选用候选 V2'),
-  'shot.pick3': stub('选用候选 V3'),
-  'shot.pick4': stub('选用候选 V4'),
-  'shot.compareToggle': stub('A/B 对比'),
+  'shot.regenerate': stub(() => t('timeline.stub.regenerate')),
+  'shot.pick1': stub(() => t('timeline.stub.pick', { n: 1 })),
+  'shot.pick2': stub(() => t('timeline.stub.pick', { n: 2 })),
+  'shot.pick3': stub(() => t('timeline.stub.pick', { n: 3 })),
+  'shot.pick4': stub(() => t('timeline.stub.pick', { n: 4 })),
+  'shot.compareToggle': stub(() => t('timeline.stub.compare')),
 }, [SCOPE_TIMELINE, SCOPE_WORKBENCH])
 
 function onWheel(e) {
@@ -396,11 +399,9 @@ async function maybeRecover() {
   const r = store.recovery
   if (!r) return
   const when = new Date(r.draft.savedAt).toLocaleString()
-  const msg = r.conflict
-    ? `发现 ${when} 的本地未保存草稿，但服务端之后已有更新，恢复将覆盖服务端的较新改动。是否恢复？`
-    : `发现 ${when} 的本地未保存草稿（可能因意外关闭而丢失）。是否恢复？`
+  const msg = t(r.conflict ? 'timeline.recover.conflict' : 'timeline.recover.msg', { when })
   try {
-    await ElMessageBox.confirm(msg, '恢复未保存的编辑', { confirmButtonText: '恢复草稿', cancelButtonText: '丢弃草稿', type: 'warning', distinguishCancelAndClose: true, closeOnClickModal: false })
+    await ElMessageBox.confirm(msg, t('timeline.recover.title'), { confirmButtonText: t('timeline.recover.restore'), cancelButtonText: t('timeline.recover.discard'), type: 'warning', distinguishCancelAndClose: true, closeOnClickModal: false })
     store.applyRecovery()
   } catch (action) {
     if (action === 'cancel') store.discardRecovery()

@@ -1,4 +1,5 @@
 import request from '@/utils/request'
+import { t } from '@/i18n'
 
 /**
  * @param {string} url
@@ -13,20 +14,20 @@ function postUniversalSegmentNdjsonStream(url, body, onDelta) {
     body: JSON.stringify(body || {}),
   }).then(async (res) => {
     if (!res.ok) {
-      let msg = `请求失败 (${res.status})`
+      let msg = t('request.failedStatus', { status: res.status })
       try {
         const j = await res.json()
         if (j?.error?.message) msg = j.error.message
       } catch (_) {
         try {
-          const t = await res.text()
-          if (t) msg = t.slice(0, 200)
+          const raw = await res.text()
+          if (raw) msg = raw.slice(0, 200)
         } catch (_) {}
       }
       throw new Error(msg)
     }
     const reader = res.body && res.body.getReader()
-    if (!reader) throw new Error('浏览器不支持流式读取')
+    if (!reader) throw new Error(t('request.noStream'))
     const dec = new TextDecoder()
     let buf = ''
     let finalText = ''
@@ -46,7 +47,7 @@ function postUniversalSegmentNdjsonStream(url, body, onDelta) {
           continue
         }
         if (obj.type === 'delta' && obj.text && typeof onDelta === 'function') onDelta(String(obj.text))
-        if (obj.type === 'error') throw new Error(obj.message || '请求失败')
+        if (obj.type === 'error') throw new Error(obj.message || t('request.failed'))
         if (obj.type === 'done') {
           finalText = (obj.universal_segment_text && String(obj.universal_segment_text).trim()) || ''
         }
@@ -56,7 +57,7 @@ function postUniversalSegmentNdjsonStream(url, body, onDelta) {
     if (tail) {
       try {
         const obj = JSON.parse(tail)
-        if (obj.type === 'error') throw new Error(obj.message || '请求失败')
+        if (obj.type === 'error') throw new Error(obj.message || t('request.failed'))
         if (obj.type === 'done') finalText = (obj.universal_segment_text && String(obj.universal_segment_text).trim()) || finalText
       } catch (e) {
         if (e instanceof Error && e.message && !e.message.includes('JSON')) throw e

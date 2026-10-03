@@ -1,0 +1,5 @@
+[
+  "shell/**",
+  "utils/styleName.js",
+  "utils/clipLabel.js"
+]

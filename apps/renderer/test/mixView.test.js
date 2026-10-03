@@ -1,8 +1,11 @@
+import { setLocale } from '../src/i18n/index.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   DEFAULT_MIX, mergeMix, toPercent, fromPercent, formatDuration, formatSize, shortTrackHint, checkMusicFile
 } from '../src/utils/mixView.js'
+
+setLocale('zh-CN')
 
 test('mergeMix fills defaults and merges patches', () => {
   assert.deepEqual(mergeMix(undefined), DEFAULT_MIX)

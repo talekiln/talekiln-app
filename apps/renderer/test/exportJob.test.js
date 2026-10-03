@@ -1,11 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { setLocale } from '../src/i18n/index.js'
 import {
   isFinal, encoderOptions, validateForm, buildStartRequest, stageLabel, progressStatus, errorText,
   formatElapsed, formatPercent, createJobPoller, FALLBACK_RESOLUTIONS,
   FALLBACK_PLATFORM_PRESETS, sizeTable, presetOf, presetHint, validateMediaForm, buildMediaRequest, mediaResultText, MEDIA_TARGETS
 } from '../src/utils/exportJob.js'
 import { createRequire } from 'node:module'
+setLocale('zh-CN')
 
 const ENCODERS = [
   { name: 'h264_nvenc', listed: true, available: false, reason: 'Cannot load libcuda' },

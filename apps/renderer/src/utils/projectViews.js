@@ -3,13 +3,6 @@
 //   line / shot / node 的 id 都是项目图节点 id；segment 的 id 是时间线视频片段 id（= compose.segments[].id）。
 // 切换视图时选择保持不变，每个视图用 focusIn() 找到“与选择对应的对象”。
 
-export const VIEWS = [
-  { key: 'script', label: '剧本' },
-  { key: 'storyboard', label: '分镜' },
-  { key: 'timeline', label: '时间线' },
-  { key: 'canvas', label: '画布' },
-]
-
 /** 与内核 PORTS 对应（packages/kernel/src/graph.js），仅用于画布上画连接点；是否可连由内核裁决。 */
 export const PORTS = {
   script_line: {},
@@ -20,11 +13,8 @@ export const PORTS = {
   compose: { video: { from: 'video', multi: true }, narration: { from: 'narration', multi: true } },
 }
 
-export const NODE_TYPE_LABEL = {
-  script_line: '剧本行', shot: '镜头', image: '首帧图', video: '视频', narration: '配音', compose: '合成',
-}
-export const STATE_LABEL = { fresh: '最新', stale: '已过期', none: '未生成' }
-export const LINE_KIND_LABEL = { scene_heading: '场景标题', narration: '旁白', dialogue: '对白', action: '动作' }
+/** 剧本行类型（显示名见 components/canvas/canvasModel.js 的 lineKindLabel）。 */
+export const LINE_KINDS = ['scene_heading', 'narration', 'dialogue', 'action']
 
 let txCounter = 0
 export function newTxId(prefix = 'ui') {
@@ -178,37 +168,24 @@ export const NODE_SIZE = { w: 220, h: 96 }
 
 const cut = (s, n = 28) => { const t = String(s ?? ''); return t.length > n ? `${t.slice(0, n)}…` : t }
 
-/** 节点卡片上的关键参数（最多 2-3 行）。 */
-export function nodeSummary(node) {
-  const p = node.params || {}
-  switch (node.type) {
-    case 'script_line': return [`${LINE_KIND_LABEL[p.kind] || p.kind}${p.speaker ? ` · ${p.speaker}` : ''}`, cut(p.text, 40)]
-    case 'shot': return [cut(p.title || p.description || '（未命名镜头）', 30), `${p.shot_type || '景别未设'} · ${((p.duration_ms ?? 0) / 1000).toFixed(1)}s`]
-    case 'image': case 'video': return [`模型 ${p.model}`, `种子 ${p.seed}`]
-    case 'narration': return [`音色 ${p.voice}`, `语速 ${p.speed}`]
-    case 'compose': return [`${(p.segments || []).length} 个片段`, `${p.size} · ${p.fps}fps`]
-    default: return []
-  }
-}
-
-/** 侧栏可编辑字段：{ key, label, type: 'text'|'textarea'|'number'|'select'|'bool'|'list', options? } */
+/** 侧栏可编辑字段：{ key, type: 'text'|'textarea'|'number'|'select'|'bool'|'list', options?: [{ value }] }。显示名见 canvasModel.editableFieldsT。 */
 export function editableFields(type) {
   switch (type) {
     case 'script_line': return [
-      { key: 'kind', label: '类型', type: 'select', options: Object.entries(LINE_KIND_LABEL).map(([value, label]) => ({ value, label })) },
-      { key: 'speaker', label: '说话人', type: 'text' },
-      { key: 'text', label: '文字', type: 'textarea' },
+      { key: 'kind', type: 'select', options: LINE_KINDS.map((value) => ({ value })) },
+      { key: 'speaker', type: 'text' },
+      { key: 'text', type: 'textarea' },
     ]
     case 'shot': return [
-      { key: 'title', label: '标题', type: 'text' }, { key: 'description', label: '画面描述', type: 'textarea' },
-      { key: 'location', label: '地点', type: 'text' }, { key: 'time', label: '时间', type: 'text' },
-      { key: 'shot_type', label: '景别', type: 'text' }, { key: 'angle', label: '角度', type: 'text' }, { key: 'movement', label: '运镜', type: 'text' },
-      { key: 'image_prompt', label: '首帧提示词', type: 'textarea' }, { key: 'video_prompt', label: '视频提示词', type: 'textarea' },
-      { key: 'characters', label: '角色（逗号分隔）', type: 'list' }, { key: 'duration_ms', label: '时长（毫秒）', type: 'number' },
+      { key: 'title', type: 'text' }, { key: 'description', type: 'textarea' },
+      { key: 'location', type: 'text' }, { key: 'time', type: 'text' },
+      { key: 'shot_type', type: 'text' }, { key: 'angle', type: 'text' }, { key: 'movement', type: 'text' },
+      { key: 'image_prompt', type: 'textarea' }, { key: 'video_prompt', type: 'textarea' },
+      { key: 'characters', type: 'list' }, { key: 'duration_ms', type: 'number' },
     ]
-    case 'image': case 'video': return [{ key: 'model', label: '模型', type: 'text' }, { key: 'seed', label: '种子', type: 'number' }]
-    case 'narration': return [{ key: 'voice', label: '音色', type: 'text' }, { key: 'speed', label: '语速', type: 'number' }]
-    case 'compose': return [{ key: 'fps', label: '帧率', type: 'number' }, { key: 'size', label: '尺寸', type: 'text' }, { key: 'aigc_label', label: 'AIGC 标识', type: 'bool' }]
+    case 'image': case 'video': return [{ key: 'model', type: 'text' }, { key: 'seed', type: 'number' }]
+    case 'narration': return [{ key: 'voice', type: 'text' }, { key: 'speed', type: 'number' }]
+    case 'compose': return [{ key: 'fps', type: 'number' }, { key: 'size', type: 'text' }, { key: 'aigc_label', type: 'bool' }]
     default: return []
   }
 }
@@ -276,7 +253,7 @@ export function displayPos(n) {
 }
 
 /** 画布“新增节点”可选类型（合成节点每集唯一，不在此列）。 */
-export const ADD_NODE_TYPES = ['shot', 'script_line', 'image', 'video', 'narration'].map((value) => ({ value, label: NODE_TYPE_LABEL[value] }))
+export const ADD_NODE_TYPES = ['shot', 'script_line', 'image', 'video', 'narration'].map((value) => ({ value }))
 
 /** 新节点的落点：放到现有节点最右侧一列，纵向对齐同类型节点（没有同类型就对齐首个节点）；空画布放原点。 */
 export function newNodePos(canvas, type) {
@@ -290,8 +267,9 @@ export function newNodePos(canvas, type) {
 }
 
 /**
- * canvas.addNodeAt 的参数：镜头 / 剧本行要落在一个场景组里（缺省第一个），并给可读的默认参数；
+ * canvas.addNodeAt 的参数：镜头 / 剧本行要落在一个场景组里（缺省第一个）；
  * 图 / 视频 / 配音节点只需类型和位置，之后用连线挂到镜头下。
+ * 镜头 / 剧本行的默认内容会写进项目，所以跟随当前语言：由 canvasModel.newNodeParams 给，不在这里。
  */
 export function addNodeArgs(canvas, type, { group = null } = {}) {
   const { x, y } = newNodePos(canvas, type)
@@ -299,7 +277,6 @@ export function addNodeArgs(canvas, type, { group = null } = {}) {
   if (type === 'shot' || type === 'script_line') {
     const gid = group || (canvas && canvas.groups && canvas.groups[0] ? canvas.groups[0].id : null)
     if (gid) args.group = gid
-    args.params = type === 'shot' ? { title: '新镜头' } : { kind: 'action', text: '（新剧本行）' }
   }
   return args
 }
@@ -311,20 +288,12 @@ export function sceneRows(canvas) {
   }))
 }
 
-/** 场景标题校验（与内核 renameGroup 同规则）：去首尾空白，非空，≤ 200 字；返回 { value } 或 { error }。 */
-export function sceneTitleInput(raw) {
-  const t = String(raw ?? '').trim()
-  if (!t) return { error: '场景标题不能为空' }
-  if (t.length > 200) return { error: '场景标题最多 200 字' }
-  return { value: t }
-}
-
 /** 画布视图 -> Vue Flow 节点 / 边（分组框在最底层）。 */
 export function canvasToFlow(canvas, selectedId = null) {
   if (!canvas) return { nodes: [], edges: [] }
   const nodes = canvas.nodes.map((n) => ({
     id: n.id, type: 'card', position: displayPos(n),
-    data: { node: n, summary: nodeSummary(n), ports: Object.keys(PORTS[n.type] || {}) },
+    data: { node: n, ports: Object.keys(PORTS[n.type] || {}) },
     selected: n.id === selectedId, zIndex: 1,
   }))
   const edges = canvas.edges.map((e) => ({
@@ -371,21 +340,18 @@ export function shotNumbers(shotsView) {
 
 export function staleCount(stale) { return Array.isArray(stale) ? stale.length : 0 }
 
-/** 保持 episode / drama 切到另一个视图的路由位置。 */
+/**
+ * 保持 episode / drama 切到另一个视图的路由位置：具名路由 `episode-<view>`（/p/:dramaId/e/:episodeId/...）。
+ * 不知道 dramaId 时才退回按剧集 id 的旧地址，由 router.beforeEach 经 utils/legacyRoutes 查出所属项目后重定向。
+ */
 export function viewLocation(view, episodeId, dramaId, query = {}) {
-  const q = { ...query }
-  if (dramaId) q.drama = String(dramaId)
-  if (view === 'storyboard') {
-    return dramaId
-      ? { path: `/project/${dramaId}/storyboard`, query: { ...q, episode: String(episodeId) } }
-      : { path: `/episodes/${episodeId}/storyboard`, query: q }
-  }
-  return { path: `/episodes/${episodeId}/${view}`, query: q }
+  if (dramaId) return { name: `episode-${view}`, params: { dramaId, episodeId }, query: { ...query } }
+  return { path: `/episodes/${episodeId}/${view}`, query: { ...query } }
 }
 
 /** 路由名属于哪个视图（用于高亮）。 */
 export function viewOfRoute(name) {
-  return { 'episode-script': 'script', storyboard: 'storyboard', 'episode-storyboard': 'storyboard', 'episode-timeline': 'timeline', 'episode-canvas': 'canvas' }[name] || null
+  return { 'episode-script': 'script', 'episode-storyboard': 'storyboard', 'episode-timeline': 'timeline', 'episode-canvas': 'canvas' }[name] || null
 }
 
 // ---------- 时间线片段 id ----------

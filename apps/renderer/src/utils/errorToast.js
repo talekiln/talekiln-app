@@ -1,6 +1,7 @@
 // Toast text from the unified error table (packages/local/src/errors/error-codes.json).
 // Pure (no Vue / DOM) so it can be unit tested; request.js feeds the result to ElMessage.
 import table from '../../../../packages/local/src/errors/error-codes.json' with { type: 'json' }
+import { t } from '../i18n/index.js'
 
 const ENTRIES = table.entries
 
@@ -35,12 +36,12 @@ export function parseApiError(err) {
     message = message || info.message
     action = action || info.action
   }
-  if (!message) message = (err && err.message) || '网络错误'
+  if (!message) message = (err && err.message) || t('request.network')
   return { code, message, action }
 }
 
 /** Text for the toast: message plus a suggested action when the table has one. */
 export function toastText(err) {
   const { message, action } = parseApiError(err)
-  return action ? `${message}。建议：${action}` : message
+  return action ? t('request.advice', { message, action }) : message
 }

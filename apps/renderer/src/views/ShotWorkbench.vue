@@ -1,58 +1,53 @@
 <template>
-  <div class="workbench">
+  <div class="workbench" data-test="shot-workbench">
     <div class="page-header">
-      <el-button text @click="$router.back()"><el-icon><ArrowLeft /></el-icon>返回</el-button>
-      <h2 class="page-title">分镜工作台 · 镜 {{ shot?.storyboard_number ?? '' }}</h2>
+      <el-button text @click="goBack"><el-icon><ArrowLeft /></el-icon>{{ t('storyboard.wb.back') }}</el-button>
+      <h2 class="page-title">{{ t('storyboard.wb.title', { n: shot?.storyboard_number ?? '' }) }}</h2>
       <span class="spacer" />
-      <el-tag v-if="genChip" :type="genChip.type" data-test="gen-chip">{{ genChip.label }}</el-tag>
-      <span v-if="genFailureText" class="gen-fail">{{ genFailureText }}</span>
-      <!-- P3-C 一致性：与锁定参考图的评分（只读；没有锁定参考图或没有内核时不显示） -->
-      <el-tooltip v-if="consBadge" :content="consHint" placement="bottom">
-        <el-tag :type="consBadge.type" data-test="consistency-chip">{{ consBadge.label }}</el-tag>
-      </el-tooltip>
-      <el-button text @click="$router.push('/task-center')">任务中心</el-button>
-      <el-button :disabled="!episodeId" title="用一句话描述修改，先看计划与花费再执行（可整体撤销）" data-test="open-director" @click="openDirector(episodeId)">导演模式</el-button>
-      <el-button :disabled="!episodeId || genBusy" data-test="gen-frame" @click="askGenerate('image')">生成首帧图</el-button>
-      <el-button :disabled="!episodeId || genBusy" data-test="gen-both" @click="askGenerate('both')">首帧图 + 视频</el-button>
-      <el-button type="primary" :disabled="!episodeId || genBusy" data-test="gen-video" @click="regenerate">重新生成视频 (R)</el-button>
-      <!-- 旧的同步出视频：仅在 config.yaml generation.legacy_enabled=true 时出现 -->
-      <template v-if="gen.legacyEnabled.value">
-        <el-select v-model="model" placeholder="视频模型（旧流程）" style="width: 200px">
-          <el-option v-for="m in models" :key="m" :label="m" :value="m" />
-        </el-select>
-        <el-button type="warning" plain :loading="busy" :disabled="!canRegen" @click="regenerateLegacy">旧流程生成（不走队列）</el-button>
+      <template v-if="chips">
+        <el-tag :type="chipType(chips.image)" data-test="gen-chip">{{ t('storyboard.insp.image') }} {{ t(chipKey(chips.image)) }}</el-tag>
+        <el-tag :type="chipType(chips.video)" data-test="gen-chip-video">{{ t('storyboard.insp.video') }} {{ t(chipKey(chips.video)) }}</el-tag>
       </template>
+      <span v-if="genFailureText" class="gen-fail">{{ genFailureText }}</span>
+      <!-- read-only consistency score against the locked references (hidden when there is none) -->
+      <el-tooltip v-if="consBadge" :content="consHint" placement="bottom">
+        <el-tag :type="consBadge.type" data-test="consistency-chip">{{ consLabel }}</el-tag>
+      </el-tooltip>
+      <el-button :disabled="!episodeId" :title="t('storyboard.bar.directorHint')" data-test="open-director" @click="openDirector(episodeId)">{{ t('storyboard.bar.director') }}</el-button>
+      <el-button :disabled="!episodeId || genBusy" data-test="gen-frame" @click="askGenerate('image')">{{ t('storyboard.wb.genFrame') }}</el-button>
+      <el-button :disabled="!episodeId || genBusy" data-test="gen-both" @click="askGenerate('both')">{{ t('storyboard.wb.genBoth') }}</el-button>
+      <el-button type="primary" :disabled="!episodeId || genBusy" data-test="gen-video" @click="regenerate">{{ t('storyboard.wb.regenVideo') }}</el-button>
     </div>
 
     <div v-loading="loading" class="grid">
-      <section class="panel">
-        <h4>首帧</h4>
+      <section class="panel side">
+        <h4>{{ t('storyboard.wb.firstFrame') }}</h4>
         <el-image v-if="firstFrame" :src="firstFrame" fit="contain" class="frame" :preview-src-list="[firstFrame]" />
-        <div v-else class="frame empty">该镜头尚无首帧图</div>
-        <p class="prompt">{{ shot?.video_prompt || shot?.description || '（无提示词）' }}</p>
+        <div v-else class="frame empty">{{ t('storyboard.wb.noFirstFrame') }}</div>
         <p v-if="consHint" class="cons-hint" :class="`is-${consBadge.type}`" data-test="consistency-hint">{{ consHint }}</p>
+        <ShotInspector v-if="kernelId && views.ready" :key="kernelId" :shot-id="kernelId" in-workbench />
       </section>
 
       <section class="panel main">
         <el-tabs v-model="tab">
-          <el-tab-pane label="当前视频" name="video">
+          <el-tab-pane :label="t('storyboard.wb.tab.video')" name="video">
             <div ref="playerWrap" class="player-wrap">
               <video
                 v-if="adoptedSrc" ref="playerEl" :key="adoptedSrc" :src="adoptedSrc" controls class="player"
                 @loadedmetadata="onMeta" @error="measure" @timeupdate="headMs = nowMs()"
               />
-              <div v-else class="player empty">尚未采用视频</div>
-              <!-- P3-R：框选区域层，贴在画面实际显示的区域上（黑边不算） -->
+              <div v-else class="player empty">{{ t('storyboard.wb.noAdopted') }}</div>
+              <!-- box-select layer, placed over the area the picture really occupies (letterbox excluded) -->
               <div
                 v-if="adoptedSrc && edit.mode === 'region'" class="rect-layer" :class="{ drawing: drawMode }" :style="layerStyle" data-test="rect-layer"
                 @mousedown="onDragStart" @mousemove="onDragMove" @mouseup="onDragEnd" @mouseleave="onDragEnd"
               >
-                <div v-if="edit.rect && !drag" class="rect-box" :style="rectStyle(edit.rect)"><span>{{ rectLabel(edit.rect) }} · {{ rectPercent(edit.rect) }}%</span></div>
+                <div v-if="edit.rect && !drag" class="rect-box" :style="rectStyle(edit.rect)"><span>{{ rectText(edit.rect) }} · {{ rectPercent(edit.rect) }}%</span></div>
                 <div v-if="drag && drag.rect" class="rect-box live" :style="rectStyle(drag.rect)" />
               </div>
             </div>
           </el-tab-pane>
-          <el-tab-pane label="A/B 对比 (Tab)" name="compare">
+          <el-tab-pane :label="t('storyboard.wb.tab.compare')" name="compare">
             <div class="ab-bar">
               <span>A</span>
               <el-select :model-value="compare.a" size="small" style="width: 90px" @change="(v) => (compare = setCompareSide(compare, 'a', v))">
@@ -62,39 +57,40 @@
               <el-select :model-value="compare.b" size="small" style="width: 90px" clearable @change="(v) => (compare = setCompareSide(compare, 'b', v ?? null))">
                 <el-option v-for="v in playableVersions" :key="v.no" :label="v.label" :value="v.no" />
               </el-select>
-              <el-tag :type="compare.showing === 'a' ? 'primary' : 'warning'">正在看 {{ compare.showing.toUpperCase() }}{{ shownNo ? ` (V${shownNo})` : '' }}</el-tag>
-              <el-button size="small" :disabled="compare.a == null || compare.b == null" @click="doToggle">切换 A/B</el-button>
-              <el-button v-if="shownVersion && !shownVersion.adopted" size="small" type="primary" @click="adoptVersion(shownVersion)">采用 {{ shownVersion.label }}</el-button>
+              <el-tag :type="compare.showing === 'a' ? 'primary' : 'warning'">{{ t('storyboard.wb.showing', { side: compare.showing.toUpperCase() }) }}{{ shownNo ? ` (V${shownNo})` : '' }}</el-tag>
+              <el-button size="small" :disabled="compare.a == null || compare.b == null" @click="doToggle">{{ t('storyboard.wb.toggleAB') }}</el-button>
+              <el-button v-if="shownVersion && !shownVersion.adopted" size="small" type="primary" @click="adoptVersion(shownVersion)">{{ t('storyboard.wb.adoptNamed', { name: shownVersion.label }) }}</el-button>
             </div>
             <video v-if="compareSrc" :key="compareSrc" :src="compareSrc" controls class="player" />
-            <div v-else class="player empty">至少需要两个有文件的版本才能对比</div>
+            <div v-else class="player empty">{{ t('storyboard.wb.needTwo') }}</div>
           </el-tab-pane>
-          <el-tab-pane label="候选（旧流程）" name="legacy">
+          <el-tab-pane :label="t('storyboard.wb.tab.legacy')" name="legacy">
             <div class="cands legacy">
               <div v-for="(c, i) in slots" :key="i" class="cand" :class="{ adopted: c && c.adopted }">
                 <div class="cand-head">
-                  <strong>候选 {{ i + 1 }}</strong>
-                  <el-tag v-if="c && c.adopted" size="small" type="success">已采用</el-tag>
-                  <el-tag v-else-if="c && c.status === 'processing'" size="small">生成中</el-tag>
-                  <el-tag v-else-if="c && c.status === 'failed'" size="small" type="danger">失败</el-tag>
+                  <strong>{{ t('storyboard.wb.cand', { n: i + 1 }) }}</strong>
+                  <el-tag v-if="c && c.adopted" size="small" type="success">{{ t('storyboard.wb.adopted') }}</el-tag>
+                  <el-tag v-else-if="c && c.status === 'processing'" size="small">{{ t('storyboard.wb.processing') }}</el-tag>
+                  <el-tag v-else-if="c && c.status === 'failed'" size="small" type="danger">{{ t('storyboard.wb.failed') }}</el-tag>
                 </div>
                 <video v-if="c && isPlayable(c)" :src="candidateVideoSrc(c)" controls class="thumb" preload="metadata" />
-                <div v-else class="thumb empty">{{ c ? (c.error_msg || '等待结果…') : '空' }}</div>
-                <el-button size="small" :disabled="!pickableAt(slots, i + 1) || (c && c.adopted)" @click="pickLegacy(i + 1)">采用候选 {{ i + 1 }}</el-button>
+                <div v-else class="thumb empty">{{ c ? (c.error_msg || t('storyboard.wb.waiting')) : t('storyboard.wb.slotEmpty') }}</div>
+                <el-button size="small" :disabled="!pickableAt(slots, i + 1) || (c && c.adopted)" @click="pickLegacy(i + 1)">{{ t('storyboard.wb.adoptCand', { n: i + 1 }) }}</el-button>
               </div>
             </div>
           </el-tab-pane>
         </el-tabs>
 
-        <!-- P3-R 选镜改片：只重做 [入点, 出点) 里框选的区域 -->
+        <!-- region edit: redo only the boxed region within [in, out) -->
         <div class="region-edit" data-test="region-edit">
           <div class="re-head">
-            <h4>选镜改片</h4>
+            <h4>{{ t('storyboard.wb.re.title') }}</h4>
             <el-radio-group v-model="edit.mode" size="small">
-              <el-radio-button v-for="m in MODES" :key="m.value" :value="m.value">{{ m.label }}</el-radio-button>
+              <el-radio-button value="region">{{ t('storyboard.wb.mode.region') }}</el-radio-button>
+              <el-radio-button value="segment">{{ t('storyboard.wb.mode.segment') }}</el-radio-button>
             </el-radio-group>
             <span class="spacer" />
-            <span v-if="regionList" class="hint">{{ strategyText(regionList.strategy) }}</span>
+            <span v-if="regionList" class="hint">{{ strategyLabel(regionList.strategy, t) }}</span>
           </div>
           <template v-if="totalMs">
             <div class="clip-bar" data-test="clip-bar" @click="onBarClick">
@@ -102,120 +98,126 @@
               <div class="clip-head" :style="{ left: headPercent }" />
             </div>
             <div class="re-row">
-              <el-button size="small" @click="doMarkIn">设入点 (I)</el-button>
+              <el-button size="small" @click="doMarkIn">{{ t('storyboard.wb.re.markIn') }}</el-button>
               <el-input-number
                 :model-value="edit.range.t0 / 1000" :min="0" :max="totalMs / 1000" :step="0.1" :precision="2" size="small" controls-position="right" style="width: 120px"
                 @change="(v) => setRange({ t0: Math.round((v || 0) * 1000) })"
               />
-              <el-button size="small" @click="doMarkOut">设出点 (O)</el-button>
+              <el-button size="small" @click="doMarkOut">{{ t('storyboard.wb.re.markOut') }}</el-button>
               <el-input-number
                 :model-value="edit.range.t1 / 1000" :min="0" :max="totalMs / 1000" :step="0.1" :precision="2" size="small" controls-position="right" style="width: 120px"
                 @change="(v) => setRange({ t1: Math.round((v || 0) * 1000) })"
               />
-              <span class="hint">{{ formatMs(edit.range.t0) }} – {{ formatMs(edit.range.t1) }}，按 {{ segmentSeconds(edit.range.t0, edit.range.t1) }} 秒计费（整条 {{ formatMs(totalMs) }}）</span>
+              <span class="hint">{{ t('storyboard.wb.re.rangeHint', { from: formatMs(edit.range.t0), to: formatMs(edit.range.t1), sec: segmentSeconds(edit.range.t0, edit.range.t1), total: formatMs(totalMs) }) }}</span>
             </div>
             <div v-if="edit.mode === 'region'" class="re-row">
-              <el-button size="small" :type="drawMode ? 'primary' : 'default'" data-test="re-draw" @click="drawMode = !drawMode">{{ drawMode ? '在画面上拖出矩形…' : '框选区域' }}</el-button>
-              <el-button size="small" :disabled="!edit.rect" @click="edit.rect = null">清除</el-button>
-              <span class="hint">{{ edit.rect ? `${rectLabel(edit.rect)} · 约占画面 ${rectPercent(edit.rect)}%` : '先在上方画面里拖出一个矩形' }}</span>
+              <el-button size="small" :type="drawMode ? 'primary' : 'default'" data-test="re-draw" @click="drawMode = !drawMode">{{ t(drawMode ? 'storyboard.wb.re.drawing' : 'storyboard.wb.re.draw') }}</el-button>
+              <el-button size="small" :disabled="!edit.rect" @click="edit.rect = null">{{ t('storyboard.wb.re.clear') }}</el-button>
+              <span class="hint">{{ edit.rect ? t('storyboard.wb.re.rectHint', { where: rectText(edit.rect), pct: rectPercent(edit.rect) }) : t('storyboard.wb.re.rectFirst') }}</span>
             </div>
-            <el-input v-model="edit.prompt" type="textarea" :rows="2" maxlength="300" show-word-limit placeholder="要改成什么样？例如：把伞换成红色" data-test="re-prompt" />
+            <el-input v-model="edit.prompt" type="textarea" :rows="2" maxlength="300" show-word-limit :placeholder="t('storyboard.wb.re.promptPlaceholder')" data-test="re-prompt" />
             <div class="re-row">
-              <span v-if="estimateState.loading" class="hint">估算中…</span>
-              <span v-else-if="estimateState.data" class="cost" data-test="re-cost">{{ costLine(estimateState.data) }}</span>
+              <span v-if="estimateState.loading" class="hint">{{ t('storyboard.wb.re.estimating') }}</span>
+              <span v-else-if="estimateState.data" class="cost" data-test="re-cost">{{ costLineText(estimateState.data, t) }}</span>
               <span v-else-if="estimateState.error" class="gen-fail">{{ estimateState.error }}</span>
-              <span v-else class="hint">填好入点 / 出点、区域和提示词后显示费用</span>
+              <span v-else class="hint">{{ t('storyboard.wb.re.costHint') }}</span>
               <span class="spacer" />
-              <el-button type="primary" size="small" :loading="submitting" :disabled="!canSubmit" data-test="re-submit" @click="submitEdit">确认改片</el-button>
+              <el-button type="primary" size="small" :loading="submitting" :disabled="!canSubmit" data-test="re-submit" @click="submitEdit">{{ t('storyboard.wb.re.submit') }}</el-button>
             </div>
             <p v-if="refusal" class="gen-fail">{{ refusal }}</p>
           </template>
-          <p v-else class="hint">先生成并采用一版视频，再框选时间段和区域修改。</p>
+          <p v-else class="hint">{{ t('storyboard.wb.re.needVideo') }}</p>
 
           <ul v-if="regionItems.length" class="re-list" data-test="re-list">
             <li v-for="it in regionItems" :key="it.id">
-              <el-tag size="small" :type="regionStatusType(it.status)">{{ regionStatusText(it.status) }}</el-tag>
-              <span class="re-line" :title="regionLine(it)">{{ regionLine(it) }}</span>
+              <el-tag size="small" :type="regionStatusType(it.status)">{{ regionStatusLabel(it.status, t) }}</el-tag>
+              <span class="re-line" :title="regionLineText(it, t)">{{ regionLineText(it, t) }}</span>
               <span v-if="it.error" class="gen-fail" :title="it.error">{{ it.error }}</span>
-              <el-button v-if="it.status === 'done' && it.result_version_id" size="small" text type="primary" @click="adoptById(it.result_version_id)">采用结果</el-button>
+              <el-button v-if="it.status === 'done' && it.result_version_id" size="small" text type="primary" @click="adoptById(it.result_version_id)">{{ t('storyboard.wb.re.adoptResult') }}</el-button>
             </li>
           </ul>
         </div>
       </section>
     </div>
 
-    <GenerateDialog :state="gen.dialog.value" @confirm="gen.confirm" @cancel="gen.cancel" />
+    <ShotGenerateDialog :gen="gen" />
 
-    <h4>版本（Alt+1..4 采用前四版）</h4>
+    <h4>{{ t('storyboard.wb.versions') }}</h4>
     <div v-if="versions.length" class="cands" data-test="versions">
       <div v-for="v in versions" :key="v.id" class="cand" :class="{ adopted: v.adopted }">
         <div class="cand-head">
           <strong>{{ v.label }}</strong>
-          <el-tag v-if="v.adopted" size="small" type="success">已采用</el-tag>
-          <el-tag v-if="v.isEdit" size="small" type="warning">改片</el-tag>
-          <span class="hint">{{ v.source }}</span>
+          <el-tag v-if="v.adopted" size="small" type="success">{{ t('storyboard.wb.adopted') }}</el-tag>
+          <el-tag v-if="v.isEdit" size="small" type="warning">{{ t('storyboard.wb.edited') }}</el-tag>
+          <span class="hint">{{ v.sourceText }}</span>
         </div>
         <video v-if="v.playable" :src="v.src" controls class="thumb" preload="metadata" />
-        <div v-else class="thumb empty">无文件</div>
-        <div class="hint ellipsis" :title="v.regionText || v.meta">{{ v.regionText || v.meta || '　' }}</div>
-        <el-button size="small" type="primary" :disabled="!v.playable || v.adopted" @click="adoptVersion(v)">{{ adoptHint(v) }}</el-button>
+        <div v-else class="thumb empty">{{ t('storyboard.wb.noFile') }}</div>
+        <div class="hint ellipsis" :title="v.regionLabel || v.metaText">{{ v.regionLabel || v.metaText }}</div>
+        <el-button size="small" type="primary" :disabled="!v.playable || v.adopted" @click="adoptVersion(v)">{{ adoptLabel(v, t) }}</el-button>
       </div>
     </div>
-    <div v-else class="empty">还没有视频版本：生成一版视频后会出现在这里（旧流程的候选在上方「候选（旧流程）」）</div>
+    <div v-else class="empty">{{ t('storyboard.wb.noVersions') }}</div>
   </div>
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
+import { useI18n } from '@/i18n'
 import { storyboardsAPI } from '@/api/storyboards'
-import { aiAPI } from '@/api/ai'
-import { videosAPI } from '@/api/videos'
 import { shotCandidatesAPI } from '@/api/referenceLocks'
 import { consistencyAPI } from '@/api/consistency'
-import { dramaAPI } from '@/api/drama'
 import { kernelAPI } from '@/api/kernel'
 import { regionEditAPI } from '@/api/regionEdit'
 import { useKeymap } from '@/composables/useKeymap'
-import GenerateDialog from '@/components/GenerateDialog.vue'
-import { useGeneration } from '@/composables/useGeneration'
 import { openDirector } from '@/composables/useDirectorPanel'
 import { useProjectViewsStore } from '@/stores/projectViews'
-import { failureText, isBusy } from '@/utils/generationView'
-import { consistencyBadge, consistencyHint, consistencyShotMap, shouldRefreshConsistency } from '@/utils/consistencyView'
+import { consistencyBadge, consistencyShotMap, shouldRefreshConsistency } from '@/utils/consistencyView'
 import { SCOPE_WORKBENCH } from '@/utils/keymap'
 import { assetImageUrl } from '@/utils/mediaUrl'
-import { getSelectableModels } from '@/utils/modelSelection'
 import {
-  buildRegenerateBody, buildWorkbenchHandlers, candidateVideoSrc, canRegenerate, createCompare,
-  isPlayable, pickableAt, setCompareSide, shownSlot, toSlots, toggleCompare,
+  buildWorkbenchHandlers, candidateVideoSrc, createCompare, isPlayable, pickableAt, setCompareSide, shownSlot, toSlots, toggleCompare,
 } from '@/utils/shotWorkbench'
 import {
-  MODES, adoptHint, canSubmitEdit, clampRange, contentBox, costLine, defaultVersionCompare, editRequestBody, findVideoVersions, formatMs, fullRange,
-  isRegionPending, markIn, markOut, msAtFraction, rangeStyle, rectFromDrag, rectLabel, rectPercent, rectStyle, refusalText, regionLine,
-  regionStatusText, regionStatusType, segmentSeconds, strategyText, versionAt, versionItems,
+  canSubmitEdit, clampRange, contentBox, defaultVersionCompare, editRequestBody, findVideoVersions, formatMs, fullRange,
+  isRegionPending, markIn, markOut, msAtFraction, rangeStyle, rectFromDrag, rectPercent, rectStyle, regionStatusType,
+  segmentSeconds, versionAt, versionItems,
 } from '@/utils/regionEdit'
+import {
+  adoptLabel, costLineText, rectLabelText, refusalLabel, regionLineText, regionStatusLabel, strategyLabel, versionMetaLabel, versionSourceLabel,
+} from '@/components/shot/workbenchLabels'
+import ShotInspector from '@/components/shot/ShotInspector.vue'
+import ShotGenerateDialog from '@/components/shot/ShotGenerateDialog.vue'
+import { useShotGeneration } from '@/components/shot/useShotGeneration'
+import { chipKey, isShotBusy, shotChips } from '@/components/shot/shotInspectorModel'
 
+const { t } = useI18n()
 const route = useRoute()
-const shotId = route.params.shotId
+const router = useRouter()
+const shotId = route.params.shotId // legacy storyboard id
 const shot = ref(null)
 const loading = ref(false)
-const busy = ref(false)
-const models = ref([])
-const model = ref('')
 const tab = ref('video')
 const adoptedId = ref(null)
 const slots = ref(toSlots([]))
 const compare = ref(createCompare())
-const aspectRatio = ref('')
 let timer = null
 
-// ---------- 内核版本（P3-R：版本列表、A/B 对比、采用都基于内核版本） ----------
-const regionList = ref(null) // GET /shots/:id/edit-regions：改片记录 + 视频节点 + 片长
-const videoInfo = ref(null) // GET /episodes/:id/versions 里该镜头的视频节点项
-const versions = computed(() => versionItems(videoInfo.value, regionList.value?.items || []))
+// ---------- kernel versions (list, A/B compare and adopt are all kernel versions) ----------
+const regionList = ref(null) // GET /shots/:id/edit-regions: edit records + video node + length
+const videoInfo = ref(null) // the shot's video node item in GET /episodes/:id/versions
+const versions = computed(() => {
+  const raw = Array.isArray(videoInfo.value?.versions) ? videoInfo.value.versions : []
+  return versionItems(videoInfo.value, regionList.value?.items || []).map((v, i) => ({
+    ...v,
+    sourceText: versionSourceLabel(raw[i]?.source, t),
+    metaText: versionMetaLabel(raw[i]?.metadata, t),
+    regionLabel: v.region ? regionLineText(v.region, t) : '',
+  }))
+})
 const playableVersions = computed(() => versions.value.filter((v) => v.playable))
 const regionItems = computed(() => regionList.value?.items || [])
 const adoptedVersion = computed(() => versions.value.find((v) => v.adopted) || null)
@@ -226,31 +228,46 @@ const adoptedSrc = computed(() => adoptedVersion.value?.src || (legacyAdopted.va
 const shownNo = computed(() => shownSlot(compare.value))
 const shownVersion = computed(() => (shownNo.value ? versionAt(versions.value, shownNo.value) : null))
 const compareSrc = computed(() => (shownVersion.value ? shownVersion.value.src : ''))
-const canRegen = computed(() => canRegenerate({ busy: busy.value, shot: shot.value, model: model.value }))
 
 const episodeId = computed(() => Number(shot.value?.episode_id) || 0)
-const gen = useGeneration(episodeId)
-// 导演模式执行 / 撤销（或别处的内核撤销）后，重新读取这个镜头（字段已由内核物化到旧表）
 const views = useProjectViewsStore()
-watch(() => views.revision, () => { if (!loading.value) load() })
+const kernelId = computed(() => views.index.shotByLegacy[shotId] || null)
+const kernelShot = computed(() => (kernelId.value ? views.index.shotById[kernelId.value] : null))
+
+// ---------- generation: queue only ----------
+const gen = useShotGeneration(episodeId, { onChanged: () => { loadShot(); refreshVersions().catch(() => {}) } })
+provide('storyboardGen', gen)
 const genStatus = computed(() => gen.shotStatus(shotId))
-const genChip = computed(() => gen.chip(shotId))
-const genBusy = computed(() => isBusy(genStatus.value))
-const genFailureText = computed(() => failureText(genStatus.value))
-// P3-C 一致性评分（只读）：结果写回后内核在后台评分，所以任务结束时拉一次、稍后再拉一次
+const chips = computed(() => (shot.value ? shotChips({ imageState: kernelShot.value?.image, videoState: kernelShot.value?.video }, genStatus.value) : null))
+const genBusy = computed(() => isShotBusy(genStatus.value))
+const chipType = (s) => ({ none: 'info', queued: 'warning', running: 'primary', stale: 'warning', fresh: 'success', failed: 'danger' }[s] || 'info')
+const genFailureText = computed(() => {
+  const g = genStatus.value
+  if (!g || g.state !== 'failed') return ''
+  const n = [g.image, g.video].find((x) => x && x.state === 'failed')
+  return (n && (n.error_message || n.error_code)) || t('storyboard.state.failedHint')
+})
+
+// undo / director / inspector edits change the kernel: re-read the shot (fields are materialized into the legacy table)
+watch(() => views.revision, () => { if (!loading.value) { loadShot(); refreshVersions().catch(() => {}) } })
+
+// ---------- consistency score (read only) ----------
 const consistency = ref(null)
 const consShot = computed(() => consistencyShotMap(consistency.value).get(Number(shotId)) || null)
 const consBadge = computed(() => consistencyBadge(consShot.value))
-const consHint = computed(() => consistencyHint(consShot.value, consistency.value?.min_score, consistency.value))
+const CONS_HINT = { ok: 'storyboard.cons.hint.ok', check: 'storyboard.cons.hint.check', retry: 'storyboard.cons.hint.retry' }
+const consScore = computed(() => (consBadge.value && Number.isFinite(Number(consBadge.value.score)) ? Math.round(Number(consBadge.value.score)) : '-'))
+const consLabel = computed(() => t('storyboard.cons.chip', { score: consScore.value }))
+const consHint = computed(() => (consBadge.value ? t(CONS_HINT[consBadge.value.suggestion] || CONS_HINT.check, { score: consScore.value }) : ''))
 let consTimer = null
 async function loadConsistency() {
   if (!episodeId.value) return
-  try { consistency.value = await consistencyAPI.episodeReport(episodeId.value) } catch (_) { /* request.js 已提示 */ }
+  try { consistency.value = await consistencyAPI.episodeReport(episodeId.value) } catch (_) { /* request.js already reports */ }
 }
-// 任务结束并写回后，重新读一次镜头（video_url / 首帧已由内核物化到旧列）
+// After a task finishes and writes back, re-read the shot (video_url / first frame are materialized into legacy columns)
 watch(() => genStatus.value && genStatus.value.state, (now, before) => {
   if (shouldRefreshConsistency(before, now)) {
-    storyboardsAPI.get(shotId).then((s) => { shot.value = s }).catch(() => {})
+    loadShot()
     loadConsistency()
     clearTimeout(consTimer)
     consTimer = setTimeout(loadConsistency, 4000)
@@ -267,7 +284,7 @@ async function refreshCandidates() {
   applyCandidates(await shotCandidatesAPI.list(shotId))
 }
 
-/** 版本列表：/versions 的节点项为准（与版本历史抽屉同一份），拿不到时退回改片接口附带的那份。 */
+/** Version list: the /versions node item wins (same list as the history drawer); fall back to the one the edit-regions API returns. */
 async function refreshVersions() {
   let list = null
   try { list = await regionEditAPI.list(shotId) } catch (_) { return }
@@ -289,71 +306,60 @@ function ensurePolling() {
 }
 watch([slots, regionItems], ensurePolling)
 
+async function loadShot() {
+  try { shot.value = await storyboardsAPI.get(shotId) } catch (_) { /* request.js already reports */ }
+}
+
 async function load() {
   loading.value = true
   try {
-    shot.value = await storyboardsAPI.get(shotId)
-    gen.refresh()
+    await loadShot()
+    if (shot.value) {
+      views.load(Number(shot.value.episode_id), { drama: route.params.dramaId })
+      gen.refresh()
+    }
     loadConsistency()
     await Promise.all([refreshCandidates().catch(() => {}), refreshVersions()])
-    dramaAPI.get(route.params.dramaId).then((d) => {
-      try { aspectRatio.value = (typeof d.metadata === 'string' ? JSON.parse(d.metadata) : d.metadata)?.aspect_ratio || '' } catch (_) { /* 忽略 */ }
-    }).catch(() => {})
-    try {
-      models.value = getSelectableModels(await aiAPI.list('video'), 'video')
-      model.value = models.value[0] || ''
-    } catch (_) { /* 模型列表失败不阻塞页面 */ }
   } finally {
     loading.value = false
   }
 }
 
-/** 新流程：估算 -> 确认 -> 持久队列；结果写回内核后状态变“最新”，上面自动刷新镜头。 */
+function goBack() {
+  const ep = route.params.episodeId || episodeId.value
+  if (ep) router.push({ name: 'episode-storyboard', params: { dramaId: route.params.dramaId, episodeId: ep } })
+  else router.back()
+}
+
+/** Estimate -> confirm -> persistent queue; when the result is written back the state turns fresh and the shot reloads. */
 function askGenerate(kind, regenerateSeed = false) {
   if (!episodeId.value || genBusy.value) return
   gen.ask({ shots: [Number(shotId)], kind, regenerate: regenerateSeed })
 }
 
-/** 重新生成视频 = 换种子后只重做这个镜头的视频（旧版本保留，可在下面的版本列表切回）。 */
+/** Regenerate video = new seed, redo only this shot's video (old versions stay, switch back in the list below). */
 function regenerate() {
   askGenerate('video', true)
 }
 
-async function regenerateLegacy() {
-  if (!canRegen.value) return
-  busy.value = true
-  try {
-    await videosAPI.create(buildRegenerateBody({
-      shot: { ...shot.value, drama_id: Number(route.params.dramaId) },
-      model: model.value, firstFrameUrl: firstFrame.value, aspectRatio: aspectRatio.value,
-    }))
-    await refreshCandidates()
-    ElMessage.success('已提交生成，完成后会出现在候选中（已锁定的角色/场景参考图会自动带上）')
-  } catch (e) {
-    ElMessage.error(e.message || '提交失败')
-  } finally {
-    busy.value = false
-  }
-}
-
-/** 采用内核版本：服务端用 adoptShotVersion，让节点参数跟随版本配方（采用改片结果 / 切回原版本都保持“最新”）。 */
+/** Adopt a kernel version: the server uses adoptShotVersion so node params follow the version's recipe. */
 async function adoptVersion(v) {
   if (!v || !v.playable || v.adopted) return
   try {
     await regionEditAPI.adopt(shotId, v.id)
     await refreshVersions()
-    shot.value = await storyboardsAPI.get(shotId)
+    await loadShot()
     gen.refresh()
-    ElMessage.success(`已采用 ${v.label}`)
-  } catch (_) { /* request.js 已提示 */ }
+    ElMessage.success(t('storyboard.wb.adoptedNamed', { name: v.label }))
+  } catch (_) { /* request.js already reports */ }
 }
 const adoptById = (id) => adoptVersion(versions.value.find((v) => v.id === id))
 
-/** Alt+N：有内核版本时采用第 N 版；没有（纯旧流程项目）时采用旧候选。 */
+/** Alt+N: adopt kernel version N; without kernel versions (pure legacy project) adopt the legacy candidate. */
 function pick(n) {
   if (versions.value.length) {
     const v = versionAt(versions.value, n)
-    if (!v) { ElMessage.warning(`V${n} 不可用`); return }
+    if (!v) { ElMessage.warning(t('storyboard.wb.versionUnavailable', { n })); return }
     return adoptVersion(v)
   }
   return pickLegacy(n)
@@ -361,26 +367,26 @@ function pick(n) {
 
 async function pickLegacy(n) {
   const c = pickableAt(slots.value, n)
-  if (!c) { ElMessage.warning(`候选 ${n} 尚不可用`); return }
+  if (!c) { ElMessage.warning(t('storyboard.wb.candUnavailable', { n })); return }
   try {
     applyCandidates(await shotCandidatesAPI.adopt(shotId, c.id))
-    shot.value = await storyboardsAPI.get(shotId)
-    ElMessage.success(`已采用候选 ${n}`)
+    await loadShot()
+    ElMessage.success(t('storyboard.wb.adoptedCand', { n }))
   } catch (e) {
-    ElMessage.error(e.message || '采用失败')
+    ElMessage.error((e && e.message) || t('storyboard.wb.adoptFailed'))
   }
 }
 
 function doToggle() {
   compare.value = toggleCompare(compare.value)
-  if (compare.value.a == null || compare.value.b == null) ElMessage.info('需要两个有文件的版本才能 A/B 对比')
+  if (compare.value.a == null || compare.value.b == null) ElMessage.info(t('storyboard.wb.needTwoInfo'))
   else tab.value = 'compare'
 }
 
-// ---------- 选镜改片 ----------
+// ---------- region edit ----------
 const playerWrap = ref(null)
 const playerEl = ref(null)
-const playerMs = ref(0) // 播放器读到的真实片长（内核没记时长时用）
+const playerMs = ref(0) // length read from the player (when the kernel has no duration)
 const headMs = ref(0)
 const dims = ref({ elWidth: 0, elHeight: 0, videoWidth: 0, videoHeight: 0 })
 const drawMode = ref(false)
@@ -389,6 +395,7 @@ const submitting = ref(false)
 const edit = ref({ range: { t0: 0, t1: 0 }, rect: null, prompt: '', mode: 'region', touched: false })
 const estimateState = ref({ loading: false, data: null, error: '' })
 
+const rectText = (rect) => rectLabelText(rect, t)
 const totalMs = computed(() => Number(regionList.value?.total_ms) || playerMs.value || Math.round((Number(shot.value?.duration) || 0) * 1000))
 const headPercent = computed(() => (totalMs.value ? `${Math.min(100, (headMs.value / totalMs.value) * 100).toFixed(2)}%` : '0%'))
 const layerStyle = computed(() => {
@@ -396,11 +403,11 @@ const layerStyle = computed(() => {
   return { left: `${b.left}px`, top: `${b.top}px`, width: `${b.width}px`, height: `${b.height}px` }
 })
 const editBody = computed(() => editRequestBody({ range: edit.value.range, rect: edit.value.rect, prompt: edit.value.prompt, mode: edit.value.mode, total: totalMs.value }))
-const refusal = computed(() => refusalText(estimateState.value.data))
+const refusal = computed(() => refusalLabel(estimateState.value.data, t))
 const canSubmit = computed(() => canSubmitEdit({ total: totalMs.value, prompt: edit.value.prompt, range: edit.value.range, rect: edit.value.rect, mode: edit.value.mode, busy: submitting.value }) && !refusal.value)
 
 const nowMs = () => Math.round((playerEl.value?.currentTime || 0) * 1000)
-// 播放器元素一出现就量一次：元数据还没到（或视频解码失败）时 contentBox 退化为整个播放器区域，框选层不会是 0×0
+// Measure as soon as the player appears: when metadata is missing (or decode fails) contentBox falls back to the whole player area, so the layer is never 0x0
 watch(playerEl, (el) => { if (el) nextTick(measure) })
 function measure() {
   const el = playerEl.value
@@ -456,7 +463,7 @@ function onDragEnd() {
   drag.value = null
 }
 
-// 表单一变就重新估算（去抖）：confirm=false 不建任务
+// Re-estimate (debounced) whenever the form changes: confirm=false creates no task
 let estTimer = null
 watch(editBody, (body) => {
   clearTimeout(estTimer)
@@ -464,7 +471,7 @@ watch(editBody, (body) => {
   estimateState.value = { ...estimateState.value, loading: true }
   estTimer = setTimeout(async () => {
     try { estimateState.value = { loading: false, data: await regionEditAPI.estimate(shotId, body), error: '' } }
-    catch (e) { estimateState.value = { loading: false, data: null, error: e.message || '估算失败' } }
+    catch (e) { estimateState.value = { loading: false, data: null, error: (e && e.message) || t('storyboard.wb.re.estimateFailed') } }
   }, 400)
 })
 
@@ -474,10 +481,10 @@ async function submitEdit() {
   submitting.value = true
   try {
     const r = await regionEditAPI.submit(shotId, body)
-    ElMessage.success(r.outcome === 'created' ? '已提交改片，完成后出现在版本列表（不会自动采用）' : r.outcome === 'retried' ? '已重试这次改片' : '这次改片已在队列里')
+    ElMessage.success(t(r.outcome === 'created' ? 'storyboard.wb.re.created' : r.outcome === 'retried' ? 'storyboard.wb.re.retried' : 'storyboard.wb.re.queued'))
     edit.value.prompt = ''
     await refreshVersions()
-  } catch (_) { /* 超额度等错误已由 request.js 提示 */ } finally {
+  } catch (_) { /* quota errors are shown by request.js */ } finally {
     submitting.value = false
   }
 }
@@ -503,16 +510,15 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.workbench { max-width: 1200px; margin: 0 auto; padding: 24px; }
+.workbench { max-width: 1320px; margin: 0 auto; padding: 24px; }
 .page-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
 .page-title { margin: 0; font-size: 18px; }
 .spacer { flex: 1; }
 .gen-fail { font-size: 12px; color: var(--el-color-danger); max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.grid { display: grid; grid-template-columns: 320px 1fr; gap: 20px; }
+.grid { display: grid; grid-template-columns: 400px 1fr; gap: 20px; }
 .panel h4 { margin: 0 0 8px; }
 .frame { width: 100%; aspect-ratio: 16 / 9; background: var(--el-fill-color); border-radius: 6px; }
-.prompt { color: var(--el-text-color-secondary); font-size: 13px; white-space: pre-wrap; }
-.cons-hint { font-size: 12px; margin: 4px 0 0; color: var(--el-text-color-secondary); }
+.cons-hint { font-size: 12px; margin: 4px 0 8px; color: var(--el-text-color-secondary); }
 .cons-hint.is-warning { color: var(--el-color-warning); }
 .cons-hint.is-danger { color: var(--el-color-danger); }
 .player-wrap { position: relative; }
@@ -526,7 +532,6 @@ onBeforeUnmount(() => {
 .cand-head { display: flex; align-items: center; gap: 8px; }
 .thumb { width: 100%; aspect-ratio: 16 / 9; border-radius: 4px; background: #000; object-fit: contain; }
 .thumb.empty { min-height: 0; background: var(--el-fill-color); }
-/* P3-R 选镜改片 */
 .rect-layer { position: absolute; pointer-events: none; }
 .rect-layer.drawing { pointer-events: auto; cursor: crosshair; background: rgba(0, 0, 0, 0.15); }
 .rect-box { position: absolute; border: 2px dashed var(--el-color-warning); box-sizing: border-box; pointer-events: none; }
@@ -540,10 +545,10 @@ onBeforeUnmount(() => {
 .clip-range { position: absolute; top: 0; bottom: 0; background: var(--el-color-primary-light-5); border-radius: 4px; }
 .clip-head { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--el-color-danger); }
 .hint { font-size: 12px; color: var(--el-text-color-secondary); }
-.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ellipsis { min-height: 1.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cost { font-size: 13px; color: var(--el-color-warning-dark-2); }
 .re-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .re-list li { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .re-line { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-@media (max-width: 800px) { .grid { grid-template-columns: 1fr; } .cands { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .cands { grid-template-columns: repeat(2, 1fr); } }
 </style>

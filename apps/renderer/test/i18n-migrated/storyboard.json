@@ -1,0 +1,9 @@
+[
+  "components/shot/*",
+  "views/StoryboardPage.vue",
+  "views/ShotWorkbench.vue",
+  "utils/storyboardTable.js",
+  "utils/shotWorkbench.js",
+  "shell/actions/storyboard.js",
+  "shell/dialogs/storyboard.js"
+]

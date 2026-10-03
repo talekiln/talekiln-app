@@ -8,26 +8,28 @@
       :position="Position.Left"
       class="h-in"
       :style="{ top: ports.length > 1 ? `${28 + i * 44}%` : '50%' }"
-      :title="`输入端口：${p}`"
+      :title="t('canvas.card.inPort', { port: p })"
     />
     <header>
-      <span class="type">{{ NODE_TYPE_LABEL[node.type] }}</span>
-      <span v-if="STATE_LABEL[node.state]" class="state" :class="'s-' + node.state">{{ STATE_LABEL[node.state] }}</span>
+      <span class="type">{{ nodeTypeLabel(node.type) }}</span>
+      <span v-if="stateLabel(node.state)" class="state" :class="'s-' + node.state">{{ stateLabel(node.state) }}</span>
     </header>
-    <div v-for="(t, i) in data.summary" :key="i" class="row" :class="{ strong: i === 0 }">{{ t }}</div>
-    <Handle v-if="node.type !== 'compose'" id="out" type="source" :position="Position.Right" class="h-out" title="输出" />
+    <div v-for="(line, i) in summary" :key="i" class="row" :class="{ strong: i === 0 }">{{ line }}</div>
+    <Handle v-if="node.type !== 'compose'" id="out" type="source" :position="Position.Right" class="h-out" :title="t('canvas.card.outPort')" />
   </div>
 </template>
 
 <script setup>
 import { computed } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
-import { NODE_TYPE_LABEL, STATE_LABEL } from '@/utils/projectViews'
+import { t } from '@/i18n'
+import { nodeSummaryT, nodeTypeLabel, stateLabel } from './canvasModel.js'
 
-// Vue Flow 自定义节点：卡片显示类型、关键参数、最新 / 已过期 / 未生成状态
+// Vue Flow 自定义节点：卡片显示类型、关键参数、最新 / 已过期 / 未生成状态（文案全部走 i18n，摘要在这里按当前语言算）
 const props = defineProps({ id: String, data: Object, selected: Boolean })
 const node = computed(() => props.data.node)
 const ports = computed(() => props.data.ports)
+const summary = computed(() => nodeSummaryT(node.value))
 </script>
 
 <style scoped>

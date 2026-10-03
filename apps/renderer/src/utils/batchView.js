@@ -1,23 +1,14 @@
 // 批量生成页（P3-B）的纯函数：金额（分）格式、估价文案、并发钳制、失败策略校验、状态标签、进度与耗时。无 Vue / 网络依赖。
+// 文案全部走 i18n（generate.batch.*）；需要给用户看的函数在调用时取当前语言。
 import { formatMoney } from './spendView.js'
+import { t } from '../i18n/index.js'
 
-export const BATCH_STATUS_LABELS = { queued: '排队中', running: '进行中', paused: '已暂停', completed: '已完成', failed: '失败', cancelled: '已取消' }
-export const ITEM_STATUS_LABELS = { pending: '等待中', running: '生成中', succeeded: '已完成', failed: '失败', cancelled: '已取消' }
-export const WAITING_LABELS = {
-  night: '不在夜间时段内，等待时段开始后再提交',
-  concurrency: '已达并发上限，等待在途任务完成',
-  budget: '预算接近上限，等待在途任务结束后再决定',
-  turn: '等待前面的批次完成',
-}
-export const KINDS_OPTIONS = [
-  { value: 'both', label: '首帧图 + 视频' },
-  { value: 'image', label: '只生成首帧图' },
-  { value: 'video', label: '只生成视频' },
-]
-export const ON_FAIL_OPTIONS = [
-  { value: 'skip', label: '跳过该集，继续后面的' },
-  { value: 'pause', label: '暂停整个批次' },
-]
+const STATUS_KEYS = ['queued', 'running', 'paused', 'completed', 'failed', 'cancelled']
+const ITEM_KEYS = ['pending', 'running', 'succeeded', 'failed', 'cancelled']
+const WAITING_KEYS = ['night', 'concurrency', 'budget', 'turn']
+
+export const KINDS_OPTIONS = ['both', 'image', 'video'].map((value) => ({ value, get label() { return t(`generate.batch.kinds.${value}`) } }))
+export const ON_FAIL_OPTIONS = ['skip', 'pause'].map((value) => ({ value, get label() { return t(`generate.batch.onFail.${value}`) } }))
 export const MAX_RETRY = 10
 const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/
 const ACTIVE = ['queued', 'running']
@@ -29,14 +20,15 @@ export function formatCents(cents, currency = 'CNY') {
   return formatMoney(n / 100, currency)
 }
 
+const centsRange = (min, max, currency) => (min === max ? formatCents(min, currency) : `${formatCents(min, currency)}–${formatCents(max, currency).replace(/^¥/, '')}`)
+
 /** 「全部完成预计 ¥x–y（最多 ¥z）」：x–y 是预计区间，z 是预算上限（没设预算就不带括号）。 */
 export function estimateText(totals, budgetCapCents = null, currency = 'CNY') {
   if (!totals) return ''
   const min = Number(totals.estimate_min_cents) || 0
   const max = Number(totals.estimate_max_cents) || 0
-  const range = min === max ? formatCents(min, currency) : `${formatCents(min, currency)}–${formatCents(max, currency).replace(/^¥/, '')}`
-  const cap = budgetCapCents != null ? `（最多 ${formatCents(budgetCapCents, currency)}）` : ''
-  return `全部完成预计 ${range}${cap}`
+  const cap = budgetCapCents != null ? t('generate.batch.estimateCap', { cap: formatCents(budgetCapCents, currency) }) : ''
+  return t('generate.batch.estimateAll', { range: centsRange(min, max, currency), cap })
 }
 
 /** 剩余预计（还没排进去的镜头 + 没开始的集）。 */
@@ -44,8 +36,8 @@ export function remainingText(totals, currency = 'CNY') {
   if (!totals) return ''
   const min = Number(totals.remaining_min_cents) || 0
   const max = Number(totals.remaining_max_cents) || 0
-  if (!min && !max) return '剩余预计 ¥0.00'
-  return `剩余预计 ${formatCents(min, currency)}–${formatCents(max, currency).replace(/^¥/, '')}`
+  if (!min && !max) return t('generate.batch.remaining', { range: formatCents(0, currency) })
+  return t('generate.batch.remaining', { range: `${formatCents(min, currency)}–${formatCents(max, currency).replace(/^¥/, '')}` })
 }
 
 /** 并发输入钳到 [1, limit]；非法取 fallback（缺省 = limit）。 */
@@ -71,15 +63,15 @@ export function concurrencyBody(providers, input = {}) {
 export function validatePolicy(form = {}) {
   const errors = []
   const retry = Number(form.retry)
-  if (!Number.isInteger(retry) || retry < 0 || retry > MAX_RETRY) errors.push(`自动重试次数应为 0–${MAX_RETRY} 的整数`)
+  if (!Number.isInteger(retry) || retry < 0 || retry > MAX_RETRY) errors.push(t('generate.batch.err.retry', { max: MAX_RETRY }))
   const onFail = form.on_fail || 'skip'
-  if (!['skip', 'pause'].includes(onFail)) errors.push('失败处理方式不合法')
+  if (!['skip', 'pause'].includes(onFail)) errors.push(t('generate.batch.err.onFail'))
   let night = null
   if (form.night_enabled) {
     const s = String(form.night_start || '').trim()
     const e = String(form.night_end || '').trim()
-    if (!HHMM.test(s) || !HHMM.test(e)) errors.push('夜间时段的开始与结束应为 HH:MM')
-    else if (s === e) errors.push('夜间时段的开始与结束不能相同')
+    if (!HHMM.test(s) || !HHMM.test(e)) errors.push(t('generate.batch.err.nightFormat'))
+    else if (s === e) errors.push(t('generate.batch.err.nightSame'))
     else night = { start: s, end: e }
   }
   return { ok: !errors.length, errors, value: { retry: Number.isInteger(retry) ? retry : 1, on_fail: onFail, night } }
@@ -87,10 +79,10 @@ export function validatePolicy(form = {}) {
 
 /** 预算输入（元）-> 分；空 = 不限制；非法返回 { error }。 */
 export function parseBudgetYuan(text) {
-  const t = String(text ?? '').trim()
-  if (t === '') return { value: null }
-  const n = Number(t)
-  if (!Number.isFinite(n) || n < 0) return { error: '请输入大于等于 0 的金额，留空表示不限制' }
+  const s = String(text ?? '').trim()
+  if (s === '') return { value: null }
+  const n = Number(s)
+  if (!Number.isFinite(n) || n < 0) return { error: t('generate.batch.err.budget') }
   return { value: Math.round(n * 100) }
 }
 
@@ -101,9 +93,9 @@ export function buildCreateBody({ dramaId, episodeIds, kinds = 'both', concurren
   return body
 }
 
-export const batchStatusLabel = (s) => BATCH_STATUS_LABELS[s] || s || '未知'
-export const itemStatusLabel = (s) => ITEM_STATUS_LABELS[s] || s || '未知'
-export const waitingText = (w) => WAITING_LABELS[w] || ''
+export const batchStatusLabel = (s) => (STATUS_KEYS.includes(s) ? t(`generate.batch.status.${s}`) : s || t('generate.batch.status.unknown'))
+export const itemStatusLabel = (s) => (ITEM_KEYS.includes(s) ? t(`generate.batch.item.${s}`) : s || t('generate.batch.status.unknown'))
+export const waitingText = (w) => (WAITING_KEYS.includes(w) ? t(`generate.batch.waiting.${w}`) : '')
 
 export function batchStatusTag(status) {
   if (status === 'completed') return 'success'
@@ -139,26 +131,26 @@ export function progressPercent(batch) {
 
 export function kindsLabel(kinds) {
   const k = Array.isArray(kinds) ? kinds : []
-  if (k.includes('image') && k.includes('video')) return '首帧图 + 视频'
-  if (k.includes('image')) return '首帧图'
-  if (k.includes('video')) return '视频'
+  if (k.includes('image') && k.includes('video')) return t('generate.batch.kindsLabel.both')
+  if (k.includes('image')) return t('generate.batch.kindsLabel.image')
+  if (k.includes('video')) return t('generate.batch.kindsLabel.video')
   return '-'
 }
 
 export function nightText(night) {
-  if (!night) return '不限时段'
+  if (!night) return t('generate.batch.night.none')
   const cross = night.start > night.end
-  return `${night.start}–${night.end}${cross ? '（跨午夜）' : ''}`
+  return `${night.start}–${night.end}${cross ? t('generate.batch.night.cross') : ''}`
 }
 
 /** 耗时文本。 */
 export function elapsedText(ms) {
   const s = Math.max(0, Math.floor((Number(ms) || 0) / 1000))
-  if (s < 60) return `${s} 秒`
+  if (s < 60) return t('generate.batch.elapsed.s', { s })
   const m = Math.floor(s / 60)
-  if (m < 60) return `${m} 分 ${String(s % 60).padStart(2, '0')} 秒`
+  if (m < 60) return t('generate.batch.elapsed.ms', { m, s: String(s % 60).padStart(2, '0') })
   const h = Math.floor(m / 60)
-  return `${h} 小时 ${String(m % 60).padStart(2, '0')} 分`
+  return t('generate.batch.elapsed.hm', { h, m: String(m % 60).padStart(2, '0') })
 }
 
 /** 有活动批次时快速刷新。 */
@@ -171,23 +163,43 @@ export function summaryCards(batch) {
   if (!batch) return []
   const cur = batch.currency || 'CNY'
   const p = batch.progress || {}
-  const t = batch.totals || {}
+  const tot = batch.totals || {}
   return [
-    { key: 'progress', label: '进度', value: `${progressPercent(batch)}%`, sub: `${p.items_done || 0} / ${p.items_total || 0} 集 · ${p.shots_done || 0} / ${p.shots_total || 0} 镜` },
-    { key: 'spent', label: '已花费', value: formatCents(t.spent_cents || 0, cur), sub: t.in_flight_max_cents ? `在途最高 ${formatCents(t.in_flight_max_cents, cur)}` : '按估算入账，实际以账单为准' },
-    { key: 'estimate', label: '预计', value: `${formatCents(t.estimate_min_cents || 0, cur)}–${formatCents(t.estimate_max_cents || 0, cur).replace(/^¥/, '')}`, sub: remainingText(t, cur) },
-    { key: 'elapsed', label: '耗时', value: elapsedText(batch.elapsed_ms), sub: batch.finished_at ? '已结束' : batch.started_at ? '进行中' : '未开始' },
+    {
+      key: 'progress',
+      label: t('generate.batch.card.progress'),
+      value: `${progressPercent(batch)}%`,
+      sub: t('generate.batch.card.progressSub', { items_done: p.items_done || 0, items_total: p.items_total || 0, shots_done: p.shots_done || 0, shots_total: p.shots_total || 0 }),
+    },
+    {
+      key: 'spent',
+      label: t('generate.batch.card.spent'),
+      value: formatCents(tot.spent_cents || 0, cur),
+      sub: tot.in_flight_max_cents ? t('generate.batch.card.inFlight', { v: formatCents(tot.in_flight_max_cents, cur) }) : t('generate.batch.card.estimated'),
+    },
+    {
+      key: 'estimate',
+      label: t('generate.batch.card.estimate'),
+      value: `${formatCents(tot.estimate_min_cents || 0, cur)}–${formatCents(tot.estimate_max_cents || 0, cur).replace(/^¥/, '')}`,
+      sub: remainingText(tot, cur),
+    },
+    {
+      key: 'elapsed',
+      label: t('generate.batch.card.elapsed'),
+      value: elapsedText(batch.elapsed_ms),
+      sub: batch.finished_at ? t('generate.batch.card.finished') : batch.started_at ? t('generate.batch.card.active') : t('generate.batch.card.notStarted'),
+    },
   ]
 }
 
 /** 分集一行的任务概况文字。 */
 export function itemTasksText(item) {
-  const t = (item && item.tasks) || {}
+  const tk = (item && item.tasks) || {}
   const parts = []
-  if (t.running) parts.push(`${t.running} 在跑`)
-  if (t.queued) parts.push(`${t.queued} 排队`)
-  if (t.succeeded) parts.push(`${t.succeeded} 完成`)
-  if (t.failed) parts.push(`${t.failed} 失败`)
+  if (tk.running) parts.push(t('generate.batch.tasks.running', { n: tk.running }))
+  if (tk.queued) parts.push(t('generate.batch.tasks.queued', { n: tk.queued }))
+  if (tk.succeeded) parts.push(t('generate.batch.tasks.succeeded', { n: tk.succeeded }))
+  if (tk.failed) parts.push(t('generate.batch.tasks.failed', { n: tk.failed }))
   return parts.join(' · ') || '-'
 }
 

@@ -1,21 +1,21 @@
 <template>
   <div class="voiceover-panel">
-    <p class="hint">用 CosyVoice 给有台词的镜头生成旁白。台词来自剧本行；改了台词，旁白会变成“过期”，需要重新生成。确认后配音进入任务队列，进度也能在任务中心看到。</p>
+    <p class="hint">{{ t('timeline.vo.hint') }}</p>
     <div class="field">
-      <label>音色</label>
+      <label>{{ t('timeline.vo.voice') }}</label>
       <el-select v-model="voice" size="small" data-test="voice-select" style="width: 220px">
         <el-option v-for="o in options" :key="o.value" :label="o.label" :value="o.value" />
       </el-select>
     </div>
     <div class="field">
-      <label>范围</label>
+      <label>{{ t('timeline.vo.scope') }}</label>
       <el-radio-group v-model="scope" size="small">
-        <el-radio-button value="missing">仅缺少或过期的</el-radio-button>
-        <el-radio-button value="redo">全部重做</el-radio-button>
+        <el-radio-button value="missing">{{ t('timeline.vo.scopeMissing') }}</el-radio-button>
+        <el-radio-button value="redo">{{ t('timeline.vo.scopeRedo') }}</el-radio-button>
       </el-radio-group>
     </div>
     <div class="actions">
-      <el-button size="small" :loading="busy === 'estimate'" data-test="voiceover-estimate" @click="estimate">估价</el-button>
+      <el-button size="small" :loading="busy === 'estimate'" data-test="voiceover-estimate" @click="estimate">{{ t('timeline.vo.estimate') }}</el-button>
     </div>
 
     <div v-if="est" class="estimate" data-test="voiceover-estimate-text">
@@ -23,10 +23,10 @@
         <p>{{ estimateText(est) }}</p>
         <p v-if="!est.allowed" class="warn">{{ est.message }}</p>
         <el-button type="primary" size="small" :disabled="!est.allowed" :loading="busy === 'run'" data-test="voiceover-confirm" @click="confirm">
-          确认并加入队列
+          {{ t('timeline.vo.confirm') }}
         </el-button>
       </template>
-      <p v-else>没有需要生成的镜头（都已有最新旁白，或没有台词）。</p>
+      <p v-else>{{ t('timeline.vo.nothing') }}</p>
     </div>
     <p v-if="result" class="result" data-test="voiceover-result">{{ resultText(result) }}</p>
     <p v-if="statusLine" class="result" :class="{ busy: polling }" data-test="voiceover-status">{{ statusLine }}</p>
@@ -36,9 +36,11 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useI18n } from '@/i18n'
 import { voiceoverAPI } from '@/api/voiceover'
 import { estimateText, needsConfirm, resultText, voiceOptions, voStatusBusy, voStatusText } from '@/utils/voiceover'
 
+const { t } = useI18n()
 const props = defineProps({ episodeId: { type: Number, required: true } })
 const emit = defineEmits(['done'])
 
@@ -78,7 +80,7 @@ async function confirm() {
     est.value = null
     if ((result.value.tasks || []).length) startPolling()
   } catch (e) {
-    ElMessage.error(e.message || '配音失败')
+    ElMessage.error(e.message || t('timeline.vo.failed'))
   } finally { busy.value = '' }
 }
 

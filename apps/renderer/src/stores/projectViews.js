@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { kernelAPI } from '@/api/kernel'
 import { dramaAPI } from '@/api/drama'
+import { t } from '@/i18n'
 import {
   buildIndex, focusIn, newTxId, normalizeSelection, playheadFor, reduceGraph, reduceSummary, reduceViews, sameSelection, staleCount,
 } from '@/utils/projectViews'
@@ -53,7 +54,7 @@ export const useProjectViewsStore = defineStore('projectViews', () => {
   const snapshot = () => ({ graph: graph.value, stale: stale.value, seq: seq.value, canUndo: canUndo.value, canRedo: canRedo.value, views: views.value })
 
   function setError(e) {
-    error.value = e?.message || '操作失败'
+    error.value = e?.message || t('request.opFailed')
     ElMessage.warning(error.value)
   }
 
@@ -94,7 +95,7 @@ export const useProjectViewsStore = defineStore('projectViews', () => {
         error.value = ''
         return await fetchAll()
       } catch (e) {
-        error.value = e?.message || '加载失败'
+        error.value = e?.message || t('request.loadFailed')
         return false
       }
     })
@@ -171,7 +172,8 @@ export const useProjectViewsStore = defineStore('projectViews', () => {
   }
 
   function setParam(nodeId, patch) {
-    return tx('改节点参数', Object.entries(patch).map(([k, v]) => ({ op: 'setParam', node: nodeId, path: [k], value: v })))
+    return tx('改节点参数', // i18n-ignore: 事务名是存进内核 / 版本历史的标识，history.tx.* 按它查译文
+      Object.entries(patch).map(([k, v]) => ({ op: 'setParam', node: nodeId, path: [k], value: v })))
   }
 
   async function undo() {

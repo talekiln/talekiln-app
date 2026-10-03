@@ -1,0 +1,11 @@
+[
+  "components/assets/*",
+  "views/AssetLibrary.vue",
+  "stores/assets.js",
+  "utils/assets.js",
+  "utils/assetForm.js",
+  "utils/assetGeneration.js",
+  "api/assets.js",
+  "shell/actions/assets.js",
+  "shell/dialogs/assets.js"
+]

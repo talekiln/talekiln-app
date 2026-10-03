@@ -2,13 +2,16 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
-  FULL_RECT, MIN_SEGMENT_MS, normalizeRect, isFullRect, rectFromDrag, rectStyle, rectLabel, rectPercent, contentBox,
+  FULL_RECT, MIN_SEGMENT_MS, MODES, normalizeRect, isFullRect, rectFromDrag, rectStyle, rectLabel, rectPercent, contentBox,
   clampRange, fullRange, markIn, markOut, rangeStyle, msAtFraction, formatMs, segmentSeconds,
   formatCents, savingPercent, costLine, strategyText, refusalText, editRequestBody, canSubmitEdit,
   regionStatusText, regionStatusType, isRegionPending, regionLine,
   findVideoVersions, versionVideoSrc, versionItems, versionAt, defaultVersionCompare, adoptHint,
 } from '../src/utils/regionEdit.js'
 import { setCompareSide, toggleCompare, shownSlot } from '../src/utils/shotWorkbench.js'
+import { setLocale } from '../src/i18n/index.js'
+
+setLocale('zh-CN')
 
 const RECT = { x: 0.25, y: 0.1, w: 0.5, h: 0.4 }
 
@@ -175,4 +178,33 @@ test('内核版本 -> V1..Vn 卡片；改片结果带记录；默认 A/B 与采�
   assert.equal(versionVideoSrc('https://x/v.mp4'), 'https://x/v.mp4')
   assert.equal(versionVideoSrc('videos/a.mp4'), '/static/videos/a.mp4')
   assert.equal(versionVideoSrc(''), '')
+})
+
+test('English locale: rect label, cost line, strategy, refusal, status, source and adopt text', () => {
+  setLocale('en')
+  try {
+    assert.equal(rectLabel(FULL_RECT), 'The whole frame')
+    assert.equal(rectLabel(RECT), 'The top of the frame')
+    assert.equal(rectLabel({ x: 0.3, y: 0.3, w: 0.4, h: 0.4 }), 'The center of the frame')
+    assert.equal(rectLabel({ x: 0, y: 0.3, w: 0.2, h: 0.4 }), 'The left side of the frame')
+    assert.equal(rectLabel({ x: 0.75, y: 0.75, w: 0.2, h: 0.2 }), 'The bottom right of the frame')
+    const est = { segment: { seconds: 2 }, estimate: { cents: 20, currency: 'CNY', full: { cents: 30, seconds: 3 }, sample_prices: true, known: true } }
+    assert.equal(costLine(est), 'Editing only these 2s costs about ¥0.20 (redoing the whole shot costs about ¥0.30, saving 33%; sample prices)')
+    assert.equal(costLine({ edit: { t0_ms: 0, t1_ms: 1000 }, estimate: { cents: 10, currency: 'CNY', full: { cents: 10 }, sample_prices: false, known: true } }), 'Editing only these 1s costs about ¥0.10 (redoing the whole shot costs about ¥0.10)')
+    assert.match(strategyText('segment_splice'), /spliced back/)
+    assert.equal(refusalText({ allowed: false }), 'Over the spending cap')
+    assert.equal(refusalText({ allowed: true, provider_ready: false, provider: 'bailian' }), 'No video service or key is configured for bailian')
+    assert.equal(regionStatusText('queued'), 'Queued')
+    assert.equal(regionStatusText('weird'), 'weird')
+    assert.equal(regionLine({ t0_ms: 0, t1_ms: 3000, rect: FULL_RECT, prompt: 'redo', mode: 'segment' }), '0.00s–3.00s · whole segment · redo')
+    assert.deepEqual(MODES.map((m) => m.label), ['Only the boxed region', 'Redo the whole segment'])
+    assert.equal(adoptHint({ adopted: true }), 'Currently adopted')
+    assert.equal(adoptHint({ isEdit: false }), 'Adopt this version')
+    const items = versionItems({ versions: [{ id: 'a', source: 'ai-task:1', metadata: { model: 'wan', duration_ms: 3000 } }, { id: 'b', source: 'legacy-sync' }] })
+    assert.equal(items[0].source, 'AI generated')
+    assert.equal(items[0].meta, 'Model wan · 3.0s')
+    assert.equal(items[1].source, 'Synced from old assets')
+  } finally {
+    setLocale('zh-CN')
+  }
 })

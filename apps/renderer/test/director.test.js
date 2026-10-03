@@ -33,6 +33,9 @@ const impact = () => ({
   ],
   stale_nodes: [{ node: 'img_2', type: 'image', step: 0, shot_id: 'shot_2', shot_no: 2 }],
 })
+import { setLocale } from '../src/i18n/index.js'
+
+setLocale('zh-CN')
 
 test('validateMessage: trims, rejects empty and over-long input', () => {
   assert.deepEqual(validateMessage('  改一下 '), { ok: true, value: '改一下' })

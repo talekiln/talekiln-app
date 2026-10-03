@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   rowFromApi, moveRow, removeRow, renumber, totalDuration, rowWarnings, patchFromRow,
-  createAutosaver, buildProjectRequest, statusLabel, saveStateText, newShotPayload,
+  createAutosaver, buildProjectRequest, statusKey, saveStateKey, newShotPayload,
 } from '../src/utils/storyboardTable.js'
 
 const rows = [1, 2, 3].map((n) => ({ id: n * 10, no: n, description: 'd', dialogue: '', duration: 3, thumb: '', status: 'pending' }))
@@ -29,11 +29,11 @@ test('removeRow renumbers; totalDuration sums', () => {
   assert.deepEqual(renumber([{ id: 1, no: 9 }]).map((r) => r.no), [1])
 })
 
-test('rowWarnings flags duration, long dialogue and empty description', () => {
+test('rowWarnings flags duration, long dialogue and empty description (as i18n keys)', () => {
   assert.deepEqual(rowWarnings({ description: 'a', dialogue: '', duration: 3 }), [])
-  assert.equal(rowWarnings({ description: 'a', dialogue: '', duration: 1 }).length, 1)
-  assert.match(rowWarnings({ description: 'a', dialogue: '一二三四五六七八九十一二三四五六', duration: 3 })[0], /台词/)
-  assert.match(rowWarnings({ description: ' ', dialogue: '', duration: 3 })[0], /画面描述/)
+  assert.deepEqual(rowWarnings({ description: 'a', dialogue: '', duration: 1 }), [{ key: 'storyboard.warn.duration', params: { min: 2, max: 10 } }])
+  assert.equal(rowWarnings({ description: 'a', dialogue: '一二三四五六七八九十一二三四五六', duration: 3 })[0].key, 'storyboard.warn.dialogueLong')
+  assert.equal(rowWarnings({ description: ' ', dialogue: '', duration: 3 })[0].key, 'storyboard.warn.noDescription')
 })
 
 test('patchFromRow rounds duration', () => {
@@ -107,13 +107,14 @@ test('buildProjectRequest validates and builds body', () => {
   assert.equal(ok.ok, true)
   assert.deepEqual(ok.body, { story: '故事', templateId: 'guofeng-drama', aspectRatio: '9:16', durationSec: 45, style: 'cinematic' })
   const bad = buildProjectRequest({ story: '', templateId: '', aspectRatio: '4:3', durationSec: 10 })
-  assert.equal(bad.errors.length, 4)
+  assert.deepEqual(bad.errors.map((e) => e.key), ['storyboard.form.noStory', 'storyboard.form.noTemplate', 'storyboard.form.noRatio', 'storyboard.form.durationRange'])
 })
 
-test('labels', () => {
-  assert.equal(statusLabel('completed'), '已完成')
-  assert.equal(statusLabel('weird'), '待生成')
-  assert.equal(saveStateText('dirty'), '有未保存的修改')
+test('label keys', () => {
+  assert.equal(statusKey('completed'), 'storyboard.status.completed')
+  assert.equal(statusKey('weird'), 'storyboard.status.pending')
+  assert.equal(saveStateKey('dirty'), 'storyboard.save.dirty')
+  assert.equal(saveStateKey('nope'), '')
 })
 
 test('autosaver default timers work when setTimeout rejects a foreign this (browser Illegal invocation)', async () => {
@@ -147,5 +148,5 @@ test('newShotPayload appends an empty shot at the end (no placeholder text to cl
   assert.deepEqual(p, { episode_id: 7, storyboard_number: 4, description: '', duration: 3 })
   assert.deepEqual(newShotPayload(7, []), { episode_id: 7, storyboard_number: 1, description: '', duration: 3 })
   // 空描述的新行要立刻带上「画面描述为空」提示，提醒用户补上
-  assert.ok(rowWarnings(rowFromApi({ id: 99, storyboard_number: 4, ...p })).includes('画面描述为空'))
+  assert.ok(rowWarnings(rowFromApi({ id: 99, storyboard_number: 4, ...p })).some((w) => w.key === 'storyboard.warn.noDescription'))
 })

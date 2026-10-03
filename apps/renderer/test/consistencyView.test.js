@@ -4,6 +4,9 @@ import {
   autoPickSummary, badgeForShot, busyCount, consistencyBadge, consistencyHint, consistencyShotMap, rankedToCandidates,
   regenerateCostText, shouldRefreshConsistency, unavailableText, faceText,
 } from '../src/utils/consistencyView.js'
+import { setLocale } from '../src/i18n/index.js'
+
+setLocale('zh-CN')
 
 const shot = (over = {}) => ({
   shot_id: 'shot_1', storyboard_id: 7, number: 1, scored: true, best: 90, worst: 35.4, suggestion: 'retry',
@@ -107,4 +110,33 @@ test('faceText / consistencyHint 带人脸部分：人脸 NN、未检测到人�
   assert.equal(consistencyHint(vid, 60), '视频与「李雷」的锁定参考图有差异（最低 52 分，人脸 62，阈值 60）：请检查画面')
   // 没传报告、行里没有人脸部分：文案与以前完全一样
   assert.equal(consistencyHint(shot(), 60), '首帧图与「李雷」的锁定参考图相差较大（最低 35 分，阈值 60）：重做首帧图 + 视频预计 ¥0.50（最高 ¥0.60）')
+})
+
+test('English locale: badge, hint, cost, auto-pick summary and unavailable text', () => {
+  setLocale('en')
+  try {
+    assert.equal(consistencyBadge(shot()).label, 'Consistency 35')
+    assert.equal(regenerateCostText(shot().regenerate), 'Redoing First frame + video is estimated at ¥0.50 (up to ¥0.60)')
+    assert.equal(
+      consistencyHint(shot(), 60),
+      'First frame against the locked reference image of "李雷": very different (lowest 35, threshold 60). Redoing First frame + video is estimated at ¥0.50 (up to ¥0.60)',
+    )
+    assert.equal(consistencyHint(shot({ suggestion: 'retry', regenerate: null })), 'First frame against the locked reference image of "李雷": very different (lowest 35). Regenerating is suggested')
+    assert.equal(consistencyHint(shot({ suggestion: 'ok', worst: 92, entity: { type: 'scene', id: 1, name: '' }, regenerate: null })), 'First frame against the locked reference image: consistent (lowest 92)')
+    assert.equal(unavailableText({ available: false, enabled: false }), 'Consistency scoring is turned off in the settings')
+    assert.equal(unavailableText({ available: false, enabled: true }), 'The render core is not running, so scoring is not available')
+    assert.equal(faceText({ entity_type: 'character', parts: { face: { ref_faces: 1, matched_frames: 1, score: 84.4 } } }), 'Face 84')
+    const r = {
+      anchor: { local_path: 'a.png' },
+      ranked: [{ source: 'generated', score: 91.6 }, { source: 'main', score: 70 }],
+      skipped: [{ reason: 'remote' }],
+      picked: { source: 'generated', score: 91.6 },
+      locked: true,
+    }
+    assert.equal(autoPickSummary(r), 'Ranked 2 candidates by sharpness and resolution and similarity to the four views; top pick: Generated image (score 92), locked as the reference image; 1 remote or missing image(s) were not ranked')
+    assert.equal(autoPickSummary({ ranked: [] }), 'There are no candidate images to rank')
+    assert.equal(rankedToCandidates(r)[1].sourceLabel, 'Main image')
+  } finally {
+    setLocale('zh-CN')
+  }
 })

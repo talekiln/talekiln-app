@@ -2,8 +2,11 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   chipFor, shotStatusMap, chipForShot, failureText, buildGenerateBody, pollInterval, isBusy,
-  confirmSummary, submittedText, taskTarget,
+  confirmSummary, submittedText, taskTarget, kindLabel,
 } from '../src/utils/generationView.js'
+import { setLocale } from '../src/i18n/index.js'
+
+setLocale('zh-CN')
 
 const item = (kind, action, extra = {}) => ({ shot_id: `shot_${Math.random()}`, kind, action, warnings: [], ...extra })
 const preview = (over = {}) => ({
@@ -59,8 +62,8 @@ test('confirmSummary shows counts, estimated spend and remaining cap', () => {
   assert.equal(s.canConfirm, true)
   assert.equal(s.blocked, false)
   assert.equal(s.free, false)
-  assert.ok(s.lines.includes('首帧图 1 张'))
-  assert.ok(s.lines.some((l) => l.startsWith('视频 2 段') && l.includes('自动接着')))
+  assert.ok(s.lines.includes('首帧图：1'))
+  assert.ok(s.lines.some((l) => l.startsWith('视频：2') && l.includes('自动接着')))
   assert.ok(s.lines.includes('预计费用 ¥1.20（最高 ¥1.44）'))
   assert.ok(s.lines.some((l) => l.includes('本月剩余额度 ¥80.00') && l.includes('上限 ¥100.00')))
   assert.ok(s.lines.includes('1 项已是最新，跳过'))
@@ -100,10 +103,24 @@ test('confirmSummary: unlimited month, missing key, stale first frame, unknown p
 
 test('submittedText and taskTarget', () => {
   assert.match(submittedText({ tasks: [] }), /没有需要生成/)
-  assert.equal(submittedText({ tasks: [{ outcome: 'created' }, { outcome: 'already_queued' }] }), '已加入队列 1 个任务，1 个已在队列中，可在任务中心查看进度')
+  assert.equal(submittedText({ tasks: [{ outcome: 'created' }, { outcome: 'already_queued' }] }), '已加入队列 1 个任务，1 个已在队列中；可在任务中心查看进度')
   assert.equal(taskTarget({ params: { _gen: { storyboard_id: 4, kind: 'video' } } }), '镜头 #4 · 视频')
   assert.equal(taskTarget({ params: { _gen: { storyboard_id: 4, kind: 'image' } } }), '镜头 #4 · 首帧图')
   assert.equal(taskTarget({ params: { _vo: { legacy_id: 7, shot_id: 's1' } } }), '镜头 #7 · 旁白配音')
   assert.equal(taskTarget({ params: { prompt: 'x' } }), '')
   assert.equal(taskTarget(null), '')
+})
+
+test('chip labels, kind labels, task targets and the confirm text follow the language', () => {
+  try {
+    setLocale('en')
+    assert.equal(chipFor('stale').label, 'Needs update')
+    assert.equal(kindLabel('both'), 'First frame + video')
+    assert.equal(taskTarget({ params: { _gen: { storyboard_id: 4, kind: 'video' } } }), 'Shot #4 · Video')
+    assert.equal(taskTarget({ params: { _vo: { legacy_id: 7 } } }), 'Shot #7 · Narration voiceover')
+    assert.equal(confirmSummary(preview()).lines[0], 'First frames: 1')
+    assert.equal(submittedText({ tasks: [] }), 'Nothing to generate (already up to date or reused earlier results)')
+  } finally {
+    setLocale('zh-CN')
+  }
 })

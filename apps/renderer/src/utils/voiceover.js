@@ -1,16 +1,16 @@
 // 配音面板的纯逻辑：估价文案、提交结果摘要、队列状态文案。
+import { t } from '../i18n/index.js'
 
-const SKIP_TEXT = { fresh: '已有最新旁白', no_text: '没有台词', no_narration_node: '没有旁白节点' }
+const SKIP_REASONS = ['fresh', 'no_text', 'no_narration_node']
+const sep = () => t('timeline.sep.comma')
 
 /** 估价一行字：例如“3 个镜头 / 86 字，预计 0.02 元（最高 0.02 元，示例价）”。 */
 export function estimateText(e) {
   if (!e) return ''
-  const unit = e.currency === 'CNY' || !e.currency ? '元' : e.currency
-  const parts = [`${e.shots} 个镜头 / ${e.chars} 字，预计 ${e.estimate} ${unit}（最高 ${e.max} ${unit}`]
-  if (e.sample_prices) parts[0] += '，示例价'
-  parts[0] += '）'
-  if (e.price_known === false) parts.push('该模型没有价格条目，按 0 估算')
-  return parts.join('；')
+  const unit = e.currency === 'CNY' || !e.currency ? t('timeline.vo.unitCny') : e.currency
+  const parts = [t('timeline.vo.est', { shots: e.shots, chars: e.chars, estimate: e.estimate, max: e.max, unit, sample: e.sample_prices ? t('timeline.vo.estSample') : '' })]
+  if (e.price_known === false) parts.push(t('timeline.vo.noPrice'))
+  return parts.join(t('timeline.sep.semi'))
 }
 
 /** 有事可做才需要确认；全部跳过时直接提示。 */
@@ -18,9 +18,9 @@ export function needsConfirm(e) {
   return !!(e && e.confirm_required && e.shots > 0)
 }
 
-/** 跳过原因的中文。 */
+/** 跳过原因的显示名。 */
 export function skipText(reason) {
-  return SKIP_TEXT[reason] || reason
+  return SKIP_REASONS.includes(reason) ? t(`timeline.vo.skip.${reason}`) : reason
 }
 
 /**
@@ -34,18 +34,18 @@ export function resultText(r) {
     const made = r.tasks.filter((t) => t.outcome === 'created' || t.outcome === 'retried').length
     const reused = r.tasks.length - made
     const bits = []
-    if (made) bits.push(`已提交 ${made} 个配音任务到任务中心`)
-    if (reused) bits.push(`${reused} 个已在队列中`)
-    if (!r.tasks.length) bits.push('没有需要生成的镜头')
-    if (skipped) bits.push(`跳过 ${skipped} 个`)
-    return bits.join('，')
+    if (made) bits.push(t('timeline.vo.result.submitted', { n: made }))
+    if (reused) bits.push(t('timeline.vo.result.reused', { n: reused }))
+    if (!r.tasks.length) bits.push(t('timeline.vo.result.none'))
+    if (skipped) bits.push(t('timeline.vo.result.skipped', { n: skipped }))
+    return bits.join(sep())
   }
   const done = (r.done || []).length
   const failed = r.failed || []
-  const bits = [`已生成 ${done} 个镜头的旁白`]
-  if (failed.length) bits.push(`${failed.length} 个失败：${failed[0].message}`)
-  if (skipped) bits.push(`跳过 ${skipped} 个`)
-  return bits.join('，')
+  const bits = [t('timeline.vo.result.done', { n: done })]
+  if (failed.length) bits.push(t('timeline.vo.result.failedN', { n: failed.length, message: failed[0].message }))
+  if (skipped) bits.push(t('timeline.vo.result.skipped', { n: skipped }))
+  return bits.join(sep())
 }
 
 /** 状态接口里还有没有在跑的配音任务（排队或执行中）。 */
@@ -60,17 +60,17 @@ export function voStatusText(st) {
   const c = st.counts
   const parts = []
   if (voStatusBusy(st)) {
-    if (c.queued) parts.push(`${c.queued} 个排队`)
-    if (c.running) parts.push(`${c.running} 个生成中`)
-    return `配音中：${parts.join('，')}`
+    if (c.queued) parts.push(t('timeline.vo.status.queued', { n: c.queued }))
+    if (c.running) parts.push(t('timeline.vo.status.running', { n: c.running }))
+    return t('timeline.vo.status.busy', { parts: parts.join(sep()) })
   }
-  if (c.fresh) parts.push(`${c.fresh} 个最新`)
-  if (c.stale) parts.push(`${c.stale} 个过期`)
+  if (c.fresh) parts.push(t('timeline.vo.status.fresh', { n: c.fresh }))
+  if (c.stale) parts.push(t('timeline.vo.status.stale', { n: c.stale }))
   if (c.failed) {
     const bad = (st.shots || []).find((s) => s.state === 'failed' && s.error_message)
-    parts.push(`${c.failed} 个失败${bad ? `（${bad.error_message}）` : ''}`)
+    parts.push(bad ? t('timeline.vo.status.failedWhy', { n: c.failed, why: bad.error_message }) : t('timeline.vo.status.failed', { n: c.failed }))
   }
-  return parts.length ? `配音完成：${parts.join('，')}` : ''
+  return parts.length ? t('timeline.vo.status.done', { parts: parts.join(sep()) }) : ''
 }
 
 /** 下拉选项：未实测的音色照常可选，label 已带说明。 */

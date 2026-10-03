@@ -1,0 +1,10 @@
+[
+  "views/FilmList.vue",
+  "views/NewProject.vue",
+  "views/MediaLibrary.vue",
+  "views/TaskCenter.vue",
+  "components/home/**",
+  "utils/homeModel.js",
+  "shell/dialogs/home.js",
+  "shell/actions/home.js"
+]

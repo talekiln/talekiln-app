@@ -1,28 +1,28 @@
 <template>
   <el-drawer
     v-model="historyOpen"
-    title="版本历史"
+    :title="t('history.title')"
     direction="rtl"
     size="520px"
     :append-to-body="true"
     data-test="history-drawer"
     @opened="reload"
   >
-    <div v-if="!episodeId" class="vh-empty" data-test="history-noepisode">请先打开一个剧集（剧本 / 镜头 / 时间线 / 画布视图）。</div>
+    <div v-if="!episodeId" class="vh-empty" data-test="history-noepisode">{{ t('history.noEpisode') }}</div>
     <template v-else>
       <el-tabs v-model="tab" data-test="history-tabs">
-        <el-tab-pane label="节点版本" name="versions">
+        <el-tab-pane :label="t('history.tab.versions')" name="versions">
           <div v-if="loadError" class="vh-error">{{ loadError }}</div>
-          <div v-else-if="!nodes.length" class="vh-empty">还没有可查看的生成节点。</div>
+          <div v-else-if="!nodes.length" class="vh-empty">{{ t('history.noNodes') }}</div>
           <template v-else>
-            <el-select v-model="nodeId" size="small" class="vh-node" filterable placeholder="选择节点" data-test="history-node">
-              <el-option v-for="n in nodes" :key="n.node" :value="n.node" :label="`${n.label}（${n.versions.length} 个版本）`" />
+            <el-select v-model="nodeId" size="small" class="vh-node" filterable :placeholder="t('history.pickNode')" data-test="history-node">
+              <el-option v-for="n in nodes" :key="n.node" :value="n.node" :label="t('history.nodeOption', { label: n.label, n: n.versions.length })" />
             </el-select>
             <div v-if="selected" class="vh-nodehead">
               <el-tag size="small" :type="stateType(selected.state)" effect="light" data-test="history-node-state">{{ stateText(selected.state) }}</el-tag>
-              <span class="vh-muted">采用中：{{ selected.adopted || '无' }}</span>
+              <span class="vh-muted">{{ t('history.adoptedNow', { id: selected.adopted || t('history.adoptedNone') }) }}</span>
             </div>
-            <div v-if="selected && !selected.versions.length" class="vh-empty">这个节点还没有生成过版本。</div>
+            <div v-if="selected && !selected.versions.length" class="vh-empty">{{ t('history.noVersions') }}</div>
             <article
               v-for="v in cards"
               :key="v.id"
@@ -38,23 +38,23 @@
               <div class="vh-main">
                 <div class="vh-line1">
                   <b>{{ v.id }}</b>
-                  <el-tag v-if="v.adopted" size="small" type="success" effect="dark" data-test="version-adopted">采用中</el-tag>
-                  <el-tag v-if="!v.current" size="small" type="warning" effect="light" title="这个版本生成时的输入与现在不同，采用后节点仍会显示已过期">输入已变</el-tag>
+                  <el-tag v-if="v.adopted" size="small" type="success" effect="dark" data-test="version-adopted">{{ t('history.adopted') }}</el-tag>
+                  <el-tag v-if="!v.current" size="small" type="warning" effect="light" :title="t('history.inputChangedTip')">{{ t('history.inputChanged') }}</el-tag>
                 </div>
                 <div class="vh-muted">{{ v.source }}<template v-if="v.time"> · {{ v.time }}</template></div>
                 <div v-if="v.meta" class="vh-muted">{{ v.meta }}</div>
                 <div v-if="v.ref" class="vh-muted vh-ref" :title="v.ref">{{ v.ref }}<template v-if="v.hash"> · {{ v.hash }}</template></div>
               </div>
               <el-button size="small" :type="v.adopted ? 'default' : 'primary'" :disabled="!v.canAdopt || views.busy" data-test="adopt-version" @click="adopt(v)">
-                {{ v.adopted ? '当前版本' : '采用此版本' }}
+                {{ v.adopted ? t('history.currentVersion') : t('history.adoptThis') }}
               </el-button>
             </article>
           </template>
         </el-tab-pane>
 
-        <el-tab-pane label="操作历史" name="ops">
+        <el-tab-pane :label="t('history.tab.ops')" name="ops">
           <div v-if="loadError" class="vh-error">{{ loadError }}</div>
-          <div v-else-if="!entries.length" class="vh-empty" data-test="history-ops-empty">还没有任何操作记录。</div>
+          <div v-else-if="!entries.length" class="vh-empty" data-test="history-ops-empty">{{ t('history.noOps') }}</div>
           <ul v-else class="vh-ops" data-test="history-ops">
             <li v-for="e in entries" :key="e.seq" class="vh-op" :class="[`s-${e.state}`, { head: e.head }]" data-test="history-op" :data-tx="e.tx_id" :data-state="e.state">
               <div class="vh-op-main">
@@ -62,12 +62,12 @@
                 <span v-if="e.detail" class="vh-muted"> · {{ e.detail }}</span>
                 <div class="vh-muted">#{{ e.seq }} · {{ e.time }}</div>
               </div>
-              <el-tag v-if="e.head" size="small" type="success" effect="dark">当前</el-tag>
+              <el-tag v-if="e.head" size="small" type="success" effect="dark">{{ t('history.current') }}</el-tag>
               <el-tag v-else-if="e.stateText" size="small" :type="e.state === 'applied' ? 'info' : 'warning'" effect="light">{{ e.stateText }}</el-tag>
               <el-button v-if="e.jump" size="small" :disabled="views.busy || jumping" data-test="history-jump" @click="jump(e)">{{ e.jump.label }}</el-button>
             </li>
           </ul>
-          <p v-if="truncated" class="vh-muted">只显示最近的操作。</p>
+          <p v-if="truncated" class="vh-muted">{{ t('history.truncated') }}</p>
         </el-tab-pane>
       </el-tabs>
     </template>
@@ -78,13 +78,15 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { useI18n } from '@/i18n'
 import { kernelAPI } from '@/api/kernel'
 import { useProjectViewsStore } from '@/stores/projectViews'
-import { historyOpen } from '@/composables/useHistoryDrawer'
+import { historyFocusNode, historyOpen } from '@/composables/useHistoryDrawer'
 import { episodeOfRoute } from '@/utils/episodeContext'
 import { adoptOps, describeEntry, describeVersion, nodeLabel, shotNumberMap, thumbUrl } from '@/utils/versionHistory'
-import { STATE_LABEL } from '@/utils/projectViews'
+import { stateLabel } from '@/components/canvas/canvasModel'
 
+const { t } = useI18n()
 const route = useRoute()
 const views = useProjectViewsStore()
 
@@ -96,7 +98,7 @@ const truncated = ref(false)
 const loadError = ref('')
 const jumping = ref(false)
 
-const episodeId = computed(() => episodeOfRoute(route, views.episodeId))
+const episodeId = computed(() => episodeOfRoute(route))
 const nums = computed(() => shotNumberMap(views.views.shots))
 const nodes = computed(() => rawNodes.value.map((n) => ({ ...n, label: nodeLabel(n, nums.value) })))
 const selected = computed(() => nodes.value.find((n) => n.node === nodeId.value) || null)
@@ -112,9 +114,9 @@ const entries = computed(() => {
   return list.map((e) => ({ ...e, head: e === head }))
 })
 
-const stateText = (s) => ({ ...STATE_LABEL, fresh: '最新' }[s] || s)
+const stateText = (s) => stateLabel(s) || s
 const stateType = (s) => ({ fresh: 'success', stale: 'warning', none: 'info' }[s] || 'info')
-const kindText = (v) => ({ video: '视频', audio: '音频', image: '图片' }[v.kind] || '素材')
+const kindText = (v) => t(['video', 'audio', 'image'].includes(v.kind) ? `history.kind.${v.kind}` : 'history.kind.other')
 
 async function reload() {
   const ep = episodeId.value
@@ -126,6 +128,12 @@ async function reload() {
     rawNodes.value = v.nodes || []
     rawEntries.value = h.entries || []
     truncated.value = !!h.truncated
+    if (historyFocusNode.value) {
+      // 从画布节点面板打开：直接定位到那个节点的版本（节点没有版本记录时按默认选择）
+      const want = historyFocusNode.value
+      historyFocusNode.value = ''
+      if (rawNodes.value.some((n) => n.node === want)) { nodeId.value = want; tab.value = 'versions' }
+    }
     if (!rawNodes.value.some((n) => n.node === nodeId.value)) {
       // 默认选第一个有版本的节点（优先当前选择对应的镜头）
       const sel = views.selection
@@ -134,21 +142,21 @@ async function reload() {
       nodeId.value = pick ? pick.node : ''
     }
   } catch (e) {
-    loadError.value = e?.message || '读取版本历史失败'
+    loadError.value = e?.message || t('history.loadFailed')
   }
 }
 
 // 打开时、剧集变化时、内核历史前进时（任何视图的编辑 / 撤销）重新读取
-watch([historyOpen, episodeId, () => views.seq], () => { if (historyOpen.value) reload() })
+watch([historyOpen, episodeId, () => views.seq, historyFocusNode], () => { if (historyOpen.value) reload() })
 
 const sameEpisode = () => !!episodeId.value && views.episodeId === episodeId.value
 
 async function adopt(v) {
-  if (!selected.value || !sameEpisode()) return ElMessage.warning('请先在剧集页面打开项目')
+  if (!selected.value || !sameEpisode()) return ElMessage.warning(t('history.openProjectFirst'))
   const r = await views.tx('adoptVersion', adoptOps(selected.value.node, v.id))
   if (r) {
     await reload()
-    ElMessage.success(v.freshIfAdopted ? `已采用 ${v.id}` : `已采用 ${v.id}（生成时的输入与现在不同，节点仍显示已过期）`)
+    ElMessage.success(t(v.freshIfAdopted ? 'history.adoptedMsg' : 'history.adoptedStale', { id: v.id }))
   }
 }
 

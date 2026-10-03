@@ -4,6 +4,7 @@ import { episodeGenerationAPI } from '@/api/episodeGeneration'
 import { aiTasksAPI } from '@/api/aiTasks'
 import { buildGenerateBody, confirmSummary } from '@/utils/generationView'
 import { makeQueuedId } from '@/utils/queuedTask'
+import { t } from '@/i18n'
 
 // 已在批量确认里看过估价的 (集, 分镜, 类型)；单个调用命中则不再弹窗。
 const approved = new Set()
@@ -13,15 +14,15 @@ async function confirmDialog(summary) {
   const body = h('div', [
     h('ul', { style: 'margin:0;padding-left:20px;line-height:1.8' }, summary.lines.map((l) => h('li', l))),
     ...summary.warnings.map((w) => h('p', { style: 'margin:8px 0 0;color:#e6a23c' }, w)),
-    h('p', { style: 'margin:12px 0 0;font-size:12px;color:#909399' }, '任务在后台队列里执行，进度见任务中心。'),
+    h('p', { style: 'margin:12px 0 0;font-size:12px;color:#909399' }, t('generation.queue.hint')),
   ])
   await ElMessageBox({
     title: summary.title,
     message: body,
     showCancelButton: true,
     closeOnClickModal: false,
-    confirmButtonText: summary.free ? '确定' : '确认并生成',
-    cancelButtonText: '取消',
+    confirmButtonText: summary.free ? t('common.ok') : t('generation.queue.confirm'),
+    cancelButtonText: t('common.cancel'),
   })
 }
 
@@ -29,13 +30,13 @@ async function previewChecked(episodeId, shots, kind, regenerate) {
   const preview = await episodeGenerationAPI.generate(episodeId, buildGenerateBody({ shots, kind, confirm: false, regenerate }))
   const summary = confirmSummary(preview)
   if (summary.blocked) throw new Error(summary.blockedText)
-  if (preview.provider_ready === false) throw new Error('还没有可用的服务商 Key，请先到设置里添加')
+  if (preview.provider_ready === false) throw new Error(t('generate.warn.noProvider'))
   return summary
 }
 
 async function askUser(summary) {
   if (!summary.canConfirm || summary.free) return
-  try { await confirmDialog(summary) } catch (_) { throw new Error('已取消') }
+  try { await confirmDialog(summary) } catch (_) { throw new Error(t('generation.cancelled')) }
 }
 
 /** 批量开始前弹一次确认（总估价）；之后对这些镜头的 queueShot 不再逐个弹窗。取消或超额度抛错。 */
@@ -49,7 +50,7 @@ export async function approveBatch(episodeId, storyboardIds, kind) {
  * 返回 { task_id }（合成 id，旧轮询经 taskAPI.get 取状态）。
  */
 export async function queueShot(episodeId, storyboardId, kind, { regenerate = false } = {}) {
-  if (!episodeId) throw new Error('缺少分集，无法生成')
+  if (!episodeId) throw new Error(t('generation.queue.noEpisode'))
   const k = key(episodeId, storyboardId, kind)
   const skipDialog = approved.has(k)
   approved.delete(k)
@@ -57,8 +58,8 @@ export async function queueShot(episodeId, storyboardId, kind, { regenerate = fa
   const summary = await previewChecked(episodeId, shots, kind, regenerate)
   if (!skipDialog) await askUser(summary)
   const result = await episodeGenerationAPI.generate(episodeId, buildGenerateBody({ shots, kind, confirm: true, regenerate }))
-  const t = (result.tasks || []).find((x) => x.kind === kind && Number(x.storyboard_id) === Number(storyboardId))
-  return { task_id: makeQueuedId({ taskId: t && t.task_id, episodeId, storyboardId, kind }) }
+  const task = (result.tasks || []).find((x) => x.kind === kind && Number(x.storyboard_id) === Number(storyboardId))
+  return { task_id: makeQueuedId({ taskId: task && task.task_id, episodeId, storyboardId, kind }) }
 }
 
 /** taskAPI.get 对合成 id 的实现：读队列任务与该镜头的节点状态。 */

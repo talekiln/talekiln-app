@@ -2,6 +2,9 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { getCatalogModels, mergeModelOptions, formatPriceHint } from '../src/utils/modelSelection.js'
+import { setLocale } from '../src/i18n/index.js'
+
+setLocale('zh-CN')
 
 const catalog = {
   models: [
@@ -48,4 +51,16 @@ test('合并：本地配置的模型在前，目录补充在后并去重，已�
   assert.equal(merged[2].fromCatalog, true)
   assert.deepEqual(mergeModelOptions(['a', 'a'], []).map((m) => m.id), ['a'])
   assert.deepEqual(mergeModelOptions(undefined, undefined), [])
+})
+
+test('价格提示的单位跟随语言', () => {
+  setLocale('en')
+  try {
+    assert.equal(formatPriceHint({ per: 'image', price: 0.2 }), '¥0.2/image')
+    assert.equal(formatPriceHint({ per: 'second', price: 1 }), '¥1/s')
+    assert.equal(formatPriceHint({ per: 'constructor', price: 3 }), '¥3')
+  } finally {
+    setLocale('zh-CN')
+  }
+  assert.equal(formatPriceHint({ per: 'image', price: 0.2 }), '¥0.2/张')
 })

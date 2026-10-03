@@ -33,6 +33,12 @@ pnpm --filter @talekiln/renderer e2e               # 约 1.5–2 分钟
 
 ## 3. 点了哪些页、看到了什么
 
+> 2026-10-03 注：下表是 2026-10-02 的记录。四视图统一之后 `/project/:id/...` 这些旧路由只做重定向到 `/p/:dramaId/e/:episodeId/...`（`utils/legacyRoutes.js`，保留一个版本）。`run.mjs` 已改到新路由：批次页 `/p/:dramaId/batch`，分镜 `/p/:dramaId/e/:episodeId/storyboard`（卡片视图再切到表格看芯片），镜头工作台 `/p/:dramaId/e/:episodeId/shot/:shotId`。
+>
+> **新增的第 0 段主流程（四视图，空白项目）**：首页 -> 新建空白项目 -> 剧本（全文应用 + 追加一行，等 `save-state` 变“已保存”）-> 分镜（“新增镜头”造 3 个镜头，因本机没有文本模型；在检查器给每镜填标题 / 描述 / 图 / 视频提示词；“生成全部”-> 确认框 `generate-confirm` -> 等 `/episodes/:id/generation/status` 里镜头全部 `fresh`）-> 时间线 -> 四个视图逐个打开导出菜单并核对 8 个菜单项（视频导出应是软禁用）-> 语言开关切到 English（核对 `<html lang>`、浏览器标题、剧本标签，并扫外壳里残留的中文）-> 导出整项目备份（下载 zip）-> 回首页“导入项目包”恢复（必须得到新项目，且撤销按钮可用，即历史随项目恢复）-> 软删除两个临时项目。
+>
+> **执行状态（2026-10-03）**：这套新步骤只做了静态校验（`node --check`）和在真实浏览器里对着假厂商后端逐个核对 `data-test` 选择器与流程，**没有完整跑过**——Windows 开发机上既没有仓库内的 `playwright` 依赖，也没有全局包，装它属于下载，未经许可不做，所以 `node e2e/run.mjs` 在第一步就报 `Cannot find module 'playwright'`（通过 0 / 失败 0，没有任何一页执行）。装好 Playwright 后请重跑一遍，注意：脚本开头会 `rmSync` 掉 `e2e/screenshots/`（里面有早先提交进库的旧截图），跑完请 `git checkout -- apps/renderer/e2e/screenshots` 恢复，不要把新截图提交。
+
 | 步骤 | 页面 | 操作 | 结果（2026-10-02） |
 |---|---|---|---|
 | templates | `/templates` | 等 11 张模板卡出现 → 点第一张 → 等估价 → 一键套用 → 确认（新建项目） | 估价“预计 ¥30.60，最高 ¥36.72”；套用成功提示，项目数 1 → 2 |

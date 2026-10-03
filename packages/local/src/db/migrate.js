@@ -107,6 +107,7 @@ function ensureAllColumns(database) {
     { name: 'thumbnail',      type: 'TEXT' },
     { name: 'total_episodes', type: 'INTEGER DEFAULT 1' },
     { name: 'total_duration', type: 'INTEGER DEFAULT 0' },
+    { name: 'quality',        type: 'TEXT DEFAULT \'final\'' }, // 质量档 draft | final（四视图改造 Task 4）
     { name: 'status',         type: 'TEXT DEFAULT \'draft\'' },
     { name: 'metadata',       type: 'TEXT' },
     { name: 'created_at',     type: 'TEXT' },

@@ -1,3 +1,5 @@
+import { t } from '../i18n/index.js'
+
 export function parseModelList(models, defaultModel = '') {
   if (Array.isArray(models)) {
     return models.map((m) => String(m).trim()).filter(Boolean)
@@ -41,10 +43,10 @@ export function getCatalogModels(catalog, serviceType, provider = '') {
     })
 }
 
-const PER_LABEL = { image: '张', second: '秒', char: '字' }
+const PER_KEY = { image: 'model.unit.image', second: 'model.unit.second', char: 'model.unit.char' }
 export function formatPriceHint(entry, currency = 'CNY') {
   if (!entry || !Number.isFinite(Number(entry.price))) return ''
-  const unit = PER_LABEL[entry.per]
+  const unit = Object.hasOwn(PER_KEY, entry.per) ? t(PER_KEY[entry.per]) : undefined
   const sym = currency === 'CNY' ? '¥' : `${currency} `
   return unit ? `${sym}${entry.price}/${unit}` : `${sym}${entry.price}`
 }

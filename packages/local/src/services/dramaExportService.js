@@ -2,8 +2,10 @@
 const fs = require('fs');
 const path = require('path');
 const AdmZip = require('adm-zip');
+const crypto = require('crypto');
+const kernelSnapshot = require('../backup/kernelSnapshot');
 
-const EXPORT_VERSION = '1.4';  // 1.4: 完整导出分镜图片历史（含首尾帧 first/last 绑定）、frame_prompts、layout_description 等，支持导入后恢复首尾帧模式数据
+const EXPORT_VERSION = '1.5';  // 1.5: 追加 kernel/episode-<n>.json（项目图 + 撤销历史 + 版本）、分镜/角色 original_id，恢复后撤销与版本都在；1.4: 完整导出分镜图片历史（含首尾帧 first/last 绑定）、frame_prompts、layout_description 等，支持导入后恢复首尾帧模式数据
 
 function getStoragePath(cfg) {
   const raw = cfg?.storage?.local_path || './data/storage';
@@ -71,6 +73,50 @@ function parseSbChars(raw) {
     const arr = typeof raw === 'string' ? JSON.parse(raw) : raw;
     return Array.isArray(arr) ? arr.map(Number).filter(n => !isNaN(n)) : [];
   } catch (_) { return []; }
+}
+
+const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
+
+/** 把各集的内核快照写进 ZIP，并在 zipData.episodes[i].kernel_file 记路径。单集失败只告警（该集导入时由旧表重建项目图）。 */
+function addKernelSnapshots(db, zip, zipData, episodes, storagePath, log) {
+  let byHash = null; // 已打包文件的 sha256 -> zip 路径，用到时才建
+  const hashes = () => {
+    if (byHash) return byHash;
+    byHash = new Map();
+    for (const e of zip.getEntries()) {
+      if (!e.isDirectory && e.entryName.startsWith('media/')) {
+        const h = sha256(e.getData());
+        if (!byHash.has(h)) byHash.set(h, e.entryName);
+      }
+    }
+    return byHash;
+  };
+  const root = path.resolve(storagePath);
+  episodes.forEach((ep, i) => {
+    try {
+      const snap = kernelSnapshot.exportEpisode(db, ep.id);
+      if (!snap) return;
+      for (const ref of snap.refs) {
+        const abs = path.resolve(root, ref.slice('/static/'.length));
+        if (abs !== root && !abs.startsWith(root + path.sep)) continue; // 引用不能指到存储目录之外
+        const buf = safeReadFile(abs);
+        if (!buf) continue;
+        const h = sha256(buf);
+        let zipPath = hashes().get(h);
+        if (!zipPath) {
+          zipPath = `media/kernel/${h.slice(0, 12)}_${path.basename(abs)}`;
+          zip.addFile(zipPath, buf);
+          hashes().set(h, zipPath);
+        }
+        snap.media[ref] = zipPath;
+      }
+      const file = `kernel/episode-${ep.episode_number}-${i}.json`;
+      zip.addFile(file, Buffer.from(JSON.stringify(snap), 'utf8'));
+      zipData.episodes[i].kernel_file = file;
+    } catch (e) {
+      try { log.warn('Kernel snapshot skipped on export', { episode_id: ep.id, error: e.message }); } catch (_) {}
+    }
+  });
 }
 
 /**
@@ -256,6 +302,7 @@ function exportDrama(db, cfg, log, dramaId, opts = {}) {
             .filter(idx => idx !== undefined);
 
           return {
+            original_id: sb.id, // 内核快照里的 legacy_id / binds 靠它映射到导入后的新分镜 id
             storyboard_number: sb.storyboard_number,
             title: sb.title,
             description: sb.description,
@@ -330,6 +377,7 @@ function exportDrama(db, cfg, log, dramaId, opts = {}) {
         return zipPath;
       });
       return {
+        original_id: c.id, // 内核快照里镜头 params.characters 的旧角色 id
         name: c.name,
         role: c.role,
         description: c.description,
@@ -381,7 +429,6 @@ function exportDrama(db, cfg, log, dramaId, opts = {}) {
 
   // ---- 9. 打包 ZIP ----
   const zip = new AdmZip();
-  zip.addFile('project.json', Buffer.from(JSON.stringify(zipData, null, 2), 'utf8'));
 
   // 分镜图片完整历史（含首尾帧 first/last 专用图 + 所有历史生成）
   for (const { localRelPath, zipPath } of imageFilesToPack) {
@@ -448,6 +495,10 @@ function exportDrama(db, cfg, log, dramaId, opts = {}) {
     const buf = safeReadFile(abs);
     if (buf) zip.addFile(zipPath, buf);
   }
+
+  // 内核快照：每集一个 kernel/episode-<集号>-<序号>.json；快照里的 /static/ 引用对应的文件打进 media/kernel/（内容相同的复用已打包的文件）
+  addKernelSnapshots(db, zip, zipData, episodes, storagePath, log);
+  zip.addFile('project.json', Buffer.from(JSON.stringify(zipData, null, 2), 'utf8'));
 
   log.info('Drama exported', { drama_id: dramaId, title: drama.title });
   if (opts && opts.outFile) {

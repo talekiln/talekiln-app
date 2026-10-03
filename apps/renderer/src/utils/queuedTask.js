@@ -1,6 +1,8 @@
 // 旧页面按“task_id + 轮询 /tasks/:id”写成；出图/出视频改走持久队列后，用一个带前缀的合成 id 让旧轮询逻辑原样可用。
 // 合成 id：q:<ai 任务 id>:<剧集 id>:<分镜 id>:<image|video>。没有真实任务（已最新 / 命中旧结果）时 ai 任务 id 为 "-"。
 
+import { t } from '../i18n/index.js'
+
 const PREFIX = 'q:'
 
 export function makeQueuedId({ taskId, episodeId, storyboardId, kind }) {
@@ -21,7 +23,7 @@ export function parseQueuedId(id) {
 export function toLegacyTask(aiTask, shotState) {
   if (aiTask) {
     if (aiTask.state === 'failed' || aiTask.state === 'cancelled') {
-      return { status: 'failed', error: aiTask.error_message || aiTask.error_code || (aiTask.state === 'cancelled' ? '已取消' : '生成失败') }
+      return { status: 'failed', error: aiTask.error_message || aiTask.error_code || (aiTask.state === 'cancelled' ? t('generation.cancelled') : t('generation.failed')) }
     }
     if (aiTask.state === 'succeeded') {
       // 结果写进内核之前仍算进行中
@@ -29,7 +31,7 @@ export function toLegacyTask(aiTask, shotState) {
     }
     return { status: 'processing' }
   }
-  if (shotState && shotState.state === 'failed') return { status: 'failed', error: shotState.error_message || shotState.error_code || '生成失败' }
+  if (shotState && shotState.state === 'failed') return { status: 'failed', error: shotState.error_message || shotState.error_code || t('generation.failed') }
   if (shotState && shotState.state === 'fresh') return { status: 'completed' }
   return { status: 'processing' }
 }

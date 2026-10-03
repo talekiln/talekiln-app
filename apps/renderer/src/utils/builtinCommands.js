@@ -10,41 +10,54 @@
  *   getViews()              { script, shots }（内核视图投影，可能为 null）
  * ctx（每次搜索现取）: { episodeId, dramaId, canUndo, canRedo, busy }
  */
+import { t } from '../i18n/index.js'
 import { viewLocation, shotNumbers } from './projectViews.js'
 
 const hasEpisode = (ctx) => !!ctx.episodeId
 
+// 标题 / 分组 / 关键词都是 getter：命令只注册一次，切换语言后下一次渲染 / 搜索就取到新语言的文案。
+// 关键词是 commands.<id>.kw 里用 | 分隔的一串（中英文都带，两种语言下都能搜到）。
+function def(id, groupId, extra) {
+  return {
+    id,
+    get title() { return t(`commands.${id}.title`) },
+    get group() { return groupId ? t(`commands.group.${groupId}`) : undefined },
+    get keywords() { return t(`commands.${id}.kw`).split('|') },
+    ...extra,
+  }
+}
+
 export function createBuiltinCommands(deps) {
   const goView = (view) => (ctx) => deps.go(viewLocation(view, ctx.episodeId, ctx.dramaId))
-  const page = (id, title, path, keywords = []) => ({ id, title, group: '页面', keywords, run: () => deps.go(path) })
+  const page = (id, path, groupId = 'pages') => def(id, groupId, { run: () => deps.go(path) })
   return [
-    page('nav.list', '项目列表', '/', ['首页', '回到首页', 'home', 'projects']),
-    { ...page('project.new', '新建项目', '/new-project', ['创建', 'new', 'create']), group: '项目' },
-    page('nav.ai-config', '打开设置', '/ai-config', ['设置', 'AI 配置', '模型', 'settings', 'key', '密钥']),
-    page('nav.keyboard', '打开快捷键设置', '/settings/shortcuts', ['快捷键', '键位', 'keymap', 'shortcuts', 'premiere', '剪映', '预设']),
-    page('nav.task-center', '任务中心', '/task-center', ['队列', '生成任务', 'tasks']),
-    page('nav.spend', '花费统计', '/spend', ['费用', '账单', '花费', 'cost']),
-    page('nav.media-library', '媒体素材库', '/media-library', ['素材', 'media']),
-    { id: 'view.script', title: '切换到剧本视图', group: '视图', keywords: ['剧本', 'script', '台词'], when: hasEpisode, run: goView('script') },
-    { id: 'view.storyboard', title: '切换到镜头视图', group: '视图', keywords: ['镜头', '分镜', 'storyboard', 'shots'], when: hasEpisode, run: goView('storyboard') },
-    { id: 'view.timeline', title: '切换到时间线视图', group: '视图', keywords: ['时间线', 'timeline', '剪辑'], when: hasEpisode, run: goView('timeline') },
-    { id: 'view.canvas', title: '切换到画布视图', group: '视图', keywords: ['画布', 'canvas', '节点'], when: hasEpisode, run: goView('canvas') },
-    { id: 'edit.undo', title: '撤销', group: '编辑', keywords: ['undo', '回退'], hint: 'Ctrl+Z', when: hasEpisode, enabled: (c) => c.canUndo && !c.busy, run: () => deps.undo() },
-    { id: 'edit.redo', title: '重做', group: '编辑', keywords: ['redo'], hint: 'Ctrl+Shift+Z', when: hasEpisode, enabled: (c) => c.canRedo && !c.busy, run: () => deps.redo() },
-    { id: 'history.open', title: '打开版本历史', group: '编辑', keywords: ['历史', '版本', 'history', 'versions', '操作记录'], when: hasEpisode, run: () => deps.openHistory() },
-    { id: 'project.export', title: '导出视频', group: '项目', keywords: ['导出', 'export', '渲染', '成片'], when: hasEpisode, run: (ctx) => deps.go({ path: `/episodes/${ctx.episodeId}/export`, query: ctx.dramaId ? { drama: String(ctx.dramaId) } : {} }) },
+    page('nav.list', '/'),
+    page('project.new', '/new-project', 'project'),
+    page('nav.ai-config', '/ai-config'),
+    page('nav.keyboard', '/settings/shortcuts'),
+    page('nav.task-center', '/task-center'),
+    page('nav.spend', '/spend'),
+    page('nav.media-library', '/media-library'),
+    def('view.script', 'views', { when: hasEpisode, run: goView('script') }),
+    def('view.storyboard', 'views', { when: hasEpisode, run: goView('storyboard') }),
+    def('view.timeline', 'views', { when: hasEpisode, run: goView('timeline') }),
+    def('view.canvas', 'views', { when: hasEpisode, run: goView('canvas') }),
+    def('edit.undo', 'edit', { hint: 'Ctrl+Z', when: hasEpisode, enabled: (c) => c.canUndo && !c.busy, run: () => deps.undo() }),
+    def('edit.redo', 'edit', { hint: 'Ctrl+Shift+Z', when: hasEpisode, enabled: (c) => c.canRedo && !c.busy, run: () => deps.redo() }),
+    def('history.open', 'edit', { when: hasEpisode, run: () => deps.openHistory() }),
+    def('project.export', 'project', { when: hasEpisode, run: (ctx) => deps.go(ctx.dramaId ? { name: 'episode-export', params: { dramaId: ctx.dramaId, episodeId: ctx.episodeId } } : { path: `/episodes/${ctx.episodeId}/export` }) }),
     // P3-B
-    { id: 'project.batch', title: '批量生成', group: '项目', keywords: ['批量', '多集', '批次', 'batch', '并发', '预算'], when: (ctx) => !!ctx.dramaId, run: (ctx) => deps.go(`/project/${ctx.dramaId}/batch`) },
+    def('project.batch', 'project', { when: (ctx) => !!ctx.dramaId, run: (ctx) => deps.go({ name: 'batch', params: { dramaId: ctx.dramaId } }) }),
     // P3-T
-    page('nav.templates', '模板市场', '/templates', ['模板', '套用', '市场', 'template', 'templates']),
+    page('nav.templates', '/templates'),
     // P3-D
-    { id: 'director.open', title: '导演模式', group: '编辑', keywords: ['导演', '自然语言', '改片', '一句话', 'director', 'ai'], when: hasEpisode, run: (ctx) => deps.openDirector(ctx.episodeId) },
+    def('director.open', 'edit', { when: hasEpisode, run: (ctx) => deps.openDirector(ctx.episodeId) }),
     // P3-P
-    page('nav.plugins', '插件与服务商', '/settings/plugins', ['插件', '服务商', '扩展', 'plugins', 'providers', '开发者模式']),
+    page('nav.plugins', '/settings/plugins'),
     // P3-K
-    page('nav.backup', '云备份', '/settings/backup', ['备份', '云备份', '快照', '恢复', 'MinIO', 'S3', 'backup', 'restore', '对象存储']),
+    page('nav.backup', '/settings/backup'),
     // P3-S
-    page('nav.studio', '工作室', '/settings/studio', ['工作室', '成员', '席位', '邀请', '共享角色', '共享模板', '共享库', 'studio', 'team', 'seat']),
+    page('nav.studio', '/settings/studio'),
   ]
 }
 
@@ -64,12 +77,12 @@ export function createContentProvider(deps, { limit = 30 } = {}) {
     for (const g of shots?.groups || []) {
       for (const s of g.shots) {
         const title = s.params?.title || s.params?.description || ''
-        const hay = `${nums[s.id] ? `镜头 ${nums[s.id]}` : ''} ${title} ${s.dialogue || ''}`.toLowerCase()
+        const hay = `${nums[s.id] ? t('commands.shotNo', { no: nums[s.id] }) : ''} ${title} ${s.dialogue || ''}`.toLowerCase()
         if (!roughMatch(q, hay)) continue
         out.push({
           id: `shot:${s.id}`,
-          title: `镜头 ${nums[s.id]}：${cut(title || s.dialogue || '（未命名镜头）')}`,
-          group: '镜头',
+          title: t('commands.shotTitle', { no: nums[s.id], text: cut(title || s.dialogue || t('commands.unnamedShot')) }),
+          group: t('commands.group.shot'),
           keywords: [s.dialogue || '', `${nums[s.id]}`, g.title || ''],
           run: (c) => { deps.select({ kind: 'shot', id: s.id }); deps.go(viewLocation('storyboard', c.episodeId, c.dramaId)) },
         })
@@ -83,8 +96,8 @@ export function createContentProvider(deps, { limit = 30 } = {}) {
         if (!roughMatch(q, hay)) continue
         out.push({
           id: `line:${l.id}`,
-          title: `${l.speaker && !String(l.text || '').startsWith(l.speaker) ? `${l.speaker}：` : ''}${cut(l.text)}`, // 对白行文字常自带“说话人：”前缀
-          group: '台词',
+          title: l.speaker && !String(l.text || '').startsWith(l.speaker) ? t('commands.speakerLine', { speaker: l.speaker, text: cut(l.text) }) : cut(l.text), // 对白行文字常自带“说话人：”前缀
+          group: t('commands.group.line'),
           keywords: [l.speaker || ''],
           run: (c) => { deps.select({ kind: 'line', id: l.id }); deps.go(viewLocation('script', c.episodeId, c.dramaId)) },
         })

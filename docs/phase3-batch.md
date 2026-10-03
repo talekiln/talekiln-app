@@ -14,11 +14,11 @@
 | `packages/local/src/app.js` | 组装：`createBatchService` + `createBatchScheduler` + `attachToWorker`；任务结束回调里顺带通知批次 |
 | `packages/local/src/generation/service.js` | 唯一改动：`create(ep, spec, { batch })` 把 `_batch` 写进任务 params，首帧完成后自动接上的视频任务也带同样标记（`_` 前缀参数不会发给厂商） |
 | `packages/local/src/errors/error-codes.json` | 新增 `BATCH_BUDGET_EXCEEDED`、`BATCH_NOTHING_TO_DO`、`BATCH_STATE` |
-| `apps/renderer/src/views/BatchPage.vue` | 批次页 `/project/:dramaId/batch`：建批次面板 + 批次列表（汇总卡片、每集进度、单集重试） |
+| `apps/renderer/src/views/BatchPage.vue` | 批次页 `/project/:dramaId/batch`：建批次面板 + 批次列表（汇总卡片、每集进度、单集重试）（2026-10-03：路由改为 `/p/:dramaId/batch`，由生成菜单「多集批量生成…」进入，旧路径重定向） |
 | `apps/renderer/src/utils/batchView.js` | 页面用到的纯函数（金额文案、并发钳制、策略校验、状态标签、轮询间隔、汇总卡片） |
 | `apps/renderer/src/api/batches.js` | axios 封装 |
 | `apps/renderer/src/router/index.js`、`utils/builtinCommands.js` | 路由与命令面板「批量生成」，均放在末尾的 `// P3-B` 块 |
-| `apps/renderer/src/views/StoryboardPage.vue`、`DramaDetail.vue` | 页头各加一个「批量生成」按钮进入批次页 |
+| `apps/renderer/src/views/StoryboardPage.vue`、`DramaDetail.vue` | 页头各加一个「批量生成」按钮进入批次页（2026-10-03：`DramaDetail.vue` 已随四视图统一删除；入口现为生成菜单「多集批量生成…」和侧栏「多集批量生成」，旧路径 `/project/:dramaId/batch` 重定向到 `/p/:dramaId/batch`。） |
 | `packages/local/test/batch.test.js`、`apps/renderer/test/batchView.test.js` | 测试（第 6 节） |
 
 批次不自己提交任务：每个镜头仍然通过现有的生成服务 `generation.create` 进持久队列 `ai_tasks`，由队列 worker 提交、轮询、下载、写回。批次只决定**什么时候**把下一个镜头放进队列，以及把任务结果汇总成每集的状态。所以任务中心、花费统计、重试 / 取消单个任务等现有功能对批次任务照常可用。
@@ -115,7 +115,7 @@
 
 ## 4. 批次页
 
-`/project/:dramaId/batch`，从剧集管理页、分镜表页头的「批量生成」按钮或命令面板「批量生成」进入。
+`/project/:dramaId/batch`，从剧集管理页、分镜表页头的「批量生成」按钮或命令面板「批量生成」进入。（2026-10-03：入口见上，`DramaDetail` 已删除。）
 
 - 建批次面板：分集多选（全选 / 清空）、生成内容（首帧 + 视频 / 只首帧 / 只视频）、每个已启用服务商的并发输入框（最大值 = 队列上限，旁边标「队列上限 n」）、预算（元，留空不限）、失败策略（重试次数、失败后跳过 / 暂停、夜间时段开关 + 起止时间）。表单变化后 400 ms 调一次 `dry_run`，显示「全部完成预计 ¥x–y（最多 ¥z）」或拒绝原因；点「开始批量生成」前再确认一次。
 - 批次列表：每个批次一个面板，状态标签、操作按钮（暂停 / 继续 / 重试失败的集 / 取消），错误提示或等待原因，四张汇总卡片（进度、已花费、预计区间、已用时），进度条，每集表格（分集、状态、镜头 x/y、任务统计、花费、预计、说明、操作：重试本集 / 去分镜表）。

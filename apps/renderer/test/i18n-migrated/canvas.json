@@ -1,0 +1,7 @@
+[
+  "views/CanvasView.vue",
+  "components/canvas/*.vue",
+  "components/canvas/canvasModel.js",
+  "utils/canvasAssetRefs.js",
+  "utils/projectViews.js"
+]

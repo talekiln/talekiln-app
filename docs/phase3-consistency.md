@@ -18,7 +18,7 @@
 | `packages/local/src/errors/error-codes.json` | `CONSISTENCY_UNAVAILABLE`（503）、`CONSISTENCY_FAILED`、`NO_REFERENCE_CANDIDATES`（400） |
 | `apps/renderer/src/utils/consistencyView.js`、`api/consistency.js` | 芯片 / 建议文案 / 估价文案 / 自动挑选结果的纯函数与接口封装 |
 | `apps/renderer/src/views/ShotWorkbench.vue`、`StoryboardPage.vue` | 只读的「一致性 NN」芯片（悬停看建议与重做估价） |
-| `apps/renderer/src/views/ReferenceLibrary.vue` | 角色页「自动挑选参考图」按钮（可勾选挑完自动锁定第一名；排好的候选显示在下方，可手动锁定其它张） |
+| `apps/renderer/src/views/ReferenceLibrary.vue` | 角色页「自动挑选参考图」按钮（可勾选挑完自动锁定第一名；排好的候选显示在下方，可手动锁定其它张）（2026-10-03：`ReferenceLibrary.vue` 已被资产库整页 `/p/:dramaId/assets` 取代，自动挑选参考图的入口随资产面板迁移。） |
 
 ## 2. 评分规则
 

@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { parseApiError, toastText } from './errorToast'
+import { t } from '../i18n/index.js'
 
 const request = axios.create({
   baseURL: '/api/v1',
@@ -18,7 +19,7 @@ request.interceptors.response.use(
     if (res.success !== false) {
       return res.data !== undefined ? res.data : res
     }
-    return Promise.reject(new Error(res.error?.message || '请求失败'))
+    return Promise.reject(new Error(res.error?.message || t('request.failed')))
   },
   (error) => {
     // 提取后端实际错误信息（优先 API 返回的 message，而非 axios 通用 "status code 500"）

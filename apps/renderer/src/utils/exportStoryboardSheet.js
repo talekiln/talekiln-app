@@ -1,30 +1,27 @@
-/** 分镜表导出列：每镜头一行，每个元素类型一列 */
-const COLUMNS = [
-  '镜头序号',
-  '镜号',
-  '镜头标题',
-  '段幕',
-  '时长(秒)',
-  '景别',
-  '运镜',
-  '场景',
-  '角色',
-  '道具',
-  '地点',
-  '时间',
-  '镜头描述',
-  '对白',
-  '解说旁白',
-  '动作',
-  '结果',
-  '氛围',
-  '布局描述',
-  '首帧提示词',
-  '尾帧提示词',
-  '图片提示词',
-  '视频提示词',
-  '全能片段',
+// 分镜表导出：每镜头一行，每个元素类型一列。列名、标签、文件名全部走 i18n（语言随当前界面语言）。
+import { t } from '../i18n/index.js'
+
+const COLUMN_KEYS = [
+  'index', 'number', 'title', 'segment', 'duration', 'shotType', 'movement', 'scene', 'characters', 'props',
+  'location', 'time', 'description', 'dialogue', 'narration', 'action', 'result', 'atmosphere', 'layout',
+  'firstFramePrompt', 'lastFramePrompt', 'imagePrompt', 'videoPrompt', 'universalSegment',
 ]
+
+/** 当前语言的 24 个列名 */
+export function sheetColumns() {
+  return COLUMN_KEYS.map((k) => t(`export.sheet.col.${k}`))
+}
+
+const MOVEMENTS = [
+  'static', 'push', 'pull', 'pan', 'tilt', 'tracking', 'crane_up', 'crane_dn', 'orbit', 'handheld', 'zoom', 'roll',
+  'whip_pan', 'spiral', 'hitchcock_zoom', 'bullet_time', 'dutch_angle_move', 'dolly_track', 'slowmo_orbit',
+]
+
+/** 运镜代码 -> 当前语言的名称；不认识的代码原样返回 */
+export function movementLabel(code) {
+  if (!code) return ''
+  return MOVEMENTS.includes(code) ? t(`export.sheet.move.${code}`) : String(code)
+}
 
 function cellText(v) {
   if (v == null) return ''
@@ -40,38 +37,40 @@ function escapeHtml(s) {
 }
 
 function escapeCsvCell(s) {
-  const t = cellText(s)
-  if (/[",\n\r]/.test(t)) return `"${t.replace(/"/g, '""')}"`
-  return t
+  const text = cellText(s)
+  if (/[",\n\r]/.test(text)) return '"' + text.replace(/"/g, '""') + '"'
+  return text
 }
 
+const labelled = (key, v) => (v ? t(`export.sheet.label.${key}`, { v }) : '')
+
 function charBlock(char) {
-  const name = cellText(char.name) || '未命名'
+  const name = cellText(char.name) || t('export.sheet.unnamed')
   const parts = [
-    char.appearance && `外貌：${char.appearance}`,
-    char.personality && `性格：${char.personality}`,
-    char.description && `描述：${char.description}`,
-    char.polished_prompt && `提示词：${char.polished_prompt}`,
+    labelled('appearance', char.appearance),
+    labelled('personality', char.personality),
+    labelled('description', char.description),
+    labelled('prompt', char.polished_prompt),
   ].filter(Boolean)
   return parts.length ? `${name}\n${parts.join('\n')}` : name
 }
 
 function sceneBlock(scene) {
-  const head = cellText(scene.location) || '未命名场景'
+  const head = cellText(scene.location) || t('export.sheet.unnamedScene')
   const parts = [
-    scene.time && `时间：${scene.time}`,
-    scene.prompt && `提示词：${scene.prompt}`,
-    scene.polished_prompt && `润色：${scene.polished_prompt}`,
+    labelled('time', scene.time),
+    labelled('prompt', scene.prompt),
+    labelled('polished', scene.polished_prompt),
   ].filter(Boolean)
   return parts.length ? `${head}\n${parts.join('\n')}` : head
 }
 
 function propBlock(prop) {
-  const name = cellText(prop.name) || '未命名'
+  const name = cellText(prop.name) || t('export.sheet.unnamed')
   const parts = [
-    prop.type && `类型：${prop.type}`,
-    prop.description && `描述：${prop.description}`,
-    prop.prompt && `提示词：${prop.prompt}`,
+    labelled('type', prop.type),
+    labelled('description', prop.description),
+    labelled('prompt', prop.prompt),
   ].filter(Boolean)
   return parts.length ? `${name}\n${parts.join('\n')}` : name
 }
@@ -86,52 +85,44 @@ function field(getField, sb, key) {
   return cellText(sb[key])
 }
 
+function segmentLabel(sb) {
+  const title = cellText(sb.segment_title)
+  const n = sb.segment_index != null ? Number(sb.segment_index) + 1 : 0
+  if (title) return n ? t('export.sheet.segmentFull', { n, title }) : title
+  return n ? t('export.sheet.segment', { n }) : ''
+}
+
 /**
+ * 构建分镜表数据：严格一行对应一个分镜。
  * @param {object} ctx
  * @param {Array} ctx.storyboards
- * @param {Function} ctx.getScene - (sbId) => scene | null
- * @param {Function} ctx.getCharacters - (sbId) => character[]
- * @param {Function} ctx.getProps - (sbId) => prop[]
- * @param {Function} ctx.getMovementLabel - (code) => string
- * @param {Function} ctx.getField - (sb, key) => string
- * @param {Function} [ctx.getFirstFramePrompt] - (sbId) => string
- * @param {Function} [ctx.getLastFramePrompt] - (sbId) => string
+ * @param {Function} [ctx.getScene] (sbId) => scene | null
+ * @param {Function} [ctx.getCharacters] (sbId) => character[]
+ * @param {Function} [ctx.getProps] (sbId) => prop[]
+ * @param {Function} [ctx.getMovementLabel] (code) => string
+ * @param {Function} [ctx.getField] (sb, key) => 编辑中的值
+ * @param {Function} [ctx.getFirstFramePrompt] (sbId) => string
+ * @param {Function} [ctx.getLastFramePrompt] (sbId) => string
  */
-/** 构建分镜表数据：严格一行对应一个分镜 */
 export function buildStoryboardSheetRows(ctx) {
   const {
-    storyboards = [],
-    getScene,
-    getCharacters,
-    getProps,
-    getMovementLabel,
-    getField,
-    getFirstFramePrompt,
-    getLastFramePrompt,
+    storyboards = [], getScene, getCharacters, getProps, getMovementLabel, getField, getFirstFramePrompt, getLastFramePrompt,
   } = ctx
+  const moveLabel = getMovementLabel || movementLabel
 
-  const rows = []
-  for (let i = 0; i < storyboards.length; i++) {
-    const sb = storyboards[i]
+  return storyboards.map((sb, i) => {
     const sbId = sb.id
-    const segmentTitle = cellText(sb.segment_title)
-    const segmentIndex = sb.segment_index != null ? Number(sb.segment_index) + 1 : ''
-    const segment = segmentTitle
-      ? (segmentIndex ? `第${segmentIndex}幕·${segmentTitle}` : segmentTitle)
-      : (segmentIndex ? `第${segmentIndex}幕` : '')
-
     const scene = getScene?.(sbId)
     const chars = getCharacters?.(sbId) || []
     const propList = getProps?.(sbId) || []
-
-    rows.push([
+    return [
       i + 1,
       sb.storyboard_number ?? i + 1,
-      cellText(field(getField, sb, 'title')) || `镜头${i + 1}`,
-      segment,
+      cellText(field(getField, sb, 'title')) || t('export.sheet.shotN', { n: i + 1 }),
+      segmentLabel(sb),
       field(getField, sb, 'duration') || sb.duration || '',
       field(getField, sb, 'shot_type'),
-      getMovementLabel?.(field(getField, sb, 'movement')) || field(getField, sb, 'movement'),
+      moveLabel(field(getField, sb, 'movement')) || field(getField, sb, 'movement'),
       scene ? sceneBlock(scene) : '',
       joinBlocks(chars.map(charBlock)),
       joinBlocks(propList.map(propBlock)),
@@ -149,9 +140,49 @@ export function buildStoryboardSheetRows(ctx) {
       field(getField, sb, 'polished_prompt') || cellText(sb.polished_prompt || sb.image_prompt),
       field(getField, sb, 'video_prompt') || cellText(sb.video_prompt),
       field(getField, sb, 'universal_segment_text'),
-    ])
+    ]
+  })
+}
+
+const idOf = (c) => (c !== null && typeof c === 'object' ? Number(c.id) : Number(c))
+
+/**
+ * 由接口数据组装 buildStoryboardSheetRows 的 ctx。
+ * storyboards 来自 GET /episodes/:id/storyboards；characters / scenes / props 来自项目；
+ * framePrompts: { [sbId]: { first, last } }（可选，来自 frame-prompts 接口）。
+ */
+export function sheetContextFrom({ storyboards = [], characters = [], scenes = [], props = [], framePrompts = {} } = {}) {
+  const byId = new Map(storyboards.map((sb) => [Number(sb.id), sb]))
+  const find = (list, id) => list.find((x) => Number(x.id) === Number(id)) || null
+  return {
+    storyboards,
+    getScene(sbId) {
+      const sb = byId.get(Number(sbId))
+      if (!sb) return null
+      return (sb.scene_id != null && find(scenes, sb.scene_id)) || sb.background || null
+    },
+    getCharacters(sbId) {
+      const sb = byId.get(Number(sbId))
+      const list = Array.isArray(sb?.characters) ? sb.characters : []
+      return list
+        .map((c) => find(characters, idOf(c)) || (c !== null && typeof c === 'object' ? c : null))
+        .filter(Boolean)
+    },
+    getProps(sbId) {
+      const sb = byId.get(Number(sbId))
+      const ids = Array.isArray(sb?.prop_ids) ? sb.prop_ids : []
+      return ids.map((id) => find(props, id)).filter(Boolean)
+    },
+    getFirstFramePrompt: (sbId) => framePrompts[sbId]?.first || '',
+    getLastFramePrompt: (sbId) => framePrompts[sbId]?.last || '',
   }
-  return rows
+}
+
+/** 文件名（不含扩展名）：<项目名>-<第N集>-分镜表 */
+export function sheetFilename({ title, episodeNumber, episodeId } = {}) {
+  const name = (title || 'project').replace(/[\\/:*?"<>|]/g, '_')
+  const ep = episodeNumber != null ? t('export.sheet.fileEp', { n: episodeNumber }) : `ep${episodeId || '1'}`
+  return `${name}-${ep}-${t('export.sheet.fileSuffix')}`
 }
 
 function formatExcelCellContent(s) {
@@ -159,41 +190,41 @@ function formatExcelCellContent(s) {
   return escapeHtml(s).replace(/\n/g, '&#10;')
 }
 
-/** 导出为 Excel 可打开的 HTML 表格（.xls，无需额外依赖） */
-export function downloadStoryboardExcel(rows, filename) {
+/** Excel 可打开的 HTML 表格（.xls，无需额外依赖） */
+export function buildExcelHtml(rows) {
   const tdStyle = 'style="white-space:normal;vertical-align:top;mso-data-placement:same-cell;"'
-  const header = COLUMNS.map((c) => `<th>${escapeHtml(c)}</th>`).join('')
-  const body = rows.map((row) => {
-    const cells = row.map((c) => `<td ${tdStyle}>${formatExcelCellContent(c)}</td>`).join('')
-    return `<tr>${cells}</tr>`
-  }).join('')
-
-  const html = `<!DOCTYPE html>
+  const header = sheetColumns().map((c) => `<th>${escapeHtml(c)}</th>`).join('')
+  const cell = (c) => `<td ${tdStyle}>${formatExcelCellContent(c)}</td>`
+  const body = rows.map((row) => `<tr>${row.map(cell).join('')}</tr>`).join('')
+  return `<!DOCTYPE html>
 <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
 <head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
-<x:Name>分镜表</x:Name></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
+<x:Name>${escapeHtml(t('export.sheet.sheetName'))}</x:Name></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
 <body><table border="1"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></body></html>`
+}
 
-  const blob = new Blob(['\uFEFF' + html], { type: 'application/vnd.ms-excel;charset=utf-8' })
+/** CSV 文本（不含 BOM；行间用 CRLF，单元格内换行放在引号里） */
+export function buildCsvText(rows) {
+  return [sheetColumns().map(escapeCsvCell).join(','), ...rows.map((row) => row.map(escapeCsvCell).join(','))].join('\r\n')
+}
+
+function saveBlob(blob, filename) {
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = filename.endsWith('.xls') ? filename : `${filename}.xls`
+  a.download = filename
   a.click()
   URL.revokeObjectURL(a.href)
 }
 
+export function downloadStoryboardExcel(rows, filename) {
+  const blob = new Blob(['﻿' + buildExcelHtml(rows)], { type: 'application/vnd.ms-excel;charset=utf-8' })
+  saveBlob(blob, filename.endsWith('.xls') ? filename : `${filename}.xls`)
+}
+
 /** CSV 备选（部分环境 .xls 受限时使用） */
 export function downloadStoryboardCsv(rows, filename) {
-  const lines = [
-    COLUMNS.map(escapeCsvCell).join(','),
-    ...rows.map((row) => row.map(escapeCsvCell).join(',')),
-  ]
-  const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8' })
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = filename.endsWith('.csv') ? filename : `${filename}.csv`
-  a.click()
-  URL.revokeObjectURL(a.href)
+  const blob = new Blob(['﻿' + buildCsvText(rows)], { type: 'text/csv;charset=utf-8' })
+  saveBlob(blob, filename.endsWith('.csv') ? filename : `${filename}.csv`)
 }
 
 export function exportStoryboardSheet(ctx, filenameBase) {

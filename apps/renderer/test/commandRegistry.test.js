@@ -3,6 +3,9 @@ import assert from 'node:assert/strict'
 
 import { createRegistry, fuzzyScore, scoreCommand, RECENT_STORAGE_KEY } from '../src/utils/commandRegistry.js'
 import { createBuiltinCommands, createContentProvider } from '../src/utils/builtinCommands.js'
+import { setLocale } from '../src/i18n/index.js'
+
+setLocale('zh-CN')
 
 const memStorage = () => {
   const m = new Map()
@@ -247,9 +250,9 @@ test('builtin commands execute: view switch keeps episode and drama; undo/redo r
   await r.execute('history.open', ctx)
   await assert.rejects(() => r.execute('edit.redo', ctx), /disabled/)
   await assert.rejects(() => r.execute('edit.undo', { ...ctx, busy: true }), /disabled/)
-  assert.deepEqual(calls[0], ['go', { path: '/episodes/5/canvas', query: { drama: '9' } }])
-  assert.deepEqual(calls[1], ['go', { path: '/project/9/storyboard', query: { drama: '9', episode: '5' } }])
-  assert.deepEqual(calls[2], ['go', { path: '/episodes/5/export', query: { drama: '9' } }])
+  assert.deepEqual(calls[0], ['go', { name: 'episode-canvas', params: { dramaId: 9, episodeId: 5 }, query: {} }])
+  assert.deepEqual(calls[1], ['go', { name: 'episode-storyboard', params: { dramaId: 9, episodeId: 5 }, query: {} }])
+  assert.deepEqual(calls[2], ['go', { name: 'episode-export', params: { dramaId: 9, episodeId: 5 } }])
   assert.deepEqual(calls[3], ['undo'])
   assert.deepEqual(calls[4], ['history'])
   await r.execute('project.new', {})
@@ -270,11 +273,11 @@ test('content provider: searches shots and script lines; empty query or no episo
   const hit = r.search('车内', ctx)[0]
   await r.execute(hit.cmd, ctx)
   assert.deepEqual(calls[0], ['select', { kind: 'shot', id: 's2' }])
-  assert.deepEqual(calls[1], ['go', { path: '/project/9/storyboard', query: { drama: '9', episode: '5' } }])
+  assert.deepEqual(calls[1], ['go', { name: 'episode-storyboard', params: { dramaId: 9, episodeId: 5 }, query: {} }])
   const line = r.search('雨越下越大', ctx).find((x) => x.cmd.id === 'line:l2')
   await r.execute(line.cmd, ctx)
   assert.deepEqual(calls[2], ['select', { kind: 'line', id: 'l2' }])
-  assert.deepEqual(calls[3], ['go', { path: '/episodes/5/script', query: { drama: '9' } }])
+  assert.deepEqual(calls[3], ['go', { name: 'episode-script', params: { dramaId: 9, episodeId: 5 }, query: {} }])
 })
 
 test('content provider: does not repeat the speaker when the line text already starts with it', () => {
@@ -292,4 +295,24 @@ test('content provider: caps the number of results and tolerates missing views',
   const many = { script: { groups: [{ id: 'g', lines: Array.from({ length: 100 }, (_, i) => ({ id: `l${i}`, text: `雨 ${i}` })) }] } }
   const out = createContentProvider({ ...deps, getViews: () => many }, { limit: 5 })('雨', { episodeId: 1 })
   assert.equal(out.length, 5)
+})
+
+test('builtin commands follow the locale (titles, groups) and keep both languages searchable', () => {
+  const cmds = createBuiltinCommands({ go() {} })
+  const undo = cmds.find((c) => c.id === 'edit.undo')
+  try {
+    setLocale('en')
+    assert.equal(undo.title, 'Undo')
+    assert.equal(undo.group, 'Edit')
+    assert.ok(undo.keywords.includes('撤销'), 'Chinese title stays searchable in English')
+    const r = createRegistry({ storage: memStorage() })
+    r.registerAll(cmds)
+    assert.equal(r.search('export', { episodeId: 1 })[0].cmd.title, 'Export video')
+    assert.equal(r.search('导出', { episodeId: 1 })[0].cmd.id, 'project.export')
+    setLocale('zh-CN')
+    assert.equal(undo.title, '撤销')
+    assert.equal(undo.group, '编辑')
+  } finally {
+    setLocale('zh-CN')
+  }
 })

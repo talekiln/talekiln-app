@@ -3,13 +3,17 @@
  * 入出点、画面区域的归一化、费用文案、请求体、内核版本的 V1..Vn 标签与 A/B 对比。
  * 服务端：packages/local/src/regionEdit（POST /shots/:id/edit-region 等）。
  */
+import { t } from '../i18n/index.js'
 
 export const FULL_RECT = Object.freeze({ x: 0, y: 0, w: 1, h: 1 })
 export const MIN_SEGMENT_MS = 200
 export const MIN_RECT_SIDE = 0.02
 export const VIDEO_MIN_SEC = 1
 export const VIDEO_MAX_SEC = 15
-export const MODES = Object.freeze([{ value: 'region', label: '只改框选区域' }, { value: 'segment', label: '整段重做' }])
+export const MODES = Object.freeze([
+  { value: 'region', get label() { return t('storyboard.wb.mode.region') } },
+  { value: 'segment', get label() { return t('storyboard.wb.mode.segment') } },
+])
 
 const round4 = (n) => Math.round(n * 1e4) / 1e4
 const clamp01 = (n) => Math.min(1, Math.max(0, n))
@@ -63,18 +67,18 @@ export function rectStyle(rect) {
   return { left: pct(r.x), top: pct(r.y), width: pct(r.w), height: pct(r.h) }
 }
 
-/** 归一化矩形 -> 中文位置描述（与服务端 regionLabel 同一规则）。 */
+/** 归一化矩形 -> 位置描述（中文与服务端 regionLabel 同一规则）。 */
 export function rectLabel(rect) {
   const r = normalizeRect(rect)
-  if (!r || (r.w >= 0.95 && r.h >= 0.95)) return '整幅画面'
+  if (!r || (r.w >= 0.95 && r.h >= 0.95)) return t('region.rect.full')
   const cx = r.x + r.w / 2
   const cy = r.y + r.h / 2
-  const hor = cx < 1 / 3 ? '左' : cx > 2 / 3 ? '右' : '中'
-  const ver = cy < 1 / 3 ? '上' : cy > 2 / 3 ? '下' : '中'
-  if (hor === '中' && ver === '中') return '画面中央'
-  if (ver === '中') return `画面${hor}侧`
-  if (hor === '中') return `画面${ver}方`
-  return `画面${ver}${hor}`
+  const hor = cx < 1 / 3 ? t('region.dir.left') : cx > 2 / 3 ? t('region.dir.right') : ''
+  const ver = cy < 1 / 3 ? t('region.dir.top') : cy > 2 / 3 ? t('region.dir.bottom') : ''
+  if (!hor && !ver) return t('region.rect.center')
+  if (!ver) return t('region.rect.side', { dir: hor })
+  if (!hor) return t('region.rect.edge', { dir: ver })
+  return t('region.rect.corner', { ver, hor })
 }
 
 /** 矩形占画面的百分比（整数，至少 1）。 */
@@ -173,29 +177,29 @@ export function costLine(est) {
   const e = est.estimate
   const cur = e.currency || 'CNY'
   const seconds = est.segment?.seconds ?? segmentSeconds(est.edit?.t0_ms, est.edit?.t1_ms)
-  let line = `只改这 ${seconds} 秒约 ${formatCents(e.cents, cur)}`
+  let line = t('region.cost.segment', { sec: seconds, price: formatCents(e.cents, cur) })
   const notes = []
   if (e.full && e.full.cents > 0) {
     const s = savingPercent(e.cents, e.full.cents)
-    notes.push(`整镜重做约 ${formatCents(e.full.cents, cur)}${s > 0 ? `，省 ${s}%` : ''}`)
+    notes.push(t(s > 0 ? 'region.cost.fullSave' : 'region.cost.full', { price: formatCents(e.full.cents, cur), pct: s }))
   }
-  if (e.sample_prices || e.known === false) notes.push('样例价')
-  if (notes.length) line += `（${notes.join('；')}）`
+  if (e.sample_prices || e.known === false) notes.push(t('region.cost.sample'))
+  if (notes.length) line = t('region.cost.withNotes', { base: line, notes: notes.join(t('region.cost.sep')) })
   return line
 }
 
 /** 策略 -> 给用户看的一句话。 */
 export function strategyText(strategy) {
-  if (strategy === 'provider_mask') return '服务商直接按区域编辑原片'
-  if (strategy === 'segment_splice') return '服务商不支持区域编辑：按入点 / 出点两帧重新生成这一段，再拼回原片'
+  if (strategy === 'provider_mask') return t('region.strategy.mask')
+  if (strategy === 'segment_splice') return t('region.strategy.splice')
   return ''
 }
 
 /** 估算响应 -> 不能提交的原因（可提交返回 ''）。 */
 export function refusalText(est) {
   if (!est) return ''
-  if (est.allowed === false) return est.refusal?.message || '超过花费上限'
-  if (est.provider_ready === false) return `未配置 ${est.provider || ''} 的视频服务或 Key`
+  if (est.allowed === false) return est.refusal?.message || t('region.refusal.cap')
+  if (est.provider_ready === false) return t('region.refusal.provider', { provider: est.provider || '' })
   return ''
 }
 
@@ -222,15 +226,20 @@ export function canSubmitEdit({ total, prompt, range, rect, mode = 'region', bus
 
 // ---------- 改片记录 ----------
 
-export const REGION_STATUS = { queued: '排队中', running: '生成中', done: '已完成', failed: '失败' }
-export const regionStatusText = (s) => REGION_STATUS[s] || String(s || '')
+export const REGION_STATUS = {
+  get queued() { return t('region.status.queued') },
+  get running() { return t('region.status.running') },
+  get done() { return t('region.status.done') },
+  get failed() { return t('region.status.failed') },
+}
+export const regionStatusText = (s) => (Object.hasOwn(REGION_STATUS, s) ? REGION_STATUS[s] : String(s || ''))
 export const regionStatusType = (s) => (s === 'done' ? 'success' : s === 'failed' ? 'danger' : s === 'running' ? 'warning' : 'info')
 export const isRegionPending = (s) => s === 'queued' || s === 'running'
 
 /** 一条改片记录的摘要："1.00s–2.50s · 画面上方 · 把伞换成红色"。 */
 export function regionLine(item) {
   if (!item) return ''
-  const where = item.mode === 'segment' ? '整段' : rectLabel(item.rect)
+  const where = item.mode === 'segment' ? t('storyboard.wb.mode.segmentShort') : rectLabel(item.rect)
   return `${formatMs(item.t0_ms)}–${formatMs(item.t1_ms)} · ${where} · ${item.prompt || ''}`
 }
 
@@ -250,12 +259,12 @@ export function versionVideoSrc(ref) {
   return `/static/${ref.replace(/^\/+/, '')}`
 }
 
-const SOURCE_TEXT = { 'legacy-import': '导入', 'legacy-sync': '同步旧素材', rebase: '沿用旧素材' }
+const SOURCE_KEYS = { 'legacy-import': 'storyboard.wb.source.import', 'legacy-sync': 'region.source.sync', rebase: 'region.source.rebase' }
 function sourceText(source) {
   if (!source) return ''
-  if (SOURCE_TEXT[source]) return SOURCE_TEXT[source]
-  if (String(source).startsWith('ai-task:')) return 'AI 生成'
-  if (String(source).startsWith('region-edit:')) return '选镜改片'
+  if (Object.hasOwn(SOURCE_KEYS, source)) return t(SOURCE_KEYS[source])
+  if (String(source).startsWith('ai-task:')) return t('storyboard.wb.source.ai')
+  if (String(source).startsWith('region-edit:')) return t('storyboard.wb.source.regionEdit')
   return String(source)
 }
 
@@ -277,8 +286,8 @@ export function versionItems(info, regions = []) {
     const region = byResult.get(v.id) || (regionId ? byId.get(regionId) : null) || null
     const meta = v.metadata || {}
     const bits = []
-    if (meta.model) bits.push(`模型 ${meta.model}`)
-    if (meta.duration_ms) bits.push(`${(meta.duration_ms / 1000).toFixed(1)} 秒`)
+    if (meta.model) bits.push(t('storyboard.wb.meta.model', { model: meta.model }))
+    if (meta.duration_ms) bits.push(t('storyboard.wb.meta.seconds', { sec: (meta.duration_ms / 1000).toFixed(1) }))
     return {
       id: v.id,
       no: i + 1,
@@ -315,6 +324,6 @@ export function defaultVersionCompare(items) {
 /** 采用版本的提示（服务端会让节点参数跟随版本配方，所以采用后都是“最新”）。 */
 export function adoptHint(item) {
   if (!item) return ''
-  if (item.adopted) return '当前采用'
-  return item.isEdit ? '采用改片结果（原版本保留，可随时切回）' : '采用这一版'
+  if (item.adopted) return t('storyboard.wb.adopt.current')
+  return t(item.isEdit ? 'storyboard.wb.adopt.edit' : 'storyboard.wb.adopt.plain')
 }

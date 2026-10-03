@@ -116,7 +116,7 @@ describe('referral stub', () => {
 
 describe('sample route', () => {
   it('builds the storyboard location from the seed response', () => {
-    assert.deepEqual(storyboardLocation({ drama_id: 4, episode_id: 9 }), { name: 'storyboard', params: { dramaId: 4 }, query: { episode: 9 } })
+    assert.deepEqual(storyboardLocation({ drama_id: 4, episode_id: 9 }), { name: 'episode-storyboard', params: { dramaId: 4, episodeId: 9 } })
   })
   it('seeds through the given api and returns the location', async () => {
     let asked

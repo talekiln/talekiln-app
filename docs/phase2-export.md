@@ -9,7 +9,7 @@
 | `packages/local/src/export/exporters/` | 纯函数导出器，零网络、零文件系统：`jianying.js`、`xmeml.js`、`fcpxml.js`、`presets.js`、`paths.js`、`common.js` |
 | `packages/local/src/export/mediaExport.js` | 服务层：读内核 `timelineView`（只读）、解析素材路径并校验、调用导出器、写目录 |
 | `packages/local/src/routes/export.js` | `POST /export/jianying`、`POST /export/fcpxml`（不依赖渲染核心 lycore，核心没启动也能用） |
-| `apps/renderer/src/views/ExportPage.vue`、`utils/exportJob.js` | 尺寸预设下拉与“导出到剪映 / Premiere”面板 |
+| `apps/renderer/src/views/ExportPage.vue`、`utils/exportJob.js` | 尺寸预设下拉与“导出到剪映 / Premiere”面板（2026-10-03：`ExportPage.vue` 已随四视图统一改为导出对话框，由导出菜单或时间线页的「导出」打开。） |
 | `packages/local/test/exportMedia.test.js` | 3 个样例项目的结构断言（见第 6 节） |
 
 输入是 `kernel.timelineView(graph)` 的投影：`video / subtitle / narration / music` 四轨，毫秒整数，素材 `asset_ref` 在服务层被转成本机绝对路径。导出不写图、不改内核语义（测试里断言导出前后图快照与日志不变）。

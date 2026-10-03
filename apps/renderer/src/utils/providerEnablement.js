@@ -4,8 +4,10 @@
  * 引导向导、AI 配置页、模型目录下拉都只认这里，不再各自写死服务商列表。
  */
 
+import { t } from '../i18n/index.js'
+
 export const DEFAULT_PROVIDERS = [
-  { id: 'bailian', label: '阿里云百炼', aliases: ['bailian', 'dashscope', 'aliyun', 'qwen_image', 'qwen'] },
+  { id: 'bailian', get label() { return t('model.provider.bailian') }, aliases: ['bailian', 'dashscope', 'aliyun', 'qwen_image', 'qwen'] },
 ]
 
 /** 规范化服务端返回；空或异常时回退默认。 */
@@ -35,5 +37,5 @@ export function oneKeyVisible(providers, providerId) {
 
 /** 开放服务商的名称串，用于提示语，如“阿里云百炼”或“阿里云百炼、火山方舟”。 */
 export function providerLabels(providers) {
-  return normalizeProviders(providers).map((p) => p.label).join('、')
+  return normalizeProviders(providers).map((p) => p.label).join(t('model.listSep'))
 }

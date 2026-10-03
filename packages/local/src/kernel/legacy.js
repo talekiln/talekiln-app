@@ -59,13 +59,29 @@ function sceneRuns(rows) {
   return runs;
 }
 
+/** 项目画幅 -> 合成节点的 size（WxH，长边 1920 / 短边 1080）。未知画幅返回 null（保留内核默认）。 */
+const COMPOSE_SIZES = { '16:9': '1920x1080', '9:16': '1080x1920', '1:1': '1080x1080', '4:3': '1440x1080', '3:4': '1080x1440', '21:9': '2560x1080' };
+function composeSizeFor(aspectRatio) {
+  const key = text(aspectRatio).trim().replace(/：/g, ':');
+  return COMPOSE_SIZES[key] || null;
+}
+
+/** 剧集所属项目的画幅（dramas.metadata.aspect_ratio）；取不到返回 ''。 */
+function projectAspectRatio(db, episode) {
+  try {
+    const row = db.prepare('SELECT metadata FROM dramas WHERE id = ?').get(episode.drama_id);
+    const meta = row && typeof row.metadata === 'string' && row.metadata.trim() ? JSON.parse(row.metadata) : (row && row.metadata) || {};
+    return text(meta && meta.aspect_ratio);
+  } catch (_) { return ''; }
+}
+
 /**
  * 纯函数：旧表行 -> 项目图。
  * - 剧本按行切成 script_line；与镜头对白/旁白/动作逐字相同的行并入镜头的行（不重复），其余放进“剧本”组；
  * - 每个镜头的 dialogue / narration / action 列切回行并连 derives 边；
  * - video_url / 图片 / 旁白音频作为采用版本；timelines 的视频轨 -> compose.segments，音乐轨 -> compose.music。
  */
-function buildGraphFromRows({ episode, storyboards, timeline }) {
+function buildGraphFromRows({ episode, storyboards, timeline, aspectRatio }) {
   const T = (s) => s.trim();
   const rows = storyboards;
   const runs = sceneRuns(rows);
@@ -143,7 +159,11 @@ function buildGraphFromRows({ episode, storyboards, timeline }) {
   }
   g = kernel.applyTx(g, {
     tx_id: 'import:compose', label: 'import timeline',
-    ops: [{ op: 'setComposeSegments', node: cid, segments }, { op: 'setParam', node: cid, path: ['music'], value: music }],
+    ops: [
+      { op: 'setComposeSegments', node: cid, segments },
+      { op: 'setParam', node: cid, path: ['music'], value: music },
+      ...(composeSizeFor(aspectRatio) ? [{ op: 'setParam', node: cid, path: ['size'], value: composeSizeFor(aspectRatio) }] : []),
+    ],
   }).graph;
 
   // 已有产物 -> 采用版本（cacheKey 取当前值，所以导入后是 fresh；hash 是引用字符串的摘要，不读文件）
@@ -177,7 +197,7 @@ function importLegacy(db, episodeId) {
     if (!episode) throw new KernelError('NOT_FOUND', `episode not found: ${episodeId}`);
     const storyboards = db.prepare('SELECT * FROM storyboards WHERE episode_id = ? AND deleted_at IS NULL ORDER BY storyboard_number, id').all(ep);
     const timeline = timelineService.loadTimelineByEpisode(db, ep);
-    const graph = buildGraphFromRows({ episode, storyboards, timeline });
+    const graph = buildGraphFromRows({ episode, storyboards, timeline, aspectRatio: projectAspectRatio(db, episode) });
     s.initProject(db, ep, graph);
     return { created: true, ...counts(graph) };
   })();
@@ -353,4 +373,4 @@ function materialize(db, episodeId, graph) {
   })();
 }
 
-module.exports = { importLegacy, materialize, buildGraphFromRows, deriveStatus, shotLines, shotParams, clipId, splitLines, SPEAKER_RE };
+module.exports = { importLegacy, materialize, buildGraphFromRows, composeSizeFor, deriveStatus, shotLines, shotParams, clipId, splitLines, SPEAKER_RE };
