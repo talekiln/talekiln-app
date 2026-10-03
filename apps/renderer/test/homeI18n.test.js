@@ -38,7 +38,6 @@ function staticKeys() {
 // 带 ${} 的 key 在代码里由固定集合展开
 const DYNAMIC = [
   ...['script', 'storyboard', 'timeline', 'canvas'].map((v) => `home.view.${v}`),
-  ...['16:9', '9:16', '3:4', '1:1', '4:3', '21:9'].map((a) => `home.aspect.${a}`),
   ...['media', 'character', 'scene', 'prop'].map((x) => `home.library.tab.${x}`),
   ...['character', 'scene', 'prop'].flatMap((k) => [`home.library.empty.${k}`, `home.library.edit.${k}`, `home.library.confirmDelete.${k}`]),
   ...['name', 'location', 'time', 'category', 'description', 'tags'].map((f) => `home.library.field.${f}`),

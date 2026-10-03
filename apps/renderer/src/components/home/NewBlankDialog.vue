@@ -16,7 +16,7 @@
       </el-form-item>
       <el-form-item :label="t('home.field.aspect')">
         <el-select v-model="form.aspect_ratio" style="width: 100%" data-test="blank-aspect">
-          <el-option v-for="a in ASPECTS" :key="a" :label="t(`home.aspect.${a}`)" :value="a" />
+          <el-option v-for="a in ASPECTS" :key="a" :label="t(`common.aspect.${a}`)" :value="a" />
         </el-select>
         <p class="hint">{{ t('home.field.aspectHint') }}</p>
       </el-form-item>

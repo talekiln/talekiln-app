@@ -32,7 +32,7 @@
         </el-form-item>
         <el-form-item :label="t('home.field.aspect')">
           <el-select v-model="form.aspect_ratio" style="width: 160px">
-            <el-option v-for="a in ASPECTS" :key="a" :label="t(`home.aspect.${a}`)" :value="a" />
+            <el-option v-for="a in ASPECTS" :key="a" :label="t(`common.aspect.${a}`)" :value="a" />
           </el-select>
         </el-form-item>
       </div>
