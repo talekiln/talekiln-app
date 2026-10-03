@@ -4,6 +4,45 @@ const path = require('path');
 const AdmZip = require('adm-zip');
 const { randomUUID } = require('crypto');
 const storageLayout = require('./storageLayout');
+const kernelSnapshot = require('../backup/kernelSnapshot');
+const { EXPORT_VERSION } = require('./dramaExportService');
+
+// 备份包错误：code 供路由映射成 BACKUP_CORRUPT / BACKUP_VERSION_UNSUPPORTED。
+// message 保留“损坏 / 格式 / 缺少”字样，/dramas/import 旧接口据此仍返回 400。
+function backupError(code, message) {
+  return Object.assign(new Error(message), { code });
+}
+
+// 一次导入的上下文（importDrama 同步执行，不会重入）：
+//   memo   zip 路径 -> 已写入的相对路径，同一个 zip 文件只落盘一次（内核快照与旧表共用同一份文件）
+//   created 本次写入的所有绝对路径，失败时全部删除，不留半个项目的媒体文件
+let ctx = null;
+
+function versionParts(v) {
+  const m = /^(\d+)\.(\d+)/.exec(String(v == null ? '' : v).trim());
+  return m ? [Number(m[1]), Number(m[2])] : null;
+}
+
+function checkVersion(v) {
+  const got = versionParts(v);
+  const sup = versionParts(EXPORT_VERSION);
+  if (!got) return; // 没写版本的老包按旧格式处理
+  if (got[0] > sup[0] || (got[0] === sup[0] && got[1] > sup[1])) {
+    throw backupError('BACKUP_VERSION_UNSUPPORTED', `备份包格式版本 ${v} 高于当前支持的 ${EXPORT_VERSION}，请升级 Talekiln 后再恢复`);
+  }
+}
+
+function removeCreated(storagePath, created) {
+  const root = path.resolve(storagePath);
+  for (const f of created) { try { fs.unlinkSync(f); } catch (_) {} }
+  for (const f of created) { // 清掉因此变空的目录（只向上到存储根为止）
+    let dir = path.dirname(f);
+    while (dir.startsWith(root + path.sep)) {
+      try { fs.rmdirSync(dir); } catch (_) { break; }
+      dir = path.dirname(dir);
+    }
+  }
+}
 
 function getStoragePath(cfg) {
   const raw = cfg?.storage?.local_path || './data/storage';
@@ -24,30 +63,31 @@ function parseZip(zipBuffer) {
     if (typeof zipBuffer === 'string' && !fs.existsSync(zipBuffer)) throw new Error('missing');
     zip = new AdmZip(zipBuffer);
   } catch (e) {
-    throw new Error('ZIP 文件损坏，无法解析');
+    throw backupError('BACKUP_CORRUPT', 'ZIP 文件损坏，无法解析');
   }
 
   const projectEntry = zip.getEntry('project.json');
   if (!projectEntry) {
-    throw new Error('ZIP 格式不正确：缺少 project.json');
+    throw backupError('BACKUP_CORRUPT', 'ZIP 格式不正确：缺少 project.json');
   }
 
   let data;
   try {
     data = JSON.parse(projectEntry.getData().toString('utf8'));
   } catch (e) {
-    throw new Error('project.json 格式错误，无法解析 JSON');
+    throw backupError('BACKUP_CORRUPT', 'project.json 格式错误，无法解析 JSON');
   }
 
-  if (!data.drama || !data.drama.title) {
-    throw new Error('project.json 格式不正确：缺少 drama.title 字段');
+  if (!data || typeof data !== 'object' || !data.drama || !data.drama.title) {
+    throw backupError('BACKUP_CORRUPT', 'project.json 格式不正确：缺少 drama.title 字段');
   }
+  checkVersion(data.version);
 
   // 读取所有媒体文件到 Map
   const files = new Map();
   for (const entry of zip.getEntries()) {
     if (!entry.isDirectory && entry.entryName !== 'project.json') {
-      files.set(entry.entryName, entry.getData());
+      try { files.set(entry.entryName, entry.getData()); } catch (_) { throw backupError('BACKUP_CORRUPT', `ZIP 文件损坏，无法读取 ${entry.entryName}`); }
     }
   }
 
@@ -73,13 +113,17 @@ function saveMediaFile(storagePath, projectDir, category, files, zipPath, prefix
   if (!zipPath) return null;
   const buf = files.get(zipPath);
   if (!buf) return null;
+  if (ctx && ctx.memo.has(zipPath)) return ctx.memo.get(zipPath);
   const ext = path.extname(zipPath) || '.jpg';
   const categoryPath = path.join(storagePath, projectDir, category);
   ensureDir(categoryPath);
   const name = `${prefix}_${randomUUID().slice(0, 8)}${ext}`;
   const abs = path.join(categoryPath, name);
+  if (ctx) ctx.created.push(abs);
   fs.writeFileSync(abs, buf);
-  return `${projectDir}/${category}/${name}`.replace(/\\/g, '/');
+  const rel = `${projectDir}/${category}/${name}`.replace(/\\/g, '/');
+  if (ctx) ctx.memo.set(zipPath, rel);
+  return rel;
 }
 
 /**
@@ -119,6 +163,20 @@ function saveExtraImages(storagePath, projectDir, category, files, zipPaths, pre
   return localPaths.length > 0 ? JSON.stringify(localPaths) : null;
 }
 
+/** 还原一集的内核快照：先把快照引用的媒体落盘，得到 旧引用 -> 新引用，再交给 importEpisode 做 id 映射。 */
+function restoreKernel(db, storagePath, projectDir, files, kernelFile, episodeId, idMaps) {
+  const buf = files.get(kernelFile);
+  if (!buf) throw new Error(`缺少 ${kernelFile}`);
+  let snap;
+  try { snap = JSON.parse(buf.toString('utf8')); } catch (_) { throw new Error(`${kernelFile} 格式错误`); }
+  const refs = new Map();
+  for (const [ref, zipPath] of Object.entries(snap.media || {})) {
+    const rel = saveMediaFile(storagePath, projectDir, 'kernel', files, zipPath, 'k');
+    if (rel) refs.set(ref, '/static/' + rel);
+  }
+  return kernelSnapshot.importEpisode(db, episodeId, snap, { storyboards: idMaps.storyboards, characters: idMaps.characters, refs });
+}
+
 /**
  * 导入 ZIP，创建剧集并还原所有数据
  * @param {Buffer} zipBuffer
@@ -145,11 +203,20 @@ function importDrama(db, cfg, log, zipBuffer) {
   const metaStr = JSON.stringify(metadata);
 
   // 用事务包裹全部写入：任何步骤失败时整体回滚，避免部分导入
+  // 失败时：事务回滚 + 删掉本次写入的媒体文件
   let result;
   const runImport = db.transaction(() => {
     result = _doImport(db, storagePath, files, data, d, title, metaStr, now, log);
   });
-  runImport();
+  ctx = { memo: new Map(), created: [] };
+  try {
+    runImport();
+  } catch (e) {
+    removeCreated(storagePath, ctx.created);
+    throw e;
+  } finally {
+    ctx = null;
+  }
   return result;
 }
 
@@ -180,6 +247,7 @@ function _doImport(db, storagePath, files, data, d, title, metaStr, now, log) {
 
   // ---- 导入角色 ----
   const charNewIds = []; // 按导出顺序保存新角色 id，用于恢复分镜 character_indices
+  const idMaps = { storyboards: new Map(), characters: new Map() }; // 旧 id（original_id）-> 新 id，给内核快照用
   for (let i = 0; i < (data.characters || []).length; i++) {
     const c = data.characters[i];
     if (!c.name) { charNewIds.push(null); continue; }
@@ -190,6 +258,7 @@ function _doImport(db, storagePath, files, data, d, title, metaStr, now, log) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(dramaId, c.name, c.role || null, c.description || null, c.personality || null, c.appearance || null, c.voice_style || null, c.polished_prompt || null, localPath, extraImagesJson, i, now, now);
     charNewIds.push(info.lastInsertRowid);
+    if (c.original_id != null) idMaps.characters.set(String(c.original_id), info.lastInsertRowid);
   }
 
   // ---- 导入剧集（先建好所有集，再关联角色/场景/道具） ----
@@ -347,6 +416,7 @@ function _doImport(db, storagePath, files, data, d, title, metaStr, now, log) {
          VALUES (${sbCols.map(() => '?').join(', ')})`
       ).run(...sbVals);
       const sbId = sbInfo.lastInsertRowid;
+      if (sb.original_id != null) idMaps.storyboards.set(String(sb.original_id), sbId);
 
       // 还原 storyboard_props（分镜与道具的关联）
       if (sbPropNewIds.length > 0) {
@@ -454,7 +524,20 @@ function _doImport(db, storagePath, files, data, d, title, metaStr, now, log) {
     }
   }
 
-  log.info('Drama imported', { drama_id: dramaId, title });
+  // ---- 内核快照（1.5+）：项目图 + 撤销历史 + 版本 + graph_ops。没有快照或还原失败时由旧表懒重建（importLegacy） ----
+  const kernel = [];
+  for (let epIdx = 0; epIdx < (data.episodes || []).length; epIdx++) {
+    const ep = data.episodes[epIdx];
+    const episodeId = episodeIdList[epIdx];
+    if (!episodeId || !ep.kernel_file) continue;
+    try {
+      kernel.push({ episode_id: episodeId, ...restoreKernel(db, storagePath, projectDir, files, ep.kernel_file, episodeId, idMaps) });
+    } catch (e) {
+      try { log.warn('Kernel snapshot not restored, project graph will be rebuilt from tables', { episode_id: episodeId, error: e.message }); } catch (_) {}
+    }
+  }
+
+  log.info('Drama imported', { drama_id: dramaId, title, kernel_restored: kernel.length });
   return { drama_id: dramaId, title };
 }
 

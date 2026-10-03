@@ -99,6 +99,8 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
   r.put('/dramas/:id/canvas-layout', drama.saveCanvasLayout);
   r.get('/dramas/:id/props', drama.listProps);
   r.get('/dramas/:id/scenes', legacyGaps.dramaScenes); // 必须在 /dramas/:id 之前
+  // 完整项目备份 / 恢复 / 本地快照（Task 5）；必须在 /dramas/:id 之前
+  require('./projectBackup').register(r, { db, cfg, log, extras });
   r.get('/dramas/:id', drama.getDrama);
   r.put('/dramas/:id', drama.updateDrama);
   r.delete('/dramas/:id', drama.deleteDrama);

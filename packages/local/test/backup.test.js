@@ -393,7 +393,7 @@ describe('backup service: against the fake S3', () => {
     assert.equal(manifest.sha256, run.sha256);
     assert.equal(manifest.size, run.size);
     assert.equal(manifest.app_version, '9.9.9-test');
-    assert.equal(manifest.export_version, '1.4');
+    assert.equal(manifest.export_version, '1.5');
     assert.equal(manifest.created_at, '2026-10-02T03:04:05.123Z');
     // ZIP 就是「导出项目」的格式
     assert.ok(new AdmZip(zip.body).getEntry('project.json'));

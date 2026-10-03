@@ -107,6 +107,16 @@
       "message": "该剧集还没有项目图",
       "action": "先导入旧数据（import-legacy）再编辑"
     },
+    "BACKUP_CORRUPT": {
+      "scope": "local",
+      "message": "备份包已损坏或不是有效的 Talekiln 备份，无法恢复",
+      "action": "换一个备份包重试；如果是云备份，可以回到备份列表选更早的一份"
+    },
+    "BACKUP_VERSION_UNSUPPORTED": {
+      "scope": "local",
+      "message": "备份包来自更新版本的 Talekiln，当前版本无法恢复",
+      "action": "先把应用升级到最新版本，再恢复这个备份包"
+    },
     "NOTHING_TO_UNDO": {
       "scope": "local",
       "message": "没有可撤销的操作",
