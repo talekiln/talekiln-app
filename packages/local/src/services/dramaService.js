@@ -308,6 +308,7 @@ function rowToDrama(r) {
     style: r.style || 'realistic',
     total_episodes: r.total_episodes ?? 1,
     total_duration: r.total_duration ?? 0,
+    quality: r.quality === 'draft' ? 'draft' : 'final',
     status: r.status || 'draft',
     thumbnail: r.thumbnail,
     tags: r.tags,

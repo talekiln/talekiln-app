@@ -15,6 +15,10 @@
  * 幂等键仍带上它们（防御性，与 cacheKey 重复无害）。锁定参考图同时进出图请求（referenceImages）与出视频请求（referenceUrls，
  * 适配器按模型决定是否真的发给服务商）。
  *
+ * 质量档（草稿 / 成片，spec §10.2）：项目的 quality 只改“这一次发给服务商的请求”（模型 / 分辨率 / 尺寸，取值见 qualityProfiles.js），
+ * 不是节点参数、不进 cacheKey，所以切档位不会让任何产物过期；档位记在新版本的 metadata.quality（草稿 / 成片）。
+ * “按成片质量重跑”（draftNodes + create 的 force/only）对草稿产物用同一个 cacheKey 再出一个成片版本并采用，图的过期集合不变。
+ *
  * onAdopted（可选钩子）：每次有新版本写进图后调用 { task, episode_id, shot_id, storyboard_id, node, kind, version_id, adopted }；
  * 一致性评分（P3-C）挂在这里。钩子的 promise 计入 idle()。
  */
@@ -23,7 +27,8 @@ const kernel = require('@talekiln/kernel');
 const store = require('../kernel/store');
 const legacy = require('../kernel/legacy');
 const inputs = require('../kernel/inputs');
-const { chooseProvider, pickModel } = require('./models');
+const { chooseProvider, pickModel, modelAllowed } = require('./models');
+const { normalizeQuality, applyQuality } = require('./qualityProfiles');
 
 const { KernelError } = kernel;
 
@@ -102,30 +107,55 @@ function createGenerationService({
 
   // ---------- 计划 ----------
 
-  function buildParams(kind, { shot, refs = [], firstFrame, tailFrame, model, projectId, seconds }) {
+  function buildParams(kind, { shot, refs = [], firstFrame, tailFrame, model, projectId, seconds, qResolution, qSize }) {
     const p = {};
     if (kind === 'image') {
       p.prompt = shot.image_prompt || shot.description || '';
       if (refs.length) p.referenceImages = refs;
+      if (qSize) p.size = qSize;
     } else {
       p.prompt = shot.video_prompt || shot.description || '';
       p.duration = seconds;
       if (firstFrame) p.firstFrameUrl = firstFrame;
       if (firstFrame && tailFrame) p.lastFrameUrl = tailFrame;
       if (refs.length) p.referenceUrls = refs; // 锁定参考图：与旧流程 videoService 的 reference_urls 一致，适配器按模型取用
-      if (resolution) p.resolution = resolution;
+      if (qResolution || resolution) p.resolution = qResolution || resolution;
+      if (qSize) p.size = qSize;
     }
     if (model) p.model = model;
     if (projectId != null) p._project = String(projectId);
     return p;
   }
 
+  /** 项目的质量档（dramas.quality，缺省 / 旧库 / 非法值 = final）。 */
+  function projectQuality(ep) {
+    try {
+      const row = db.prepare('SELECT d.quality AS quality FROM episodes e JOIN dramas d ON d.id = e.drama_id WHERE e.id = ?').get(Number(ep));
+      return normalizeQuality(row && row.quality);
+    } catch (_) {
+      return 'final';
+    }
+  }
+
+  /** 计划项上的质量字段：tier 是请求的档位；quality 是这一次实际生效的档位（档位表对该请求形态没有更便宜的已验证选项时 = final）。 */
+  function qualityFields(tier, q, rerunOf) {
+    return {
+      tier, quality: q.applied ? 'draft' : 'final', resolution: q.resolution || null, size: q.size || null,
+      ...(rerunOf ? { rerun_of: rerunOf } : {}),
+    };
+  }
+
   /**
    * 在图 g 上为一组镜头做计划。纯读：不写库、不建任务。
    * 每项 action：fresh（已新鲜）| cache_hit（有同 key 旧版本，改采用）| create（建任务）| chain（接在首帧之后建）| blocked。
+   * opts：{ quality（缺省取项目的）, force（节点 id 集合：即使已新鲜也规划成 create / chain，用于草稿重跑）, only（只规划 force 里的节点）}。
    */
-  function planGraph(g, ep, shotIds, kinds, contexts = null) {
+  function planGraph(g, ep, shotIds, kinds, contexts = null, opts = {}) {
     const keys = kernel.cacheKeys(g);
+    const quality = normalizeQuality(opts.quality != null ? opts.quality : projectQuality(ep));
+    const force = opts.force instanceof Set ? opts.force : new Set(opts.force || []);
+    const only = !!opts.only; // 只规划 force 里的节点
+    const adoptedId = (nodeId) => { const v = nodeId && kernel.adoptedVersion(g, nodeId); return v ? v.id : null; };
     const legacy = inputs.legacyKeys(g);
     const dramaId = episodeRow(ep).drama_id;
     const items = [];
@@ -149,8 +179,10 @@ function createGenerationService({
       const cacheVersion = (nodeId) => {
         const list = g.versions[nodeId] || [];
         const usable = (v) => v.asset && v.asset.ref;
+        const isDraft = (v) => !!(v.metadata && v.metadata.quality === 'draft');
         const unknownModel = (v) => !(v.metadata && v.metadata.inputs && 'model' in v.metadata.inputs) && !list.some((x) => x.rebased_from === v.id); // 改记过的旧版本，模型假设已经落定在别名版本上
-        return list.find((v) => v.cache_key === keys[nodeId] && usable(v))
+        return list.find((v) => v.cache_key === keys[nodeId] && usable(v) && !isDraft(v)) // 成片版本优先于草稿版本
+          || list.find((v) => v.cache_key === keys[nodeId] && usable(v))
           || list.find((v) => unknownModel(v) && v.cache_key === legacy[nodeId] && usable(v)) || null;
       };
 
@@ -158,27 +190,33 @@ function createGenerationService({
       let imageItem = null;
       if (kinds.includes('image')) {
         const node = parts.image;
+        const forced = !!node && force.has(node);
         if (!node) {
           imageItem = { ...base, kind: 'image', action: 'blocked', reason: 'no_node' };
+        } else if (only && !forced) {
+          imageItem = null; // 只重跑指定节点：其余节点不规划
         } else {
           const state = nodeState('image');
           const it = { ...base, kind: 'image', node, state, cache_key: keys[node] };
-          if (state === 'fresh') imageItem = { ...it, action: 'fresh' };
-          else if (cacheVersion(node)) imageItem = { ...it, action: 'cache_hit', version_id: cacheVersion(node).id, ref: cacheVersion(node).asset.ref };
+          if (state === 'fresh' && !forced) imageItem = { ...it, action: 'fresh' };
+          else if (!forced && cacheVersion(node)) imageItem = { ...it, action: 'cache_hit', version_id: cacheVersion(node).id, ref: cacheVersion(node).asset.ref };
           else if (!(shot.image_prompt || shot.description)) imageItem = { ...it, action: 'blocked', reason: 'no_prompt' };
           else {
             const refs = shotRefs();
             const { provider, ready } = providerFor.image;
             const saved = g.nodes[node].params.model; // 已同步进图的所选模型；'default' = 交给适配器挑
-            const model = saved && saved !== 'default' ? saved : pickModel({ provider, kind: 'image', hasRefs: refs.length > 0, listConfigs: list, catalogModels: catalog });
+            const auto = pickModel({ provider, kind: 'image', hasRefs: refs.length > 0, listConfigs: list, catalogModels: catalog });
+            const model = saved && saved !== 'default' ? saved : auto;
+            const q = applyQuality({ quality, provider, kind: 'image', shape: { hasRefs: refs.length > 0 }, model, autoModel: auto, allowed: modelAllowed({ provider, kind: 'image', catalogModels: catalog }) });
             imageItem = {
-              ...it, action: 'create', provider, provider_ready: ready, model: model || null, refs,
+              ...it, action: 'create', provider, provider_ready: ready, model: q.model || null, refs,
+              ...qualityFields(quality, q, forced ? adoptedId(node) : null),
               inputs: { model: model || null, reference_hashes: refs.map(inputs.hashRef), tail_frame_hash: null },
-              spec: { provider, kind: 'image', params: buildParams('image', { shot, refs, model, projectId: dramaId }) },
+              spec: { provider, kind: 'image', params: buildParams('image', { shot, refs, model: q.model, projectId: dramaId, qResolution: q.resolution, qSize: q.size }) },
             };
           }
         }
-        items.push(imageItem);
+        if (imageItem) items.push(imageItem);
       }
 
       // 视频：首帧来源 / 尾帧 / 模型（与动作无关，所以同步输入时也能单独取到）
@@ -210,21 +248,26 @@ function createGenerationService({
           items.push({ ...base, kind: 'video', action: 'blocked', reason: 'no_node' });
           continue;
         }
+        const forced = force.has(node);
+        if (only && !forced) continue;
         const state = nodeState('video');
         const it = { ...base, kind: 'video', node, state, cache_key: keys[node] };
-        const hit = cacheVersion(node);
-        if (state === 'fresh') { items.push({ ...it, action: 'fresh' }); continue; }
+        const hit = forced ? null : cacheVersion(node);
+        if (state === 'fresh' && !forced) { items.push({ ...it, action: 'fresh' }); continue; }
         if (hit) { items.push({ ...it, action: 'cache_hit', version_id: hit.id, ref: hit.asset.ref }); continue; }
         if (!(shot.video_prompt || shot.description)) { items.push({ ...it, action: 'blocked', reason: 'no_prompt' }); continue; }
 
         const { warnings, firstFrame, chained, tailFrame, hasFrame, model } = videoCtx();
-        if (chained) imageItem.then_video = true;
+        if (chained) { imageItem.then_video = true; if (forced) imageItem.then_video_force = true; }
         const seconds = Math.min(VIDEO_MAX_SEC, Math.max(VIDEO_MIN_SEC, Math.round((shot.duration_ms || kernel.DEFAULT_SHOT_MS) / 1000)));
         const { provider, ready } = providerFor.video;
         const refs = shotRefs();
-        const params = buildParams('video', { shot, refs, firstFrame, tailFrame, model, projectId: dramaId, seconds });
+        const auto = pickModel({ provider, kind: 'video', hasFrame, listConfigs: list, catalogModels: catalog });
+        const q = applyQuality({ quality, provider, kind: 'video', shape: { hasFrame }, model, autoModel: auto, allowed: modelAllowed({ provider, kind: 'video', catalogModels: catalog }) });
+        const params = buildParams('video', { shot, refs, firstFrame, tailFrame, model: q.model, projectId: dramaId, seconds, qResolution: q.resolution, qSize: q.size });
         items.push({
-          ...it, action: chained ? 'chain' : 'create', provider, provider_ready: ready, model: model || null,
+          ...it, action: chained ? 'chain' : 'create', provider, provider_ready: ready, model: q.model || null,
+          ...qualityFields(quality, q, forced ? adoptedId(node) : null),
           mode: hasFrame ? 'first_frame' : 'text', first_frame: firstFrame, tail_frame: tailFrame, warnings, refs,
           inputs: { model: model || null, reference_hashes: refs.map(inputs.hashRef), tail_frame_hash: tailFrame ? inputs.hashRef(tailFrame) : null },
           spec: { provider, kind: 'video', params },
@@ -271,6 +314,8 @@ function createGenerationService({
     const extra = kernel.sha256(kernel.canonicalJSON({
       provider: item.spec.provider, model: p.model || null, first: p.firstFrameUrl || null, last: p.lastFrameUrl || null,
       refs: p.referenceImages || null, ref_urls: p.referenceUrls || null, duration: p.duration || null, resolution: p.resolution || null,
+      ...(p.size ? { size: p.size } : {}), // 质量档带来的尺寸（没有时不进，旧键不变）
+      ...(item.rerun_of ? { rerun: item.rerun_of } : {}), // 草稿重跑：同一个 cacheKey，靠被替换的草稿版本 id 区分
     }));
     return `${GEN_PREFIX}${ep}:${item.node}:${item.cache_key.slice(0, 32)}:${extra.slice(0, 12)}`;
   }
@@ -285,11 +330,11 @@ function createGenerationService({
     shot_id: it.shot_id, storyboard_id: it.storyboard_id, kind: it.kind, node: it.node || null, action: it.action,
     state: it.state || null, reason: it.reason || null, model: it.model || null, mode: it.mode || null,
     provider: it.provider || null, warnings: it.warnings || [], cache_key: it.cache_key ? it.cache_key.slice(0, 12) : null,
-    refs: it.refs ? it.refs.length : 0, tail_frame: !!it.tail_frame,
+    refs: it.refs ? it.refs.length : 0, tail_frame: !!it.tail_frame, quality: it.quality || null,
   });
 
   /** 对一次点击做估算 + 额度检查。不建任何任务。 */
-  function estimate(ep, { shots = 'all', kind = 'both', regenerate = false } = {}) {
+  function estimate(ep, { shots = 'all', kind = 'both', regenerate = false, force = null, only = false, quality = null } = {}) {
     const kinds = kindsOf(kind);
     const { graph } = openGraph(ep);
     const ids = resolveShots(graph, shots);
@@ -297,7 +342,7 @@ function createGenerationService({
     const sync = syncTx(graph, ep, ids, kinds);
     if (sync) g = kernel.applyTx(g, sync).graph; // 只在副本上演算：估算不写库
     if (regenerate) g = kernel.applyTx(g, regenerateTx(g, ids, kinds)).graph; // 只在副本上演算
-    const items = planGraph(g, ep, ids, kinds);
+    const items = planGraph(g, ep, ids, kinds, null, { quality, force, only });
     const billable = items.filter((i) => i.action === 'create' || i.action === 'chain');
     const check = spend.checkBatch(billable.map((i) => i.spec));
     return { items, billable, check };
@@ -343,6 +388,9 @@ function createGenerationService({
       _gen: {
         episode_id: item.episode_id, shot_id: item.shot_id, storyboard_id: item.storyboard_id, node: item.node, kind: item.kind,
         cache_key: item.cache_key, ...(item.inputs ? { inputs: item.inputs } : {}), ...(item.then_video ? { then_video: true } : {}),
+        quality: item.quality || 'final', ...(item.tier ? { tier: item.tier } : {}),
+        ...(item.resolution ? { resolution: item.resolution } : {}), ...(item.size ? { size: item.size } : {}),
+        ...(item.rerun_of ? { rerun_of: item.rerun_of } : {}), ...(item.then_video_force ? { then_video_force: true } : {}),
       },
       ...(batch ? { _batch: batch } : {}),
     };
@@ -401,11 +449,11 @@ function createGenerationService({
       const ids = resolveShots(graph, args.shots);
       // 先对副本估算：超限则一个字节都不写（包括种子变更）
       const sim = kernel.applyTx(graph, regenerateTx(graph, ids, kinds)).graph;
-      const pre = spend.checkBatch(planGraph(sim, ep, ids, kinds).filter((i) => i.action === 'create' || i.action === 'chain').map((i) => i.spec));
+      const pre = spend.checkBatch(planGraph(sim, ep, ids, kinds, null, { quality: args.quality }).filter((i) => i.action === 'create' || i.action === 'chain').map((i) => i.spec));
       if (!pre.ok && !opts.skipCap) throw refusal(pre, ep);
       store.commit(db, ep, (g) => regenerateTx(g, ids, kinds, args.tx_id ? `${args.tx_id}:regen` : undefined), args.tx_id ? { tx_id: `${args.tx_id}:regen` } : {});
     }
-    const est = estimate(ep, { shots: args.shots, kind: args.kind });
+    const est = estimate(ep, { shots: args.shots, kind: args.kind, force: args.force, only: args.only, quality: args.quality });
     if (!est.check.ok && !opts.skipCap) throw refusal(est.check, ep);
     const unready = est.billable.find((b) => b.provider_ready === false);
     if (unready && !opts.allowNoKey) {
@@ -459,6 +507,10 @@ function createGenerationService({
     if (gen.inputs) meta.inputs = gen.inputs;
     const params = parseJson(task.params) || {};
     if (params.model) meta.model = params.model;
+    meta.quality = gen.quality === 'draft' ? 'draft' : 'final'; // 质量档只进元数据，不进 cacheKey
+    if (gen.resolution) meta.resolution = gen.resolution;
+    if (gen.size) meta.size = gen.size;
+    if (gen.rerun_of) meta.rerun_of = gen.rerun_of;
     if (gen.kind === 'video') {
       let ms = file ? await probeDurationMs(file.path) : null;
       let source = 'probe';
@@ -526,7 +578,15 @@ function createGenerationService({
       if (!node) return;
       const parts = kernel.partsOfShot(graph, gen.shot_id);
       if (kernel.nodeState(graph, parts.image) !== 'fresh') return; // 首帧已被改过，不接着出
-      create(ep, { shots: [gen.shot_id], kind: 'video' }, { skipCap: true, batch });
+      const next = { shots: [gen.shot_id], kind: 'video' };
+      if (gen.tier) next.quality = gen.tier; // 沿用点击时的档位
+      if (gen.then_video_force) { // 草稿重跑：首帧换成成片后，视频也按同一 cacheKey 重出
+        const vnode = kernel.partsOfShot(graph, gen.shot_id).video;
+        if (!vnode) return;
+        next.force = [vnode];
+        next.only = true;
+      }
+      create(ep, next, { skipCap: true, batch });
     } catch (e) {
       warn('generation chain video', { error: e && e.message, shot: gen.shot_id });
     }
@@ -605,7 +665,54 @@ function createGenerationService({
     return { episode_id: Number(ep), seq, shots, counts, stale: kernel.staleSet(g), cap: spend.capStatus() };
   }
 
-  return { preview, create, status, onTaskFinished, adoptTask, recoverFinished, idle, planGraph, estimate };
+  // ---------- 质量档：草稿产物重跑 ----------
+
+  /**
+   * 当前采用的版本是草稿档产出、且仍新鲜（版本 cacheKey = 当前 key）的 image / video 节点，
+   * 以及按成片档重跑它们的估算（与 rerunDrafts 实际入队的是同一批）。
+   */
+  function draftNodes(ep) {
+    const opened = openGraph(ep);
+    const ids = kernel.shotOrder(opened.graph);
+    let g = opened.graph;
+    const sync = syncTx(g, ep, ids, KINDS);
+    if (sync) g = kernel.applyTx(g, sync).graph; // 只在副本上演算
+    const keys = kernel.cacheKeys(g);
+    const picked = [];
+    for (const shotId of ids) {
+      const parts = kernel.partsOfShot(g, shotId);
+      for (const kind of KINDS) {
+        const node = parts[kind];
+        const v = node && kernel.adoptedVersion(g, node);
+        if (v && v.metadata && v.metadata.quality === 'draft' && v.cache_key === keys[node]) picked.push({ node, kind, shot: shotId });
+      }
+    }
+    const force = picked.map((p) => p.node);
+    const items = picked.length
+      ? planGraph(g, ep, ids, KINDS, null, { quality: 'final', force: new Set(force), only: true }).filter((i) => i.action === 'create' || i.action === 'chain')
+      : [];
+    const check = spend.checkBatch(items.map((i) => i.spec));
+    return {
+      episode_id: Number(ep),
+      count: picked.length,
+      nodes: picked,
+      force,
+      estimate: { amount: check.total, max: check.max, currency: check.currency },
+      allowed: check.ok,
+      refusal: check.ok ? null : { reason: check.reason, message: check.message },
+    };
+  }
+
+  /** 按成片档重跑草稿产物：同一批节点、同一套规划，先估算 + 额度检查再入队。 */
+  function rerunDrafts(ep, opts = {}) {
+    const d = draftNodes(ep);
+    if (!d.count) return { ...d, tasks: [] };
+    const shots = [...new Set(d.nodes.map((n) => n.shot))];
+    const r = create(ep, { shots, kind: 'both', force: d.force, only: true, quality: 'final' }, opts);
+    return { ...d, tasks: r.tasks };
+  }
+
+  return { preview, create, status, onTaskFinished, adoptTask, recoverFinished, idle, planGraph, estimate, draftNodes, rerunDrafts, projectQuality };
 }
 
 module.exports = { createGenerationService, GenerationError, GEN_PREFIX, KernelError };

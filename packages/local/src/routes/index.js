@@ -87,6 +87,7 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
   r.get('/dramas/examples', drama.listExamples);
   r.post('/dramas/import-example', drama.importExample);
   r.put('/dramas/:id/outline', drama.saveOutline);
+  r.put('/dramas/:id/quality', drama.setQuality);
   r.get('/dramas/:id/characters', drama.getCharacters);
   r.put('/dramas/:id/characters', drama.saveCharacters);
   r.put('/dramas/:id/episodes', drama.saveEpisodes);
@@ -375,6 +376,9 @@ function setupRouter(cfg, db, log, aiQueue, cloud, extras = {}) {
     const gen = require('./generation')(extras.generation, log, { legacyEnabled: !!(cfg && cfg.generation && cfg.generation.legacy_enabled === true) });
     r.post('/episodes/:id/generate', gen.generate);
     r.get('/episodes/:id/generation/status', gen.status);
+    const qr = require('./qualityRerun')(extras.generation, log);
+    r.get('/episodes/:id/quality/draft-nodes', qr.draftNodes);
+    r.post('/episodes/:id/quality/rerun', qr.rerun);
   }
 
   // ---------- export / render (G06) and AIGC marking settings (G04) ----------

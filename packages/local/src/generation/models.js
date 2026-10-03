@@ -52,4 +52,10 @@ function pickModel({ provider, kind, hasFrame = false, hasRefs = false, listConf
   return listed.length ? listed[0] : undefined;
 }
 
-module.exports = { PREFS, chooseProvider, pickModel, defaultModelOf };
+/** 质量档用：目录里该服务商该类型列了模型时，档位模型必须在其中；没列则不限制。 */
+function modelAllowed({ provider, kind, catalogModels = [] }) {
+  const listed = (catalogModels || []).filter((m) => m.provider === provider && m.service_type === kind).map((m) => m.id);
+  return (m) => !!m && (!listed.length || listed.includes(m));
+}
+
+module.exports = { PREFS, chooseProvider, pickModel, defaultModelOf, modelAllowed };

@@ -87,6 +87,22 @@ function saveOutline(db, log) {
   };
 }
 
+// 质量档（草稿 / 成片，spec §10.2）：只存档位，生成时才读；不会让任何产物过期
+function setQuality(db, log) {
+  return (req, res) => {
+    const q = req.body && req.body.quality;
+    if (q !== 'draft' && q !== 'final') return response.badRequest(res, "quality 必须是 'draft' 或 'final'");
+    try {
+      const r = db.prepare('UPDATE dramas SET quality = ? WHERE id = ? AND deleted_at IS NULL').run(q, Number(req.params.id));
+      if (!r.changes) return response.notFound(res, '剧本不存在');
+      response.success(res, { quality: q });
+    } catch (err) {
+      log.error('Set drama quality failed', { error: err.message });
+      response.internalError(res, err.message || '保存失败');
+    }
+  };
+}
+
 function getCharacters(db) {
   return (req, res) => {
     const characters = dramaService.getCharacters(db, req.params.id, req.query.episode_id);
@@ -288,6 +304,7 @@ module.exports = function dramaRoutes(db, cfg, log) {
     deleteDrama: deleteDrama(db, log),
     getDramaStats: getDramaStats(db, log),
     saveOutline: saveOutline(db, log),
+    setQuality: setQuality(db, log),
     getCharacters: getCharacters(db),
     saveCharacters: saveCharacters(db, log),
     saveEpisodes: saveEpisodes(db, log),
