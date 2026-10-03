@@ -33,6 +33,8 @@ export const useShellStore = defineStore('shell', () => {
   const assetCounts = ref({ characters: 0, scenes: 0, props: 0 })
   const quality = ref('final')
   const tasksRunning = ref(0)
+  // 当前集里“草稿档产出”的节点数；>0 时“按成片质量重跑草稿产物”才可用
+  const draftCount = ref(0)
   const renderCoreOk = ref(true)
   const loading = ref(false)
   const loadError = ref('')
@@ -136,14 +138,24 @@ export const useShellStore = defineStore('shell', () => {
     } catch (_) { /* 保持上一次的数字 */ }
   }
 
+  async function refreshDraftCount(episodeId) {
+    if (!episodeId) { draftCount.value = 0; return }
+    try {
+      const a = await api()
+      draftCount.value = a.draftCount ? Number(await a.draftCount(episodeId)) || 0 : 0
+    } catch (_) {
+      draftCount.value = 0
+    }
+  }
+
   const setStaleOnly = (v) => { staleOnly.value = !!v }
   const openAssetsPanel = () => { assetsPanelOpen.value = true }
   const closeAssetsPanel = () => { assetsPanelOpen.value = false }
 
   return {
-    dramaId, drama, episodes, assetCounts, quality, tasksRunning, renderCoreOk, loading, loadError,
+    dramaId, drama, episodes, assetCounts, quality, tasksRunning, draftCount, renderCoreOk, loading, loadError,
     staleOnly, assetsPanelOpen, aspectRatio, style,
-    loadProject, setQuality, rememberView, lastView, landingPath, refreshTasks,
+    loadProject, setQuality, rememberView, lastView, landingPath, refreshTasks, refreshDraftCount,
     setStaleOnly, openAssetsPanel, closeAssetsPanel,
   }
 })

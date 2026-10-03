@@ -85,3 +85,24 @@ export default {
 ## 5. 手工验证
 
 见下方“验证记录”（Task 2 完成时补充）。
+
+## 验证记录（Task 2 阶段 b）
+
+- 单元测试：`apps/renderer` 下 `node --test test/*.test.js`：450 个，445 通过，5 失败。失败项都不是外壳的：`assetPanelModel` / `atImageOrder` / `frameSlots` / `shotParams` 四个文件是别的 lane 先提交了测试、对应源文件还没写（ERR_MODULE_NOT_FOUND），`exportSrt` 的 `buildSrt` 一条是 lane 9 未完成的实现。外壳相关（legacyRoutes、menus、actionRegistry、dialogHost、shellStore、shellHelpers、episodeContextShell、i18n*）全部通过。
+- 构建：`pnpm --filter @talekiln/renderer build` 通过。
+- 浏览器（chrome-devtools，只读）：验证时本机后端（5679）没有在监听，`/api/v1/*` 经 Vite 代理返回 500，所以**没有用示例项目 1 走完完整流程**。能确认的只有外壳本身：
+  - `/p/1/e/1/script` 渲染出顶栏、左栏、状态栏；项目加载失败时显示红色提示条，而不是白屏。
+  - 四个标签依次点击：地址变为 `/p/1/e/1/{storyboard,timeline,canvas,script}`，当前标签高亮。
+  - 语言切换：中文 -> English，标签、菜单、`<html lang>` 随之变化，选择写入 `talekiln.locale`。
+  - “生成 / 导出”菜单：不可用的项保持可见，副标题换成原因；点击它会弹出同一条原因的提示（例如“本集还没有镜头，先生成分镜”）。
+  - 没有验证：真实数据下的分集列表、过期徽标计数、撤销 / 重做、花费、任务抽屉内容、渲染核心不可用时“导出成片”的置灰。这些在后端恢复后需要补一次手工走查。
+- 截图（不提交）：`.scratch/shots/shell-export-menu.png`。
+
+## 阶段 b 新增的约定
+
+- 左栏调用的 action id：`script.addEpisode`、`script.importEpisodes`、`assets.importFromGlobal`；对话框 id：`home.projectSettings`（参数 `{ dramaId }`）。未注册时会提示“功能还在接入中”。
+- 左栏的资产三项：在四个视图里设 `shell.assetsPanelOpen = true`（由 lane 7 的资产面板消费），在资产页 / 批量页则跳到 `assets`。
+- `shell.draftCount`：外壳每 8 秒按当前集读 `GET /episodes/:id/quality/draft-nodes` 的 `count`，决定“按成片质量重跑草稿产物”是否可用；接口不存在时为 0。
+- 顶栏“花费”：`GET /spend/summary` 的 `by_project` 里 `project_id` 等于当前项目的一行；取不到就不显示。
+- 顶栏的撤销 / 重做和 Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y 接管（`shell/shortcuts.js`）取代了原 ViewSwitcher；时间线视图自己处理这些快捷键，所以不接管。
+- 镜头工作台、导出页这类“有集但不是四视图”的页面，由外壳调用 `projectViews.load(episodeId, { drama })`；四个视图仍自己加载。

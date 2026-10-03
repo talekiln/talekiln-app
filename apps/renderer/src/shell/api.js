@@ -1,5 +1,6 @@
 // 外壳使用的真实后端接口（stores/shell.js 默认通过它访问；测试注入假实现，不会加载本文件）。
 import request from '@/utils/request'
+import { pickProjectCost } from './spend.js'
 
 const quiet = { silentError: true }
 
@@ -27,6 +28,22 @@ export const shellApi = {
       ...quiet,
     })
     return data?.pagination?.total ?? (data?.items || []).length
+  },
+
+  /** 当前集里草稿档产出的节点数（GET /episodes/:id/quality/draft-nodes，Task 4） */
+  async draftCount(episodeId) {
+    const d = await request.get(`/episodes/${episodeId}/quality/draft-nodes`, quiet)
+    return Number(d?.count) || 0
+  },
+  /** 本项目累计花费（GET /spend/summary 的 by_project）；取不到时 cost 为 null */
+  async projectSpend(dramaId) {
+    const s = await request.get('/spend/summary', quiet)
+    return { cost: pickProjectCost(s, dramaId), currency: s?.currency || 'CNY' }
+  },
+  /** 任务抽屉：最近的 AI 任务（最新在前），含进行中与已结束 */
+  async recentTasks(limit = 20) {
+    const data = await request.get('/ai-tasks', { params: { page: 1, page_size: limit }, ...quiet })
+    return data?.items || []
   },
 
   // ---- 旧地址重定向用（utils/legacyRoutes.js 的 deps） ----

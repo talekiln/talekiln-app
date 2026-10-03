@@ -148,3 +148,18 @@ test('refreshTasks and stale-only / assets-panel flags', async () => {
   s.closeAssetsPanel()
   assert.equal(s.assetsPanelOpen, false)
 })
+
+test('refreshDraftCount: reads the count, 0 without an episode, an api without it, or on error', async () => {
+  setShellApi(fakeApi({ draftCount: async (id) => (id === 7 ? 4 : 0) }))
+  const s = useShellStore()
+  await s.refreshDraftCount(7)
+  assert.equal(s.draftCount, 4)
+  await s.refreshDraftCount(null)
+  assert.equal(s.draftCount, 0)
+  setShellApi(fakeApi())
+  await s.refreshDraftCount(7)
+  assert.equal(s.draftCount, 0)
+  setShellApi(fakeApi({ draftCount: async () => { throw new Error('404') } }))
+  await s.refreshDraftCount(7)
+  assert.equal(s.draftCount, 0)
+})
