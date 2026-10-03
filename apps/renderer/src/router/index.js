@@ -4,6 +4,9 @@ import { useAccountStore } from '@/stores/account'
 import { useShellStore } from '@/stores/shell'
 import { isLegacyPath, resolveLegacyRoute, LEGACY_ROUTE_RECORDS } from '@/utils/legacyRoutes'
 import { routeDecision, isStale } from '@/utils/account'
+import { routeTitle } from '@/utils/routeTitle'
+import { t, locale } from '@/i18n'
+import { watch } from 'vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -186,7 +189,7 @@ router.beforeEach(async (to) => {
     if (dest) return { path: dest, replace: true }
   }
   if (to.meta.title) {
-    document.title = `${to.meta.title} - 故事窑`
+    document.title = routeTitle(to, t)
   }
   // 登录门禁：仅当本地配置 cloud.require_login 为 true 时生效；状态查不到（本地服务异常）不拦截
   const account = useAccountStore()
@@ -204,6 +207,12 @@ router.beforeEach(async (to) => {
     } catch (_) { /* 服务未就绪时不拦截 */ }
   }
   return true
+})
+
+// 切换语言后，标题跟着换
+watch(locale, () => {
+  const cur = router.currentRoute.value
+  if (cur && cur.meta && cur.meta.title) document.title = routeTitle(cur, t)
 })
 
 export default router

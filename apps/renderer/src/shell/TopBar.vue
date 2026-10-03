@@ -233,6 +233,7 @@ function pick(it) {
   border: 1px solid var(--border-muted); border-radius: 6px; background: transparent; color: var(--text-primary); cursor: pointer;
 }
 .ep-btn:hover { background: var(--bg-hover); }
+.ep-btn .ep { white-space: nowrap; }
 .ep-btn .proj { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ep-btn .sep { color: var(--text-faint); }
 .tabs { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--bg-inner); border: 1px solid var(--border-color); }
@@ -255,6 +256,14 @@ function pick(it) {
 .active { color: var(--el-color-primary); font-weight: 600; }
 @media (max-width: 1100px) { .lbl { display: none; } }
 @media (max-width: 900px) { .brand-name, .spend { display: none; } }
+/* 窄窗口：顶栏折成两行，所有按钮都保持可见（不再被挤出右边） */
+@media (max-width: 1100px) {
+  .topbar { flex-wrap: wrap; height: auto; min-height: 48px; padding: 6px 8px; gap: 6px 6px; }
+  .topbar > * { flex-shrink: 0; }
+  .ep-btn { max-width: 180px; }
+  .tab { padding: 4px 10px; }
+}
+.topbar :deep(.el-radio-group) { flex-wrap: nowrap; white-space: nowrap; }
 </style>
 
 <style>

@@ -8,8 +8,9 @@ import exportMsgs from './messages/export.js'
 import canvas from './messages/canvas.js'
 import home from './messages/home.js'
 import backup from './messages/backup.js'
+import routes from './messages/routes.js'
 
-const all = [common, shell, script, assets, storyboard, generate, exportMsgs, canvas, home, backup]
+const all = [common, shell, script, assets, storyboard, generate, exportMsgs, canvas, home, backup, routes]
 const catalog = { 'zh-CN': {}, en: {} }
 for (const m of all) {
   Object.assign(catalog['zh-CN'], m['zh-CN'])
