@@ -31,9 +31,9 @@ action（`shell/actions/home.js`）：`home.oneLine`、`home.newBlank`、`home.i
 
 | 旧（FilmList） | 新位置 |
 |---|---|
-| 素材角色 / 素材场景 / 素材道具 三个弹窗（搜索、列表、编辑、换图、AI 生成、删除） | 素材库页 `/media-library` 的「角色 / 场景 / 道具」标签（`GlobalLibraryPanel`，同样的搜索、编辑、上传、AI 生成、删除、分页）；顶栏「全局素材库」进入 |
+| 素材角色 / 素材场景 / 素材道具 三个弹窗（搜索、列表、编辑、换图、AI 生成、删除） | 素材库页 `/media-library` 的「角色 / 场景 / 道具」标签（`GlobalLibraryPanel`，同样的搜索、编辑、上传、AI 生成、删除、分页）；顶栏「全局素材库」先打开 `assets.globalLibrary` 浏览对话框，再经其「管理素材库」进入（见缺口 5） |
 | 隐藏的「素材库」（媒体素材） | 素材库页「媒体素材」标签（`MediaAssetsPanel`：类型过滤、搜索、上传、多选批量删除、预览） |
-| 隐藏的「自由创作」按钮 | 仍然隐藏（路由 `free-create` 保留，首页不放入口） |
+| 隐藏的「自由创作」按钮 | 已删除（Task 12）：`FreeCreate` 页面不存在，旧地址 `/free-create` 由 `utils/legacyRoutes.js` 重定向到首页 |
 | 模板 | 顶栏「模板」-> `templates` |
 | 任务中心 | 顶栏「任务」-> `task-center`（页面已国际化） |
 | 花费统计 | 顶栏「花费」-> `spend` |
@@ -60,7 +60,7 @@ action（`shell/actions/home.js`）：`home.oneLine`、`home.newBlank`、`home.i
 2. **没有剧集的项目**点卡片落到 `project-home`（外壳决定落点），不是剧本。空白项目与导入剧本都会带至少 1 集，所以这只发生在旧数据 / 导入的空项目。
 3. **画幅不可改**：`updateDrama` 只支持 title / description / genre / status，重命名对话框不含画幅。重命名也无法把描述清成空（与旧版一致）。
 4. **完整备份下载经内存**：`fetch` 读完整个响应再保存，非常大的项目会占内存。后端是流式的，改成 `showSaveFilePicker` / 原生 `<a>` 需要 GET 路由或桌面端下载钩子。
-5. **与 T7 的重复**：`GlobalLibraryPanel` 是首页自己的全局角色 / 场景 / 道具库面板。assets lane 的 `GlobalLibraryDialog` 在我完成时还没有合入；合入后可以把顶栏入口改成打开它，或让两处共用一个面板。
+5. **与 T7 的重复（Task 12 已合并为一个入口）**：首页顶栏「全局素材库」现在运行 `home.globalLibrary`，它用 `openDialog('assets.globalLibrary', { kind: 'characters', scope: 'global', browseOnly: true })` 打开 assets lane 的 `GlobalLibraryDialog`（和项目内左栏「从素材库导入」是同一个对话框）。首页没有当前项目，所以 `browseOnly` 隐藏「导入所选」和「本项目资料库」来源，也不使用外壳 store 里可能残留的上一个项目 id。`GlobalLibraryPanel` 只留在 `/media-library` 的「角色 / 场景 / 道具」标签里，负责对话框没有的编辑 / 删除 / 换图 / AI 生成；对话框底部的「管理素材库（编辑 / 删除）」按当前类别跳到对应标签。代价：首页进入编辑多一次点击；「媒体素材」标签只能经该按钮（或命令面板）到达。
 6. **`home.projectSettings` 不在我这里**：LeftRail 打开它，计划由 T6（剧本）提供；`dialogs/home.js` 刻意没有注册（合并表是后者覆盖前者，home 在最后）。卡片的重命名用我自己的 `home.rename`。
 7. **导出类 action**（`export.projectZip` / `export.fullBackup`）属于 T9，没有在 home 注册；`homeApi.downloadProjectZip` / `downloadFullBackup` 可复用。
 8. **仍是中文的数据**：画风名（`constants/styleOptions`）、题材模板名 / 描述（`/scriptgen/templates` 返回）、服务端 `error_readable`（仅在错误码不认识时使用）。这些不是首页的文件。

@@ -1,7 +1,7 @@
 <template>
   <el-dialog :model-value="true" :title="t('assets.global.title')" width="min(760px, 94vw)" append-to-body @closed="emit('close', result)">
     <div class="bar">
-      <el-radio-group v-model="scope" size="small" data-test="lib-scope" @change="reset">
+      <el-radio-group v-if="!browseOnly" v-model="scope" size="small" data-test="lib-scope" @change="reset">
         <el-radio-button value="global">{{ t('assets.global.scopeGlobal') }}</el-radio-button>
         <el-radio-button value="project" :disabled="!dramaId">{{ t('assets.global.scopeProject') }}</el-radio-button>
       </el-radio-group>
@@ -46,14 +46,16 @@
 
     <template #footer>
       <span class="count">{{ t('assets.global.selected', { n: picked.length }) }}</span>
+      <el-button link type="primary" data-test="lib-manage" @click="manage">{{ t('assets.global.manage') }}</el-button>
       <el-button @click="emit('close', result)">{{ t('common.close') }}</el-button>
-      <el-button type="primary" :loading="importing" :disabled="!picked.length || !dramaId" data-test="lib-import" @click="doImport">{{ t('assets.global.import') }}</el-button>
+      <el-button v-if="!browseOnly" type="primary" :loading="importing" :disabled="!picked.length || !dramaId" data-test="lib-import" @click="doImport">{{ t('assets.global.import') }}</el-button>
     </template>
   </el-dialog>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { useI18n } from '@/i18n'
@@ -61,18 +63,25 @@ import { characterLibraryAPI } from '@/api/characterLibrary'
 import { sceneLibraryAPI } from '@/api/sceneLibrary'
 import { propLibraryAPI } from '@/api/propLibrary'
 import { KINDS, assetImageUrl, assetName, libraryItemToAsset } from '@/utils/assets'
-import { useAssetContext } from './assetContext'
+import { useAssetContext, useAssetScope } from './assetContext'
 
 // 从素材库导入资产到当前项目。两个来源：全局素材库（global=1）和本项目的资料库（drama_id）。
-// 这里只做浏览 + 导入；素材库本身的增删改在首页的 GlobalLibraryPanel。
-// props: kind 初始类别；scope 初始来源（global | project）。close 结果 { imported: n }。
+// 这里只做浏览 + 导入；素材库本身的增删改在 /media-library 页的 GlobalLibraryPanel（“管理素材库”进入）。
+// props: kind 初始类别；scope 初始来源（global | project）；browseOnly 只浏览（首页顶栏用：那里没有当前项目，
+// 也不能把素材导入到“上次打开的项目”里）。close 结果 { imported: n }。
 const props = defineProps({
+  browseOnly: { type: Boolean, default: false },
   kind: { type: String, default: 'characters' },
   scope: { type: String, default: 'global' },
 })
 const emit = defineEmits(['close'])
 const { t } = useI18n()
-const { dramaId, episodeId, assets } = useAssetContext()
+// browseOnly 不需要项目上下文，也不触发资产加载
+const ctx = props.browseOnly ? useAssetScope() : useAssetContext()
+const { episodeId, assets } = ctx
+const router = useRouter()
+// browseOnly 时不认当前项目（外壳 store 里可能还留着上一个项目的 id）
+const dramaId = computed(() => (props.browseOnly ? null : ctx.dramaId.value))
 
 const API = { characters: characterLibraryAPI, scenes: sceneLibraryAPI, props: propLibraryAPI }
 const pageSize = 12
@@ -115,6 +124,13 @@ async function load() {
   } finally {
     if (mine === seq) loading.value = false
   }
+}
+
+// 素材库本身的编辑 / 删除在 /media-library 页（GlobalLibraryPanel）：跳过去并带上当前类别标签
+const TAB_OF = { characters: 'character', scenes: 'scene', props: 'prop' }
+function manage() {
+  router.push({ name: 'media-library', query: { tab: TAB_OF[kind.value] || 'character' } })
+  emit('close', result.value)
 }
 
 function reset() {

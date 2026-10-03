@@ -6,7 +6,7 @@
     </div>
     <span class="spacer" />
     <nav class="links" :aria-label="t('home.bar.aria')">
-      <button type="button" class="link" data-test="bar-library" @click="go({ name: 'media-library', query: { tab: 'character' } })">{{ t('home.bar.library') }}</button>
+      <button type="button" class="link" data-test="bar-library" @click="openLibrary">{{ t('home.bar.library') }}</button>
       <button type="button" class="link" data-test="bar-templates" @click="go({ name: 'templates' })">{{ t('home.bar.templates') }}</button>
       <button type="button" class="link" data-test="bar-tasks" @click="go({ name: 'task-center' })">{{ t('home.bar.tasks') }}</button>
       <button type="button" class="link" data-test="bar-spend" @click="go({ name: 'spend' })">{{ t('home.bar.spend') }}</button>
@@ -37,14 +37,22 @@ import { useRouter } from 'vue-router'
 import { useI18n } from '@/i18n'
 import { useTheme } from '@/composables/useTheme'
 import LocaleSwitch from '@/shell/LocaleSwitch.vue'
+import { runAction } from '@/shell/actions/registry.js'
+import { useActionContext } from '@/shell/context.js'
 
 const emit = defineEmits(['ai-config'])
 const { t } = useI18n()
 const router = useRouter()
 const { isDark, toggle } = useTheme()
+const actionCtx = useActionContext()
 
 function go(location) {
   router.push(location)
+}
+
+// 和项目内“从素材库导入”共用 assets.globalLibrary 对话框（actions/home.js 的 home.globalLibrary）
+function openLibrary() {
+  return runAction('home.globalLibrary', actionCtx())
 }
 
 function onSettings(cmd) {

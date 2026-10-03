@@ -20,5 +20,7 @@ export default {
   'home.importScript': async (ctx) => goAfter(ctx, await ctx.openDialog('home.importScript')),
   'home.importPackage': async (ctx) => goAfter(ctx, await ctx.openDialog('home.importPackage')),
   'home.oneLine': (ctx) => ctx.router.push({ name: 'new-project' }),
-  'home.globalLibrary': (ctx) => ctx.router.push({ name: 'media-library', query: { tab: 'character' } }),
+  // 顶栏“全局素材库”：和项目内“从素材库导入”是同一个对话框（assets.globalLibrary）。首页没有当前项目，
+  // 所以只浏览（browseOnly）；增删改在对话框里的“管理素材库”进入 /media-library 的标签页（GlobalLibraryPanel）。
+  'home.globalLibrary': (ctx) => ctx.openDialog('assets.globalLibrary', { kind: 'characters', scope: 'global', browseOnly: true }),
 }
