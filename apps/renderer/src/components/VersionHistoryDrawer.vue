@@ -80,7 +80,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { kernelAPI } from '@/api/kernel'
 import { useProjectViewsStore } from '@/stores/projectViews'
-import { historyOpen } from '@/composables/useHistoryDrawer'
+import { historyFocusNode, historyOpen } from '@/composables/useHistoryDrawer'
 import { episodeOfRoute } from '@/utils/episodeContext'
 import { adoptOps, describeEntry, describeVersion, nodeLabel, shotNumberMap, thumbUrl } from '@/utils/versionHistory'
 import { STATE_LABEL } from '@/utils/projectViews'
@@ -126,6 +126,12 @@ async function reload() {
     rawNodes.value = v.nodes || []
     rawEntries.value = h.entries || []
     truncated.value = !!h.truncated
+    if (historyFocusNode.value) {
+      // 从画布节点面板打开：直接定位到那个节点的版本（节点没有版本记录时按默认选择）
+      const want = historyFocusNode.value
+      historyFocusNode.value = ''
+      if (rawNodes.value.some((n) => n.node === want)) { nodeId.value = want; tab.value = 'versions' }
+    }
     if (!rawNodes.value.some((n) => n.node === nodeId.value)) {
       // 默认选第一个有版本的节点（优先当前选择对应的镜头）
       const sel = views.selection
@@ -139,7 +145,7 @@ async function reload() {
 }
 
 // 打开时、剧集变化时、内核历史前进时（任何视图的编辑 / 撤销）重新读取
-watch([historyOpen, episodeId, () => views.seq], () => { if (historyOpen.value) reload() })
+watch([historyOpen, episodeId, () => views.seq, historyFocusNode], () => { if (historyOpen.value) reload() })
 
 const sameEpisode = () => !!episodeId.value && views.episodeId === episodeId.value
 
