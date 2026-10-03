@@ -2,7 +2,8 @@
 // 完整项目备份与本地快照（spec §10.3）
 //   POST /dramas/:id/backup/full              流式下载 <项目名>.talekiln.zip（格式 1.5）
 //   POST /dramas/restore                      上传 .talekiln.zip（multipart 字段 file）-> 新建项目，返回 { drama_id, title }
-//   GET  /dramas/:id/snapshots                本地快照列表（新的在前）
+//   GET  /dramas/:id/snapshots                本地快照列表（新的在前）；已软删除的项目也能列出（“最近删除”对话框用）
+//   POST /dramas/:id/snapshots                现在给整个项目（全部集）存一份本地快照，body 可选 { reason }（默认 'manual'）-> 201 { id, created_at }
 //   POST /dramas/:id/snapshots/:sid/restore   把某份快照恢复成新项目
 // 恢复永远新建项目，不碰原项目。包损坏 -> 400 BACKUP_CORRUPT；包来自更新版本 -> 400 BACKUP_VERSION_UNSUPPORTED。
 const fs = require('fs');
@@ -81,6 +82,18 @@ function register(r, { db, cfg, log, extras = {} }) {
   r.get('/dramas/:id/snapshots', (req, res) => {
     try {
       response.success(res, snapshots.listSnapshots(req.params.id).map(({ file, ...pub }) => pub));
+    } catch (err) {
+      restoreError(res, err, log);
+    }
+  });
+
+  // 删除项目前由前端调用。项目不存在 / 已删除 -> 404。保留最近 5 份的规则同自动快照。
+  r.post('/dramas/:id/snapshots', (req, res) => {
+    const reason = req.body && req.body.reason;
+    if (reason != null && typeof reason !== 'string') return response.badRequest(res, 'reason 必须是字符串');
+    try {
+      const { id, created_at } = snapshots.snapshotEpisode(req.params.id, (reason || '').trim().slice(0, 64) || 'manual');
+      response.created(res, { id, created_at });
     } catch (err) {
       restoreError(res, err, log);
     }

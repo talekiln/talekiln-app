@@ -81,3 +81,10 @@
 - `graph_ops` 随包最多带最近 5000 条；撤销栈最多 200 层（`store.MAX_UNDO_DEPTH`）。更早的日志恢复后没有，但当前图和栈都是完整的。
 - 恢复出来的项目标题按现有规则去重（“<名> 导入N”）。
 - 上传上限 2 GB（`/dramas/restore`）；旧的 `/dramas/import` 仍是 500 MB。
+
+## 手动快照与已删除项目（首页“删除前先存一份”）
+
+- `POST /dramas/:id/snapshots`，body 可选 `{ reason }`（字符串，默认 `'manual'`，去空白后截到 64 字符；不是字符串 -> 400）。成功 201 `{ id, created_at }`。项目不存在 / 已软删除 / id 不是数字 -> 404（不留文件）。
+- 走的就是自动快照的 `snapshotEpisode`：同一份完整导出，含项目全部集（测试里用两集的项目验证 `project.json.episodes.length === 2`），同步完成，保留最近 5 份。前端先 `POST` 这个再 `DELETE /dramas/:id`。
+- **软删除后的快照**：`GET /dramas/:id/snapshots` 和 `POST …/:sid/restore` 只看磁盘上的 `snapshots/<dramaId>/`，不查 `dramas` 表，所以已软删除的项目照常列出、照常恢复成新项目（本来就是这样，没有改路由，只补了测试）。`DELETE /dramas/:id` 只写 `deleted_at`，不碰快照目录。只有“新建快照”要求项目存在且未删除。
+- 测试：`packages/local/test/localSnapshotManual.test.js`。
