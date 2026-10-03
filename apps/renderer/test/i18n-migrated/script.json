@@ -1,0 +1,6 @@
+[
+  "views/ScriptView.vue",
+  "components/script/*",
+  "shell/actions/script.js",
+  "shell/dialogs/script.js"
+]
