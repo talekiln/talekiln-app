@@ -145,7 +145,7 @@
           <el-table-column label="操作" width="110" align="center">
             <template #default="{ row }">
               <el-button v-if="row.status === 'failed' && b.status !== 'cancelled'" link type="primary" size="small" data-test="retry-item" @click="onRetry(b, row)">重试本集</el-button>
-              <el-button link size="small" @click="$router.push({ path: `/project/${dramaId}/storyboard`, query: { episode: String(row.episode_id) } })">分镜</el-button>
+              <el-button link size="small" @click="$router.push({ name: 'episode-storyboard', params: { dramaId, episodeId: row.episode_id } })">分镜</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -316,7 +316,7 @@ async function onCancel(b) {
   return act(b, 'cancel')
 }
 
-function goProject() { router.push(`/drama/${dramaId.value}`) }
+function goProject() { router.push({ name: 'project-home', params: { dramaId: dramaId.value } }) }
 
 onMounted(load)
 onBeforeUnmount(() => { clearTimeout(pollTimer); clearTimeout(estimateTimer) })

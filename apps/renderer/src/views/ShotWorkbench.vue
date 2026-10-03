@@ -1,7 +1,7 @@
 <template>
   <div class="workbench">
     <div class="page-header">
-      <el-button text @click="$router.back()"><el-icon><ArrowLeft /></el-icon>返回</el-button>
+      <el-button text @click="$router.push({ name: 'episode-storyboard', params: { dramaId: $route.params.dramaId, episodeId: $route.params.episodeId } })"><el-icon><ArrowLeft /></el-icon>返回</el-button>
       <h2 class="page-title">分镜工作台 · 镜 {{ shot?.storyboard_number ?? '' }}</h2>
       <span class="spacer" />
       <el-tag v-if="genChip" :type="genChip.type" data-test="gen-chip">{{ genChip.label }}</el-tag>

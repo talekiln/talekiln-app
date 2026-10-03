@@ -131,7 +131,7 @@ const store = useTimelineStore()
 // 四视图共享状态（选择 / 播放头 / 历史）。时间线编辑器自己的编辑走旧接口（已改道经内核），保存后刷新共享 store
 const views = useProjectViewsStore()
 
-const episodeId = computed(() => Number(route.params.id))
+const episodeId = computed(() => Number(route.params.episodeId))
 const pxPerSec = ref(DEFAULT_ZOOM)
 const playhead = ref(0)
 const playing = ref(false)
@@ -159,13 +159,12 @@ const previewKind = computed(() => {
 })
 
 function goBack() {
-  const dramaId = route.query.drama
-  router.push(dramaId ? { path: `/film/${dramaId}`, query: { episode: String(episodeId.value) } } : '/')
+  router.push({ name: 'episode-storyboard', params: { dramaId: route.params.dramaId, episodeId: episodeId.value } })
 }
 
 async function goExport() {
   await store.flushPending()
-  router.push({ path: `/episodes/${episodeId.value}/export`, query: route.query })
+  router.push({ name: 'episode-export', params: { dramaId: route.params.dramaId, episodeId: episodeId.value } })
 }
 
 function zoom(factor) {
@@ -187,7 +186,7 @@ async function loadAll() {
     ElMessage.error(e.message || '加载时间线失败')
   }
   await maybeRecover()
-  await views.load(episodeId.value, { drama: route.query.drama })
+  await views.load(episodeId.value, { drama: route.params.dramaId })
   applySharedFocus()
 }
 

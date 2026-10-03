@@ -1,7 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { shouldShowOnboarding } from '@/utils/onboarding'
 import { useAccountStore } from '@/stores/account'
-import { useProjectViewsStore } from '@/stores/projectViews'
+import { useShellStore } from '@/stores/shell'
+import { isLegacyPath, resolveLegacyRoute } from '@/utils/legacyRoutes'
 import { routeDecision, isStale } from '@/utils/account'
 
 const router = createRouter({
@@ -31,6 +32,75 @@ const router = createRouter({
       component: () => import('@/views/NewProject.vue'),
       meta: { title: '新建项目' }
     },
+    // 项目外壳：顶栏 / 左栏 / 状态栏 + 子页面。四个视图与资产、批量、镜头工作台都是它的子路由。
+    // 旧地址（/film /drama /episodes /project）在 beforeEach 里先经 utils/legacyRoutes 重定向到这里。
+    {
+      path: '/p/:dramaId(\\d+)',
+      component: () => import('@/shell/ProjectShell.vue'),
+      children: [
+        {
+          // /p/:dramaId：上次停留的集和视图，没有则第 1 集剧本；没有剧集则资产页
+          path: '',
+          name: 'project-home',
+          component: { render: () => null },
+          beforeEnter: async (to) => {
+            const shell = useShellStore()
+            await shell.loadProject(Number(to.params.dramaId))
+            return { path: shell.landingPath(to.params.dramaId), replace: true }
+          },
+          meta: { title: '项目' }
+        },
+        {
+          path: 'e/:episodeId(\\d+)/script',
+          name: 'episode-script',
+          component: () => import('@/views/ScriptView.vue'),
+          meta: { title: '剧本视图', view: 'script' }
+        },
+        {
+          path: 'e/:episodeId(\\d+)/storyboard',
+          name: 'episode-storyboard',
+          component: () => import('@/views/StoryboardPage.vue'),
+          meta: { title: '分镜表', view: 'storyboard' }
+        },
+        {
+          path: 'e/:episodeId(\\d+)/timeline',
+          name: 'episode-timeline',
+          component: () => import('@/views/TimelineEditor.vue'),
+          meta: { title: '时间线编辑', view: 'timeline' }
+        },
+        {
+          path: 'e/:episodeId(\\d+)/canvas',
+          name: 'episode-canvas',
+          component: () => import('@/views/CanvasView.vue'),
+          meta: { title: '画布视图', view: 'canvas' }
+        },
+        {
+          path: 'e/:episodeId(\\d+)/shot/:shotId',
+          name: 'shot-workbench',
+          component: () => import('@/views/ShotWorkbench.vue'),
+          meta: { title: '分镜工作台' }
+        },
+        {
+          // 页面形式保留；Task 9 改为时间线上的导出对话框后，此路由重定向到 timeline 并打开对话框
+          path: 'e/:episodeId(\\d+)/export',
+          name: 'episode-export',
+          component: () => import('@/views/ExportPage.vue'),
+          meta: { title: '导出视频' }
+        },
+        {
+          path: 'assets',
+          name: 'assets',
+          component: () => import('@/views/ReferenceLibrary.vue'),
+          meta: { title: '角色与场景库' }
+        },
+        {
+          path: 'batch',
+          name: 'batch',
+          component: () => import('@/views/BatchPage.vue'),
+          meta: { title: '批量生成' }
+        }
+      ]
+    },
     {
       path: '/project/:dramaId/storyboard',
       name: 'storyboard',
@@ -45,7 +115,7 @@ const router = createRouter({
     },
     {
       path: '/project/:dramaId/shot/:shotId',
-      name: 'shot-workbench',
+      name: 'legacy-shot-workbench',
       component: () => import('@/views/ShotWorkbench.vue'),
       meta: { title: '分镜工作台' }
     },
@@ -69,37 +139,33 @@ const router = createRouter({
     },
     {
       path: '/episodes/:id/timeline',
-      name: 'episode-timeline',
+      name: 'legacy-episode-timeline',
       component: () => import('@/views/TimelineEditor.vue'),
       meta: { title: '时间线编辑' }
     },
     // 四视图：同一份项目图的剧本 / 分镜 / 时间线 / 画布投影，选择与历史共享
     {
       path: '/episodes/:id/script',
-      name: 'episode-script',
+      name: 'legacy-episode-script',
       component: () => import('@/views/ScriptView.vue'),
       meta: { title: '剧本视图' }
     },
     {
       path: '/episodes/:id/canvas',
-      name: 'episode-canvas',
+      name: 'legacy-episode-canvas',
       component: () => import('@/views/CanvasView.vue'),
       meta: { title: '画布视图' }
     },
     {
       // 只有剧集 id 时（如从剧本 / 画布视图的直达链接）：查出所属项目后进入分镜表
       path: '/episodes/:id/storyboard',
-      name: 'episode-storyboard',
+      name: 'legacy-episode-storyboard',
       component: () => import('@/views/StoryboardPage.vue'),
-      beforeEnter: async (to) => {
-        const drama = await useProjectViewsStore().resolveDrama(Number(to.params.id))
-        return drama ? { path: `/project/${drama}/storyboard`, query: { ...to.query, episode: String(to.params.id) }, replace: true } : { path: '/' }
-      },
       meta: { title: '分镜表' }
     },
     {
       path: '/episodes/:id/export',
-      name: 'episode-export',
+      name: 'legacy-episode-export',
       component: () => import('@/views/ExportPage.vue'),
       meta: { title: '导出视频' }
     },
@@ -148,7 +214,7 @@ const router = createRouter({
     // P3-B
     {
       path: '/project/:dramaId/batch',
-      name: 'batch',
+      name: 'legacy-batch',
       component: () => import('@/views/BatchPage.vue'),
       meta: { title: '批量生成' }
     },
@@ -186,6 +252,12 @@ const router = createRouter({
 // 每次打开应用只检查一次：首页且还没配 Key、也没点过“跳过”时，进入首次引导
 let onboardingChecked = false
 router.beforeEach(async (to) => {
+  // 旧地址先重定向到 /p/...（spec §6）；解析不出时落到存在的页面（项目资产页 / 首页）
+  if (isLegacyPath(to.path)) {
+    const { shellApi } = await import('@/shell/api')
+    const dest = await resolveLegacyRoute(to, shellApi)
+    if (dest) return { path: dest, replace: true }
+  }
   if (to.meta.title) {
     document.title = `${to.meta.title} - 故事窑`
   }

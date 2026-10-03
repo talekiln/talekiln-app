@@ -230,12 +230,12 @@ async function fit() {
 
 onMounted(async () => {
   window.addEventListener('keydown', onKey)
-  await views.load(route.params.id, { drama: route.query.drama })
+  await views.load(route.params.episodeId, { drama: route.params.dramaId })
   rebuild()
   fit()
 })
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
-watch(() => route.params.id, async (id) => { if (id) { await views.load(id, { drama: route.query.drama }); rebuild(); fit() } })
+watch(() => route.params.episodeId, async (id) => { if (id) { await views.load(id, { drama: route.params.dramaId }); rebuild(); fit() } })
 </script>
 
 <style scoped>

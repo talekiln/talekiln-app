@@ -1,7 +1,7 @@
 <template>
   <div class="ref-lib">
     <div class="page-header">
-      <el-button text @click="$router.back()"><el-icon><ArrowLeft /></el-icon>返回</el-button>
+      <el-button text @click="$router.push({ name: 'project-home', params: { dramaId: $route.params.dramaId } })"><el-icon><ArrowLeft /></el-icon>返回</el-button>
       <h2 class="page-title">{{ title || '项目' }} · 角色与场景库</h2>
       <span class="spacer" />
       <el-select v-model="model" placeholder="图像模型" clearable style="width: 200px">

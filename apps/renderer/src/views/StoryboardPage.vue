@@ -16,8 +16,8 @@
         data-test="save-indicator"
         @click="saveState === 'error' && retry()"
       >{{ saveStateText(saveState) }}</el-tag>
-      <el-button plain @click="$router.push(`/project/${$route.params.dramaId}/library`)">角色与场景库</el-button>
-      <el-button plain data-test="open-batch" @click="$router.push(`/project/${$route.params.dramaId}/batch`)">批量生成</el-button>
+      <el-button plain @click="$router.push({ name: 'assets', params: { dramaId: $route.params.dramaId } })">角色与场景库</el-button>
+      <el-button plain data-test="open-batch" @click="$router.push({ name: 'batch', params: { dramaId: $route.params.dramaId } })">批量生成</el-button>
       <el-button plain :disabled="!episodeId" title="用一句话描述修改，先看计划与花费再执行（可整体撤销）" data-test="open-director" @click="openDirector(episodeId)">导演模式</el-button>
       <el-button type="success" plain :disabled="!rows.length || !episodeId" data-test="generate-all" @click="gen.ask({ shots: 'all', kind: 'both' })">
         生成全部首帧与视频
@@ -70,7 +70,7 @@
       <el-table-column label="操作" width="260" align="center">
         <template #default="{ row, $index }">
           <el-button link type="success" :disabled="isBusy(gen.shotStatus(row.id))" data-test="generate-row" @click="gen.ask({ shots: [row.id], kind: 'both' })">生成</el-button>
-          <el-button link type="primary" @click="$router.push(`/project/${$route.params.dramaId}/shot/${row.id}`)">工作台</el-button>
+          <el-button link type="primary" @click="$router.push({ name: 'shot-workbench', params: { dramaId: $route.params.dramaId, episodeId, shotId: row.id } })">工作台</el-button>
           <el-button link :disabled="$index === 0" title="上移" @click="move($index, $index - 1)"><el-icon><ArrowUp /></el-icon></el-button>
           <el-button link :disabled="$index === rows.length - 1" title="下移" @click="move($index, $index + 1)"><el-icon><ArrowDown /></el-icon></el-button>
           <el-button link type="danger" title="删除" @click="removeShot(row)"><el-icon><Delete /></el-icon></el-button>
@@ -109,7 +109,7 @@ const rows = ref([])
 const loading = ref(false)
 const adding = ref(false)
 const saveState = ref('saved')
-const episodeId = ref(Number(route.query.episode) || 0)
+const episodeId = ref(Number(route.params.episodeId || route.query.episode) || 0)
 
 const total = computed(() => totalDuration(rows.value))
 // 四视图共享状态：选择 / 历史 / 过期数。分镜表自己的编辑仍走旧接口（已改道经内核），保存后从共享 store 刷新

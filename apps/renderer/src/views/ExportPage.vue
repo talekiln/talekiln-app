@@ -151,7 +151,7 @@ import { formatDuration } from '@/utils/mixView'
 
 const route = useRoute()
 const router = useRouter()
-const episodeId = computed(() => Number(route.params.id))
+const episodeId = computed(() => Number(route.params.episodeId))
 
 const loading = ref(false)
 const detecting = ref(false)
@@ -297,8 +297,7 @@ async function onOpenFolder() {
 }
 
 function goBack() {
-  const { drama } = route.query
-  router.push({ path: `/episodes/${episodeId.value}/timeline`, query: drama ? { drama } : {} })
+  router.push({ name: 'episode-timeline', params: { dramaId: route.params.dramaId, episodeId: episodeId.value } })
 }
 
 onMounted(() => loadOptions())

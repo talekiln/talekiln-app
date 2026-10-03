@@ -164,10 +164,10 @@ async function scrollToFocus() {
 }
 
 onMounted(async () => {
-  await views.load(route.params.id, { drama: route.query.drama })
+  await views.load(route.params.episodeId, { drama: route.params.dramaId })
   scrollToFocus()
 })
-watch(() => route.params.id, (id) => id && views.load(id, { drama: route.query.drama }))
+watch(() => route.params.episodeId, (id) => id && views.load(id, { drama: route.params.dramaId }))
 watch(() => views.selection, scrollToFocus)
 </script>
 
