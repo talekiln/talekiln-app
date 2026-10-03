@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// 三期页面浏览器 e2e：自带启动 / 关闭本机服务（假厂商）与 vite dev server，用 Playwright（全局安装或仓库依赖）驱动 Chromium，
-// 依次点模板市场、插件页、批量生成页、云备份设置页、分镜表 / 工作台（一致性芯片、改片面板）、导演面板，
+// 浏览器 e2e：自带启动 / 关闭本机服务（假厂商）与 vite dev server，用 Playwright（全局安装或仓库依赖）驱动 Chromium。
+// 先走四视图主流程：首页 -> 新建空白项目 -> 剧本 -> 分镜 -> 时间线 -> 导出菜单 -> 切到英文 -> 整项目备份 -> 恢复（得到新项目）；
+// 再依次点模板市场、插件页、批量生成页、云备份设置页、分镜表 / 工作台（一致性芯片、改片面板）、导演面板（用内置示例项目）。
 // 每页截图到 e2e/screenshots/，记录控制台错误、页面异常与 5xx 响应，最后写 e2e/screenshots/report.json。
 // 运行：pnpm --filter @talekiln/renderer e2e   （见 docs/e2e-browser.md）
 // 环境变量：TALEKILN_E2E_API_PORT（默认 5791）、TALEKILN_E2E_WEB_PORT（默认 3091）、TALEKILN_E2E_HEADED=1 有头、TALEKILN_E2E_KEEP=1 跑完不关服务。
@@ -172,6 +173,189 @@ async function main() {
     else if (r.status() >= 400) report.api_4xx.push({ status: r.status(), method: r.request().method(), url: u.replace(BASE, '') });
   });
 
+  // 0. 四视图主流程（空白项目，全程走新路由 /p/:dramaId/e/:episodeId/...）
+  const flow = {};
+  await step('flow-home-new-blank', async (e) => {
+    await goto('/');
+    await t('start-blank').waitFor({ timeout: 15000 });
+    e.screenshots.push(await shot('home'));
+    await t('start-blank').click();
+    await t('blank-title').waitFor({ timeout: 10000 });
+    await fill('blank-title', 'e2e-flow');
+    await t('blank-submit').click();
+    await page.waitForURL(/\/p\/\d+\/e\/\d+\/script/, { timeout: 20000 });
+    const m = /\/p\/(\d+)\/e\/(\d+)\/script/.exec(page.url());
+    flow.dramaId = Number(m[1]);
+    flow.episodeId = Number(m[2]);
+    e.notes.push(`新项目 ${flow.dramaId}，第 1 集 ${flow.episodeId}；落地页：${page.url().replace(BASE, '')}`);
+    await t('script-view').waitFor({ timeout: 15000 });
+    e.screenshots.push(await shot('script-empty'));
+  });
+
+  await step('flow-script', async (e) => {
+    if (!flow.dramaId) throw new Error('上一步没有建出项目');
+    await t('write-direct').click();
+    await t('full-text-area').waitFor({ timeout: 10000 });
+    await fill('full-text-area', '# 旧书店\n小林推开旧书店的门，风铃响了。\n老板：欢迎光临，随便看看。\n小林：我想找一本绝版的诗集。\n# 街角\n△雨后的街角，小林撑着伞走远。');
+    await t('full-text-apply').click();
+    await waitFor(async () => (await t('script-line').count()) >= 5, { label: '剧本行出现', timeout: 15000 });
+    await t('append-line').first().click();
+    await waitFor(async () => (await t('script-line').count()) >= 7, { label: '追加一行', timeout: 10000 });
+    e.notes.push(`剧本行：${await t('script-line').count()}`);
+    // 行 -> 正文的防抖写回（约 1 秒）
+    await waitFor(async () => /已保存|Saved/.test(await t('save-state').innerText()), { label: '剧本保存状态', timeout: 15000 }).catch((err) => e.notes.push(err.message));
+    e.screenshots.push(await shot('script-lines'));
+  });
+
+  await step('flow-storyboard', async (e) => {
+    if (!flow.dramaId) throw new Error('上一步没有建出项目');
+    await t('tab-storyboard').click();
+    await page.waitForURL(/\/storyboard/, { timeout: 15000 });
+    await t('storyboard-page').waitFor({ timeout: 15000 });
+    // 本机没有文本模型，“生成分镜”会失败；这里用“新增镜头”造 3 个镜头（走内核意图），再用假厂商生成图 / 视频
+    for (let i = 0; i < 3; i++) {
+      await waitFor(async () => !(await t('add-shot').isDisabled()), { label: '新增镜头可用', timeout: 15000 });
+      await t('add-shot').click();
+      await page.waitForTimeout(700);
+    }
+    const g = await api('GET', `/episodes/${flow.episodeId}/graph`).catch(() => null);
+    const nodes = g ? ((g.graph || g).nodes || {}) : {};
+    const shots = Object.values(nodes).filter((n) => n.type === 'shot').length;
+    e.notes.push(`内核图镜头数：${g ? shots : '(读不到)'}`);
+    if (g && shots < 3) throw new Error(`应有 3 个镜头，实际 ${shots}`);
+    e.screenshots.push(await shot('storyboard-shots'));
+    // 新建的镜头没有提示词，“生成全部”会提示缺提示词；先在检查器里给每个镜头填上图 / 视频提示词（失焦时提交）
+    for (let i = 1; i <= 3; i++) {
+      await t(`shot-card-${i}`).click();
+      await t('field-image-prompt').waitFor({ timeout: 10000 });
+      await fill('field-title', `镜头${i}`);
+      await fill('field-description', `小林在旧书店里翻书（${i}）`);
+      await fill('field-image-prompt', `旧书店内景，暖色灯光，镜头${i}`);
+      await fill('field-video-prompt', `缓慢推近，镜头${i}`);
+      await t('field-video-prompt').first().evaluate((n) => (n.querySelector('textarea') || n).blur());
+      await page.waitForTimeout(800);
+    }
+    await t('generate-all').click();
+    await t('generate-confirm').waitFor({ timeout: 15000 });
+    await waitFor(async () => !(await t('generate-confirm').isDisabled()), { label: '确认按钮可用', timeout: 15000 });
+    e.notes.push(`确认框：${(await t('generate-dialog').innerText()).trim().replace(/\s+/g, ' ').slice(0, 120)}`);
+    e.screenshots.push(await shot('storyboard-confirm'));
+    await t('generate-confirm').click();
+    await waitFor(async () => {
+      const st = await api('GET', `/episodes/${flow.episodeId}/generation/status`);
+      const arr = st.shots || [];
+      return arr.length > 0 && arr.every((s) => s.state === 'fresh');
+    }, { label: '假厂商生成完成', timeout: 120000, interval: 1000 });
+    await page.waitForTimeout(1500);
+    e.notes.push(`过期徽标：${(await t('stale-badge').innerText()).trim()}`);
+    e.screenshots.push(await shot('storyboard-generated'));
+  });
+
+  await step('flow-timeline', async (e) => {
+    if (!flow.dramaId) throw new Error('上一步没有建出项目');
+    await t('tab-timeline').click();
+    await page.waitForURL(/\/timeline/, { timeout: 15000 });
+    await page.waitForTimeout(1500);
+    e.notes.push(`路径：${page.url().replace(BASE, '')}`);
+    e.screenshots.push(await shot('timeline'));
+  });
+
+  await step('flow-export-menu', async (e) => {
+    if (!flow.dramaId) throw new Error('上一步没有建出项目');
+    const expected = ['video', 'jianying', 'premiere', 'srt', 'storyboardSheet', 'projectZip', 'assetPack', 'fullBackup'];
+    for (const tab of ['script', 'storyboard', 'timeline', 'canvas']) {
+      await t(`tab-${tab}`).click();
+      await page.waitForURL(new RegExp(`/${tab}`), { timeout: 15000 });
+      await page.waitForTimeout(800);
+      await t('menu-export').click();
+      await t('item-export.fullBackup').waitFor({ timeout: 10000 });
+      const have = [];
+      for (const id of expected) if (await t(`item-export.${id}`).count()) have.push(id);
+      e.notes.push(`${tab}：导出菜单 ${have.length}/${expected.length} 项`);
+      if (have.length !== expected.length) throw new Error(`${tab} 的导出菜单缺项：${expected.filter((x) => !have.includes(x)).join(',')}`);
+      if (tab === 'storyboard') e.screenshots.push(await shot('export-menu'));
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(300);
+    }
+    // 视频导出需要渲染核心；e2e 里没有，应当是“软禁用”而不是消失
+    await t('menu-export').click();
+    const cls = await t('item-export.video').getAttribute('class');
+    e.notes.push(`导出视频项：${/soft-disabled/.test(cls || '') ? '软禁用（渲染核心未连接）' : '可用'}`);
+    await page.keyboard.press('Escape');
+  });
+
+  await step('flow-english', async (e) => {
+    if (!flow.dramaId) throw new Error('上一步没有建出项目');
+    await t('tab-storyboard').click();
+    await page.waitForURL(/\/storyboard/, { timeout: 15000 });
+    await t('locale-switch').click();
+    await page.locator('.el-dropdown-menu__item', { hasText: 'English' }).first().click();
+    await waitFor(async () => (await page.evaluate(() => document.documentElement.lang)) === 'en', { label: 'html lang=en', timeout: 8000 });
+    await page.waitForTimeout(500);
+    const title = await page.title();
+    const tabText = (await t('tab-script').innerText()).trim();
+    e.notes.push(`标题：${title}；剧本标签：${tabText}`);
+    if (/故事窑/.test(title)) throw new Error(`切到英文后浏览器标题还是中文：${title}`);
+    if (tabText !== 'Script') throw new Error(`剧本标签应为 Script，实际 ${tabText}`);
+    // 外壳（顶栏 / 左栏 / 状态栏）里不应残留中文，用户自己的数据（项目名、集名）除外
+    const left = await page.evaluate(() => {
+      const out = [];
+      for (const sel of ['[data-test=topbar]', '[data-test=left-rail]', '[data-test=statusbar]']) {
+        const root = document.querySelector(sel);
+        if (!root) continue;
+        const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        for (let n = w.nextNode(); n; n = w.nextNode()) if (/[一-鿿]/.test(n.nodeValue)) out.push(n.nodeValue.trim().slice(0, 30));
+      }
+      return out;
+    });
+    e.notes.push(`外壳里的中文文本：${left.length ? left.join(' | ') : '无'}`);
+    const stray = left.filter((x) => !/^(第\s*\d*\s*集.*|e2e-flow)$/.test(x) && x !== '中文');
+    if (stray.length) throw new Error(`英文界面外壳残留中文：${stray.join(' | ')}`);
+    e.screenshots.push(await shot('english-storyboard'));
+  });
+
+  let backupFile = null;
+  await step('flow-backup', async (e) => {
+    if (!flow.dramaId) throw new Error('上一步没有建出项目');
+    await t('menu-export').click();
+    await t('item-export.fullBackup').waitFor({ timeout: 10000 });
+    const [dl] = await Promise.all([
+      page.waitForEvent('download', { timeout: 60000 }),
+      t('item-export.fullBackup').click(),
+    ]);
+    backupFile = path.join(workDir, 'flow-backup.zip');
+    await dl.saveAs(backupFile);
+    const size = fs.statSync(backupFile).size;
+    e.notes.push(`下载文件：${dl.suggestedFilename()}，${size} 字节`);
+    if (size < 200) throw new Error('备份文件过小');
+  });
+
+  await step('flow-restore', async (e) => {
+    if (!backupFile) throw new Error('上一步没有备份文件');
+    const before = (await api('GET', '/dramas?page=1&page_size=100')).items.map((d) => d.id);
+    await goto('/');
+    await t('start-importPackage').click();
+    await t('package-file').setInputFiles(backupFile);
+    await page.waitForURL(/\/p\/\d+\//, { timeout: 30000 });
+    const m = /\/p\/(\d+)\/e\/(\d+)\//.exec(page.url());
+    const restoredId = m ? Number(m[1]) : null;
+    e.notes.push(`恢复后落地：${page.url().replace(BASE, '')}`);
+    if (!restoredId || restoredId === flow.dramaId || before.includes(restoredId)) throw new Error(`恢复必须得到新项目，实际 ${restoredId}（原项目 ${flow.dramaId}）`);
+    const list = (await api('GET', '/dramas?page=1&page_size=100')).items;
+    const orig = list.find((d) => d.id === flow.dramaId);
+    const copy = list.find((d) => d.id === restoredId);
+    e.notes.push(`原项目：${orig ? orig.title : '(不见了)'}；新项目：${copy ? copy.title : '(找不到)'}`);
+    if (!orig || !copy) throw new Error('原项目或恢复出的项目不在列表里');
+    // 恢复出的项目保留撤销历史：顶栏的撤销可用
+    await t('topbar').waitFor({ timeout: 15000 });
+    await waitFor(async () => !(await t('undo-btn').isDisabled()), { label: '恢复项目的撤销可用', timeout: 15000 });
+    e.notes.push('恢复项目的撤销按钮可用（历史随项目一起恢复）');
+    e.screenshots.push(await shot('restored'));
+    // 清理：删掉两个临时项目（软删除）
+    await api('DELETE', `/dramas/${restoredId}`).catch(() => {});
+    await api('DELETE', `/dramas/${flow.dramaId}`).catch(() => {});
+  });
+
   // 1. 模板市场
   await step('templates', async (e) => {
     await goto('/templates');
@@ -216,7 +400,7 @@ async function main() {
 
   // 3. 批量生成
   await step('batches', async (e) => {
-    await goto(`/project/${dramaId}/batch`);
+    await goto(`/p/${dramaId}/batch`);
     await t('select-all').waitFor({ timeout: 15000 });
     await t('select-all').click();
     await waitFor(async () => (await t('estimate').innerText()).trim() && !(await t('start').isDisabled()), { label: '批次估算', timeout: 20000 });
@@ -293,16 +477,21 @@ async function main() {
     await waitFor(async () => {
       const st = await api('GET', `/episodes/${episodeId}/generation/status`);
       const arr = st.shots || [];
-      return arr.length && arr.every((s) => !['queued', 'running'].includes(s.state));
+      return arr.length > 0 && arr.every((s) => s.state === 'fresh');
     }, { label: '假厂商生成完成', timeout: 90000, interval: 1000 });
     await waitFor(async () => {
       const rep = await api('GET', `/episodes/${episodeId}/consistency`);
       return rep.available && rep.counts && (rep.counts.ok + rep.counts.check + rep.counts.retry) > 0 ? rep : null;
     }, { label: '一致性评分', timeout: 60000, interval: 1000 }).then((rep) => e.notes.push(`一致性：${JSON.stringify(rep.counts)}`), (err) => e.notes.push(err.message));
-    await goto(`/project/${dramaId}/storyboard?episode=${episodeId}`);
-    await page.locator('table tbody tr').first().waitFor({ timeout: 15000 });
+    await goto(`/p/${dramaId}/e/${episodeId}/storyboard`);
+    await t('consistency-chip').first().waitFor({ timeout: 20000 }).catch((err) => e.notes.push(`卡片视图没有一致性芯片：${err.message}`));
     await page.waitForTimeout(1000);
-    e.notes.push(`一致性芯片：${await t('consistency-chip').count()} 个；生成芯片：${await t('gen-chip').count()} 个`);
+    e.notes.push(`卡片视图一致性芯片：${await t('consistency-chip').count()} 个`);
+    e.screenshots.push(await shot('storyboard-cards'));
+    await t('view-mode').locator('label', { hasText: /表格|Table/ }).click();
+    await page.locator('table tbody tr').first().waitFor({ timeout: 15000 });
+    await page.waitForTimeout(800);
+    e.notes.push(`表格视图一致性芯片：${await t('consistency-chip').count()} 个；图片状态芯片：${await t('row-chip-image').count()} 个`);
     e.screenshots.push(await shot('storyboard-chips'));
   });
 
@@ -313,7 +502,7 @@ async function main() {
     const items = rows ? (rows.storyboards || []) : [];
     shotId = items[0] && items[0].id;
     if (!shotId) throw new Error('取不到分镜 id');
-    await goto(`/project/${dramaId}/shot/${shotId}`);
+    await goto(`/p/${dramaId}/e/${episodeId}/shot/${shotId}`);
     await t('region-edit').waitFor({ timeout: 20000 });
     await page.waitForTimeout(1000);
     e.notes.push(`一致性芯片：${await t('consistency-chip').count()}；提示：${await t('consistency-hint').count() ? (await t('consistency-hint').innerText()).trim() : '无'}`);
