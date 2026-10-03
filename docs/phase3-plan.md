@@ -117,7 +117,7 @@ CI 配额仍未恢复，先做了不依赖 CI 的四路，全部合入 `claude/p
 | D1 资产放哪 | 左侧资产面板 + 整页，不做第五个标签；面板数据全局可引用（任何视图、任何检查器里可用 `@角色` / `#场景` / `#道具`） | 已做：`useAssetsStore`、`AssetPanel`、`/p/:dramaId/assets`（notes/assets.md）。道具也进了资产库 |
 | D2 上游改动是否自动重跑 | 只标记「已过期」，不自动重跑；另增草稿 / 成片质量档和整个项目备份。生成分镜后全文模式只读（按建议） | 已做：质量档（notes/backend-quality.md）、完整备份（notes/backend-backup.md）、剧本视图有镜头后禁用全文编辑（notes/script.md） |
 | D3 重新生成分镜 | 改成多版本管理：新分镜作为一次可撤销事务，旧镜头及其产物靠撤销恢复；执行前自动做本地快照 | 已做：`compat.replaceEpisodeShots` + 备份钩子（notes/backend-regenerate.md，kernel-design §12.4 / §17） |
-| D4 快速拼接 | 删除，导出菜单里没有，旧 `finalize` 随旧页面删除；没有渲染核心时只有「导出成片」置灰 | 界面入口已删。后端 `POST /episodes/:episode_id/finalize` 路由本文写作时仍在 `routes/index.js`，是否一并删除未决定 |
+| D4 快速拼接 | 删除，导出菜单里没有，界面里的旧「快速拼接」入口随旧页面删除；没有渲染核心时只有「导出成片」置灰 | 界面入口已删。后端 `POST /episodes/:episode_id/finalize` 路由本文写作时仍在 `routes/index.js`，是否一并删除未决定 |
 | D5 字幕烧录 / 对白烧录 / 水印 | 不进本轮，只记为渲染核心缺口，导出对话框不显示这些选项 | 已按此做，见下面「已知缺口」 |
 | D6 旧画布工作流分组 | 放弃；用分镜视图多选 + 生成菜单代替 | 已做：分镜多选批量条；画布节点位置也不迁移（notes/canvas.md、storyboard.md） |
 | D7 通用片段（全能）模式 | 只在支持多参考图的模型（方舟 Seedance 2.0）可用时显示；删除 Grok 格式转换 | 已做，但可用性来自当前视频 AI 配置，方舟路径没有真 Key 验证 |
