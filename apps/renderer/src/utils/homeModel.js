@@ -197,3 +197,39 @@ export function rememberDeleted(log, rec) {
 export function forgetDeleted(log, dramaId) {
   return asList(log).filter((r) => String(r.dramaId) !== String(dramaId))
 }
+
+/** 具名路由位置：某集的某个视图（视图不合法时落到剧本）。 */
+export function viewLocation(view, dramaId, episodeId) {
+  const v = HOME_VIEWS.includes(view) ? view : 'script'
+  return { name: `episode-${v}`, params: { dramaId, episodeId } }
+}
+
+// ---- 任务中心：把任务映射到翻译 key（文字本身在 messages/home.js） ----
+
+const KNOWN_TASK_ERRORS = [
+  'INVALID_API_KEY', 'MODEL_NOT_ENABLED', 'INSUFFICIENT_BALANCE', 'RATE_LIMITED', 'INVALID_PARAMS',
+  'TASK_FAILED', 'NETWORK', 'BAD_RESPONSE', 'PROVIDER_NOT_AVAILABLE', 'CAPABILITY_NOT_SUPPORTED',
+]
+
+/** 失败原因的翻译 key；没有错误码返回 ''；不认识的错误码回退到服务端给的可读文字（readable）。 */
+export function taskErrorKey(task) {
+  if (!task || !task.error_code) return ''
+  if (task.uncertain || String(task.error_message || '').startsWith('SUBMIT_UNCERTAIN')) return 'home.tasks.err.UNCERTAIN'
+  if (KNOWN_TASK_ERRORS.includes(task.error_code)) return `home.tasks.err.${task.error_code}`
+  return 'home.tasks.err.UNKNOWN'
+}
+
+const TASK_STATES = ['queued', 'submitting', 'submitted', 'polling', 'downloading', 'succeeded', 'failed', 'cancelled']
+export function taskStateKey(state) {
+  return TASK_STATES.includes(state) ? `home.tasks.state.${state}` : 'home.tasks.state.unknown'
+}
+
+/** "对象"列：{ key, shot } 或 null。 */
+export function taskTargetInfo(task) {
+  const p = task && task.params
+  if (!p) return null
+  if (p._vo) return { key: 'home.tasks.target.voice', shot: p._vo.legacy_id ?? '?' }
+  const g = p._gen
+  if (!g) return null
+  return { key: g.kind === 'video' ? 'home.tasks.target.video' : 'home.tasks.target.frame', shot: g.storyboard_id ?? '?' }
+}

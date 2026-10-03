@@ -160,3 +160,25 @@ test('deleted-project log keeps the 5 newest, de-duplicates and survives garbage
   assert.deepEqual(parseDeletedLog(JSON.stringify([{ dramaId: 1, title: 'x', snapshotId: 's', at: 1 }, { nope: true }])).length, 1)
   assert.deepEqual(rememberDeleted(log, { title: 'no id' }), log)
 })
+
+import { viewLocation, taskErrorKey, taskStateKey, taskTargetInfo } from '../src/utils/homeModel.js'
+
+test('viewLocation builds named routes and defaults to script', () => {
+  assert.deepEqual(viewLocation('storyboard', 3, 9), { name: 'episode-storyboard', params: { dramaId: 3, episodeId: 9 } })
+  assert.equal(viewLocation('weird', 3, 9).name, 'episode-script')
+})
+
+test('task helpers map to translation keys', () => {
+  assert.equal(taskErrorKey({}), '')
+  assert.equal(taskErrorKey({ error_code: 'INVALID_API_KEY' }), 'home.tasks.err.INVALID_API_KEY')
+  assert.equal(taskErrorKey({ error_code: 'WEIRD' }), 'home.tasks.err.UNKNOWN')
+  assert.equal(taskErrorKey({ error_code: 'TASK_FAILED', uncertain: true }), 'home.tasks.err.UNCERTAIN')
+  assert.equal(taskErrorKey({ error_code: 'X', error_message: 'SUBMIT_UNCERTAIN: lost' }), 'home.tasks.err.UNCERTAIN')
+  assert.equal(taskStateKey('polling'), 'home.tasks.state.polling')
+  assert.equal(taskStateKey('???'), 'home.tasks.state.unknown')
+  assert.equal(taskTargetInfo({ params: { _vo: { legacy_id: 4 } } }).key, 'home.tasks.target.voice')
+  assert.deepEqual(taskTargetInfo({ params: { _gen: { storyboard_id: 8, kind: 'video' } } }), { key: 'home.tasks.target.video', shot: 8 })
+  assert.deepEqual(taskTargetInfo({ params: { _gen: { storyboard_id: 8 } } }), { key: 'home.tasks.target.frame', shot: 8 })
+  assert.equal(taskTargetInfo({}), null)
+  assert.equal(taskTargetInfo({ params: {} }), null)
+})
