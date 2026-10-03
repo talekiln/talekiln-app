@@ -90,7 +90,7 @@ const router = createRouter({
         {
           path: 'assets',
           name: 'assets',
-          component: () => import('@/views/ReferenceLibrary.vue'),
+          component: () => import('@/views/AssetLibrary.vue'),
           meta: { title: '角色与场景库' }
         },
         {
