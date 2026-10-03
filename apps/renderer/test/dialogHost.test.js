@@ -42,3 +42,18 @@ test('closeDialog with nothing open is a no-op; loaderFor exposes registered loa
   assert.equal(loaderFor('t.l'), loader)
   assert.equal(loaderFor('t.none'), null)
 })
+
+test('closing a generate.* dialog with a result notifies generation listeners; other dialogs and empty results do not', async () => {
+  quiet()
+  const { onGenerationSubmitted } = await import('../src/shell/dialogs/index.js')
+  registerDialog('generate.t', () => Promise.resolve({ default: {} }))
+  registerDialog('other.t', () => Promise.resolve({ default: {} }))
+  const seen = []
+  const off = onGenerationSubmitted((r) => seen.push(r))
+  const a = openDialog('generate.t'); closeDialog({ submitted: true }); await a
+  const b = openDialog('generate.t'); closeDialog(undefined); await b
+  const c = openDialog('other.t'); closeDialog({ submitted: true }); await c
+  off()
+  const d = openDialog('generate.t'); closeDialog({ submitted: true }); await d
+  assert.deepEqual(seen, [{ submitted: true }])
+})

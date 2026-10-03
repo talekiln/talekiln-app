@@ -39,6 +39,7 @@ import { installActions } from './actions/index.js'
 import { shellApi } from './api.js'
 import { formatSpend } from './spend.js'
 import DialogHost from './DialogHost.vue'
+import { onGenerationSubmitted } from './dialogs/index.js'
 import TopBar from './TopBar.vue'
 import LeftRail from './LeftRail.vue'
 import AssetPanel from '@/components/assets/AssetPanel.vue'
@@ -113,7 +114,17 @@ async function tick() {
   shell.refreshDraftCount(episodeId.value)
 }
 let timer = null
+// Generation runs in the background: pull the views when it is submitted (a few quick looks, fast jobs finish
+// before the 8 s tick) and again when the running count drops to 0, so open pages show the new results.
+let burstTimers = []
+let offSubmitted = null
+function afterSubmit() {
+  burstTimers.forEach(clearTimeout)
+  burstTimers = [1500, 4000, 8000, 14000].map((ms) => setTimeout(() => { tick(); views.refresh() }, ms))
+}
+watch(() => shell.tasksRunning, (n, old) => { if (old > 0 && n === 0) views.refresh() })
 onMounted(() => {
+  offSubmitted = onGenerationSubmitted(afterSubmit)
   if (globalThis.matchMedia) {
     mql = globalThis.matchMedia('(max-width: 900px)')
     onMql()
@@ -124,6 +135,8 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   clearInterval(timer)
+  burstTimers.forEach(clearTimeout)
+  if (offSubmitted) offSubmitted()
   mql?.removeEventListener('change', onMql)
 })
 watch(dramaId, () => { spendText.value = '' })

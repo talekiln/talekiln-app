@@ -406,6 +406,7 @@ async function loadConsistency() {
 }
 watch(() => busyCount(gen.status.value), (now, before) => {
   if (before > 0 && now === 0) {
+    views.refresh() // chips read the kernel views; loadRows only re-reads the legacy thumbnails
     loadRows()
     loadConsistency()
     clearTimeout(consTimer)

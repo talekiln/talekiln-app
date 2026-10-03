@@ -53,9 +53,20 @@ export function openDialog(id, props = {}) {
   })
 }
 
+// A generate.* dialog that closes with a result has probably queued work. The shell listens, so open pages
+// pick up fast jobs (they can finish between two 8 s task ticks) without a reload.
+const submitListeners = new Set()
+export function onGenerationSubmitted(fn) {
+  submitListeners.add(fn)
+  return () => submitListeners.delete(fn)
+}
+
 export function closeDialog(result) {
   const cur = currentDialog.value
   if (!cur) return
   currentDialog.value = null
   cur.resolve(result)
+  if (result && String(cur.id).startsWith('generate.')) {
+    for (const fn of submitListeners) { try { fn(result) } catch (_) { /* a listener must not break closing */ } }
+  }
 }
