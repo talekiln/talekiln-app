@@ -58,3 +58,13 @@ test('draftHint: only shows when drafts exist', () => {
   assert.equal(draftHint(undefined), '')
   assert.match(draftHint(3), /3/)
 })
+
+test('export API calls whose errors the dialogs show inline are silent for the global toast', async () => {
+  // request.js 在 node 下无法直接导入（别名 / 无扩展名），所以检查源码：这三个调用必须带 silentError
+  const { readFileSync } = await import('node:fs')
+  const src = readFileSync(new URL('../src/api/export.js', import.meta.url), 'utf8')
+  assert.match(src, /const inline = \{ silentError: true \}/)
+  assert.match(src, /'\/export\/options'[^\r\n]*\.\.\.inline/)
+  assert.match(src, /'\/export\/jianying', body, inline/)
+  assert.match(src, /'\/export\/fcpxml', body, inline/)
+})
