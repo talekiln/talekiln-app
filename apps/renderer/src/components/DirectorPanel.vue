@@ -1,14 +1,14 @@
 <template>
   <el-drawer
     v-model="directorOpen"
-    title="导演模式"
+    :title="t('director.title')"
     direction="rtl"
     size="560px"
     :append-to-body="true"
     data-test="director-drawer"
     @opened="reload"
   >
-    <div v-if="!episodeId" class="dr-empty" data-test="director-noepisode">请先打开一个剧集（分镜表 / 工作台 / 四视图）。</div>
+    <div v-if="!episodeId" class="dr-empty" data-test="director-noepisode">{{ t('director.noEpisode') }}</div>
     <template v-else>
       <section class="dr-ask">
         <el-input
@@ -16,46 +16,46 @@
           type="textarea"
           :autosize="{ minRows: 2, maxRows: 6 }"
           :maxlength="MESSAGE_MAX"
-          placeholder="用一句话说要改什么，例如：第二镜改成夜景特写，第三镜的旁白短一点"
+          :placeholder="t('director.placeholder')"
           data-test="director-input"
           @keydown.ctrl.enter.prevent="submit"
           @keydown.meta.enter.prevent="submit"
         />
         <div class="dr-ask-row">
-          <span class="dr-muted">计划只用项目已有的编辑动作；执行前会列出会改什么、不会改什么、要花多少钱，执行后可一键撤销。</span>
-          <el-button type="primary" :loading="planning" :disabled="!canSubmit" data-test="director-plan" @click="submit">生成计划</el-button>
+          <span class="dr-muted">{{ t('director.askHint') }}</span>
+          <el-button type="primary" :loading="planning" :disabled="!canSubmit" data-test="director-plan" @click="submit">{{ t('director.plan') }}</el-button>
         </div>
         <div v-if="planError" class="dr-error" data-test="director-error">{{ planError }}</div>
       </section>
 
       <div v-if="loadError" class="dr-error">{{ loadError }}</div>
-      <div v-else-if="!cards.length" class="dr-empty" data-test="director-empty">还没有导演模式的记录。</div>
+      <div v-else-if="!cards.length" class="dr-empty" data-test="director-empty">{{ t('director.empty') }}</div>
 
       <article
-        v-for="t in cards"
-        :key="t.id"
+        v-for="tn in cards"
+        :key="tn.id"
         class="dr-turn"
-        :class="[`s-${t.status.key}`, { rejected: t.rejected }]"
+        :class="[`s-${tn.status.key}`, { rejected: tn.rejected }]"
         data-test="director-turn"
-        :data-turn="t.id"
-        :data-status="t.status.key"
+        :data-turn="tn.id"
+        :data-status="tn.status.key"
       >
         <header class="dr-head">
-          <div class="dr-msg">「{{ t.message }}」</div>
-          <el-tag size="small" :type="t.status.type" effect="light" data-test="director-status">{{ t.status.label }}</el-tag>
+          <div class="dr-msg">{{ t('director.quote', { message: tn.message }) }}</div>
+          <el-tag size="small" :type="tn.status.type" effect="light" data-test="director-status">{{ tn.status.label }}</el-tag>
         </header>
-        <div class="dr-muted">{{ t.time }}<template v-if="t.model"> · {{ t.model }}</template><template v-if="t.attempts > 1"> · 修正 {{ t.attempts - 1 }} 次</template></div>
-        <p v-if="t.summary" class="dr-summary">{{ t.summary }}</p>
+        <div class="dr-muted">{{ tn.time }}<template v-if="tn.model"> · {{ tn.model }}</template><template v-if="tn.attempts > 1"> · {{ t('director.attempts', { n: tn.attempts - 1 }) }}</template></div>
+        <p v-if="tn.summary" class="dr-summary">{{ tn.summary }}</p>
 
-        <div v-if="t.rejected" class="dr-reject" data-test="director-reject">
-          <b>计划未通过校验，没有改动项目：</b>
-          <ul><li v-for="e in t.errors" :key="e">{{ e }}</li></ul>
-          <el-button link size="small" data-test="director-raw-toggle" @click="toggleRaw(t.id)">{{ rawOpen.has(t.id) ? '收起模型原文' : '查看模型原文' }}</el-button>
-          <pre v-if="rawOpen.has(t.id)" class="dr-raw" data-test="director-raw">{{ t.raw }}</pre>
+        <div v-if="tn.rejected" class="dr-reject" data-test="director-reject">
+          <b>{{ t('director.rejectedTitle') }}</b>
+          <ul><li v-for="e in tn.errors" :key="e">{{ e }}</li></ul>
+          <el-button link size="small" data-test="director-raw-toggle" @click="toggleRaw(tn.id)">{{ rawOpen.has(tn.id) ? t('director.rawHide') : t('director.rawShow') }}</el-button>
+          <pre v-if="rawOpen.has(tn.id)" class="dr-raw" data-test="director-raw">{{ tn.raw }}</pre>
         </div>
 
-        <ol v-if="t.steps.length" class="dr-steps" data-test="director-steps">
-          <li v-for="s in t.steps" :key="s.index" class="dr-step" :class="{ bad: !s.ok }" data-test="director-step">
+        <ol v-if="tn.steps.length" class="dr-steps" data-test="director-steps">
+          <li v-for="s in tn.steps" :key="s.index" class="dr-step" :class="{ bad: !s.ok }" data-test="director-step">
             <div class="dr-step-head">
               <b>{{ s.title }}</b><span v-if="s.target" class="dr-target"> · {{ s.target }}</span>
               <span class="dr-step-cost" :class="{ zero: !s.cost }" data-test="director-step-cost">{{ s.costText }}</span>
@@ -66,44 +66,44 @@
           </li>
         </ol>
 
-        <template v-if="t.impact">
+        <template v-if="tn.impact">
           <div class="dr-impact" data-test="director-impact">
             <div class="dr-col">
-              <div class="dr-col-title">会改</div>
-              <div v-if="!t.impact.changed.length" class="dr-muted">没有镜头级变化</div>
+              <div class="dr-col-title">{{ t('director.willChange') }}</div>
+              <div v-if="!tn.impact.changed.length" class="dr-muted">{{ t('director.noShotChange') }}</div>
               <ul v-else>
-                <li v-for="c in t.impact.changed" :key="c.id" :class="`c-${c.change}`">镜头 {{ c.no }}<template v-if="c.title"> {{ c.title }}</template> · {{ c.changeText }}</li>
+                <li v-for="c in tn.impact.changed" :key="c.id" :class="`c-${c.change}`">{{ t('director.shotRow', { no: c.no }) }}<template v-if="c.title"> {{ c.title }}</template> · {{ c.changeText }}</li>
               </ul>
-              <div v-if="t.impact.staleCount" class="dr-muted">{{ t.impact.staleCount }} 个生成节点会过期（图 / 视频 / 配音）</div>
+              <div v-if="tn.impact.staleCount" class="dr-muted">{{ t('director.staleNodes', { n: tn.impact.staleCount }) }}</div>
             </div>
             <div class="dr-col">
-              <div class="dr-col-title">不会改</div>
-              <div class="dr-muted">{{ t.impact.unchangedText }}</div>
-              <ul v-if="t.impact.untouched.length"><li v-for="u in t.impact.untouched" :key="u">{{ u }}</li></ul>
+              <div class="dr-col-title">{{ t('director.wontChange') }}</div>
+              <div class="dr-muted">{{ tn.impact.unchangedText }}</div>
+              <ul v-if="tn.impact.untouched.length"><li v-for="u in tn.impact.untouched" :key="u">{{ u }}</li></ul>
             </div>
           </div>
 
           <div class="dr-duration" data-test="director-duration">
-            <div class="dr-muted">时长 {{ t.impact.durationText }}</div>
-            <div class="dr-bars-row"><span class="dr-bars-label">前</span>
-              <div class="dr-bars"><span v-for="b in t.bars.before" :key="b.id" class="dr-bar" :class="`c-${b.change}`" :style="{ width: `${b.width}%` }" :title="`镜头 ${b.no} ${b.title} ${b.seconds}`" /></div>
+            <div class="dr-muted">{{ t('director.duration', { text: tn.impact.durationText }) }}</div>
+            <div class="dr-bars-row"><span class="dr-bars-label">{{ t('director.before') }}</span>
+              <div class="dr-bars"><span v-for="b in tn.bars.before" :key="b.id" class="dr-bar" :class="`c-${b.change}`" :style="{ width: `${b.width}%` }" :title="t('director.barTitle', { no: b.no, title: b.title, seconds: b.seconds })" /></div>
             </div>
-            <div class="dr-bars-row"><span class="dr-bars-label">后</span>
-              <div class="dr-bars"><span v-for="b in t.bars.after" :key="b.id" class="dr-bar" :class="`c-${b.change}`" :style="{ width: `${b.width}%` }" :title="`镜头 ${b.no} ${b.title} ${b.seconds}`" /></div>
+            <div class="dr-bars-row"><span class="dr-bars-label">{{ t('director.after') }}</span>
+              <div class="dr-bars"><span v-for="b in tn.bars.after" :key="b.id" class="dr-bar" :class="`c-${b.change}`" :style="{ width: `${b.width}%` }" :title="t('director.barTitle', { no: b.no, title: b.title, seconds: b.seconds })" /></div>
             </div>
           </div>
 
           <div class="dr-cost" data-test="director-cost">
-            <b>{{ t.cost.text }}</b><span v-if="t.cost.note" class="dr-muted"> · {{ t.cost.note }}</span>
-            <el-button v-if="t.cost.items.length" link size="small" @click="toggleCost(t.id)">{{ costOpen.has(t.id) ? '收起明细' : '明细' }}</el-button>
-            <ul v-if="costOpen.has(t.id)" class="dr-cost-items"><li v-for="i in t.cost.items" :key="i.node">{{ i.text }}</li></ul>
-            <div v-if="t.cost.refusal" class="dr-warn">{{ t.cost.refusal }}</div>
+            <b>{{ tn.cost.text }}</b><span v-if="tn.cost.note" class="dr-muted"> · {{ tn.cost.note }}</span>
+            <el-button v-if="tn.cost.items.length" link size="small" @click="toggleCost(tn.id)">{{ costOpen.has(tn.id) ? t('director.costHide') : t('director.costShow') }}</el-button>
+            <ul v-if="costOpen.has(tn.id)" class="dr-cost-items"><li v-for="i in tn.cost.items" :key="i.node">{{ i.text }}</li></ul>
+            <div v-if="tn.cost.refusal" class="dr-warn">{{ tn.cost.refusal }}</div>
           </div>
 
           <div class="dr-preview" data-test="director-preview">
-            <div class="dr-muted">计划后的镜头（虚线 = 会变）</div>
+            <div class="dr-muted">{{ t('director.previewTitle') }}</div>
             <div class="dr-shots">
-              <div v-for="s in t.preview" :key="s.id" class="dr-shot" :class="[`c-${s.change}`, { dashed: s.dashed }]" :data-change="s.change" :title="s.changeText">
+              <div v-for="s in tn.preview" :key="s.id" class="dr-shot" :class="[`c-${s.change}`, { dashed: s.dashed }]" :data-change="s.change" :title="s.changeText">
                 <b>{{ s.no }}</b><span class="dr-shot-title">{{ s.title }}</span><i>{{ s.seconds }}</i>
               </div>
             </div>
@@ -112,11 +112,11 @@
 
         <footer class="dr-actions">
           <el-button-group>
-            <el-button type="primary" size="small" :disabled="!t.canApply || !!acting" :loading="acting === `apply:${t.id}`" data-test="director-apply" @click="doApply(t)">执行</el-button>
-            <el-button size="small" :disabled="!t.canUndo || !!acting" :loading="acting === `undo:${t.id}`" data-test="director-undo" @click="doUndo(t)">撤销</el-button>
+            <el-button type="primary" size="small" :disabled="!tn.canApply || !!acting" :loading="acting === `apply:${tn.id}`" data-test="director-apply" @click="doApply(tn)">{{ t('director.apply') }}</el-button>
+            <el-button size="small" :disabled="!tn.canUndo || !!acting" :loading="acting === `undo:${tn.id}`" data-test="director-undo" @click="doUndo(tn)">{{ t('director.undo') }}</el-button>
           </el-button-group>
-          <span v-if="t.status.note" class="dr-muted">{{ t.status.note }}</span>
-          <span v-else-if="t.status.key === 'applied'" class="dr-muted">已作为一步写入历史，顶栏撤销也能回退</span>
+          <span v-if="tn.status.note" class="dr-muted">{{ tn.status.note }}</span>
+          <span v-else-if="tn.status.key === 'applied'" class="dr-muted">{{ t('director.appliedNote') }}</span>
         </footer>
       </article>
     </template>
@@ -127,12 +127,14 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { useI18n } from '@/i18n'
 import { directorAPI } from '@/api/director'
 import { useProjectViewsStore } from '@/stores/projectViews'
 import { directorOpen, directorEpisodeId } from '@/composables/useDirectorPanel'
 import { episodeOfRoute } from '@/utils/episodeContext'
 import { MESSAGE_MAX, describeTurn, sortTurns, upsertTurn, validateMessage } from '@/utils/director'
 
+const { t } = useI18n()
 const route = useRoute()
 const views = useProjectViewsStore()
 
@@ -148,9 +150,9 @@ const costOpen = ref(new Set())
 // 打开时指定的剧集优先（工作台不在剧集路由上）；否则按当前路由推断
 const episodeId = computed(() => directorEpisodeId.value || episodeOfRoute(route))
 const canSubmit = computed(() => validateMessage(message.value).ok && !planning.value)
-const cards = computed(() => turns.value.map((t) => describeTurn(t, { busy: views.busy || !!acting.value })))
+const cards = computed(() => turns.value.map((turn) => describeTurn(turn, { busy: views.busy || !!acting.value })))
 
-const errText = (e, fallback) => `${e?.message || fallback}${e?.action ? `（${e.action}）` : ''}`
+const errText = (e, fallback) => (e?.action ? t('director.errAction', { message: e?.message || fallback, action: e.action }) : e?.message || fallback)
 const toggle = (set, id) => { const s = new Set(set.value); if (s.has(id)) s.delete(id); else s.add(id); set.value = s }
 const toggleRaw = (id) => toggle(rawOpen, id)
 const toggleCost = (id) => toggle(costOpen, id)
@@ -164,7 +166,7 @@ async function reload() {
     loadError.value = ''
     turns.value = sortTurns(r.turns || [])
   } catch (e) {
-    loadError.value = errText(e, '读取导演模式记录失败')
+    loadError.value = errText(e, t('director.loadFailed'))
   }
 }
 
@@ -181,12 +183,12 @@ async function submit() {
     turns.value = upsertTurn(turns.value, turn)
     if (turn.status === 'rejected') {
       planError.value = ''
-      ElMessage.warning('计划未通过校验，原因见下方')
+      ElMessage.warning(t('director.planRejected'))
     } else {
       message.value = ''
     }
   } catch (e) {
-    planError.value = errText(e, '生成计划失败')
+    planError.value = errText(e, t('director.planFailed'))
   } finally {
     planning.value = false
   }
@@ -198,34 +200,34 @@ async function afterChange(ep) {
   views.revision += 1
 }
 
-async function doApply(t) {
+async function doApply(tn) {
   const ep = episodeId.value
   if (!ep || acting.value) return
-  acting.value = `apply:${t.id}`
+  acting.value = `apply:${tn.id}`
   try {
-    const r = await directorAPI.apply(ep, t.id)
+    const r = await directorAPI.apply(ep, tn.id)
     turns.value = upsertTurn(turns.value, r.turn)
     await afterChange(ep)
-    ElMessage.success(`已执行：${t.summary || t.message}`)
+    ElMessage.success(t('director.applied', { what: tn.summary || tn.message }))
   } catch (e) {
-    ElMessage.error(errText(e, '执行失败'))
+    ElMessage.error(errText(e, t('director.applyFailed')))
     await reload()
   } finally {
     acting.value = ''
   }
 }
 
-async function doUndo(t) {
+async function doUndo(tn) {
   const ep = episodeId.value
   if (!ep || acting.value) return
-  acting.value = `undo:${t.id}`
+  acting.value = `undo:${tn.id}`
   try {
-    const r = await directorAPI.undo(ep, t.id)
+    const r = await directorAPI.undo(ep, tn.id)
     turns.value = upsertTurn(turns.value, r.turn)
     await afterChange(ep)
-    ElMessage.success('已撤销这次执行')
+    ElMessage.success(t('director.undone'))
   } catch (e) {
-    ElMessage.error(errText(e, '撤销失败'))
+    ElMessage.error(errText(e, t('director.undoFailed')))
     await reload()
   } finally {
     acting.value = ''

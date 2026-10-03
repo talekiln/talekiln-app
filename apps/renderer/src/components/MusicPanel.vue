@@ -1,9 +1,9 @@
 <template>
   <div class="music-panel">
     <section class="block">
-      <h3>混音设置</h3>
+      <h3>{{ t('timeline.mix.title') }}</h3>
       <div class="field">
-        <label>音乐音量</label>
+        <label>{{ t('timeline.mix.musicVolume') }}</label>
         <el-slider
           :model-value="musicPercent"
           :min="0"
@@ -16,11 +16,11 @@
         <span class="val">{{ musicPercent }}%</span>
       </div>
       <div class="field">
-        <label>旁白时压低音乐</label>
+        <label>{{ t('timeline.mix.ducking') }}</label>
         <el-switch :model-value="store.mix.ducking.enabled" data-test="duck-enabled" @update:model-value="(v) => store.updateMix({ ducking: { enabled: v } })" />
       </div>
       <div class="field" :class="{ off: !store.mix.ducking.enabled }">
-        <label>压低后音乐音量</label>
+        <label>{{ t('timeline.mix.duckGain') }}</label>
         <el-slider
           :model-value="toPercent(store.mix.ducking.gain)"
           :min="0"
@@ -33,7 +33,7 @@
         <span class="val">{{ toPercent(store.mix.ducking.gain) }}%</span>
       </div>
       <div class="field" :class="{ off: !store.mix.ducking.enabled }">
-        <label>渐变时长</label>
+        <label>{{ t('timeline.mix.ramp') }}</label>
         <el-input-number
           :model-value="store.mix.ducking.rampMs"
           :min="0"
@@ -43,40 +43,40 @@
           :disabled="!store.mix.ducking.enabled"
           @update:model-value="(v) => v != null && store.updateMix({ ducking: { rampMs: v } })"
         />
-        <span class="val">毫秒</span>
+        <span class="val">{{ t('timeline.mix.ms') }}</span>
       </div>
       <div class="field">
-        <label>响度归一化</label>
+        <label>{{ t('timeline.mix.loudnorm') }}</label>
         <el-switch :model-value="store.mix.loudnorm" @update:model-value="(v) => store.updateMix({ loudnorm: v })" />
       </div>
-      <p class="hint">压低只跟随旁白轨；导出时按以上设置混音。这些设置随时间线一起保存。</p>
+      <p class="hint">{{ t('timeline.mix.hint') }}</p>
     </section>
 
     <section class="block">
       <div class="block-head">
-        <h3>音乐库</h3>
-        <el-button size="small" :loading="uploading" data-test="import-btn" @click="pickFile">导入音乐</el-button>
+        <h3>{{ t('timeline.music.library') }}</h3>
+        <el-button size="small" :loading="uploading" data-test="import-btn" @click="pickFile">{{ t('timeline.music.import') }}</el-button>
         <input ref="fileInput" type="file" :accept="accept" hidden @change="onFile" />
       </div>
-      <p class="hint warn">请确认你拥有所导入音乐的使用授权；示例配乐由程序合成，仅作占位。</p>
+      <p class="hint warn">{{ t('timeline.music.licence') }}</p>
       <div v-loading="loading" class="lib">
-        <div v-if="!items.length && !loading" class="empty">音乐库为空</div>
+        <div v-if="!items.length && !loading" class="empty">{{ t('timeline.music.empty') }}</div>
         <div v-for="m in items" :key="m.id" class="item" data-test="music-item">
           <div class="meta">
             <div class="name" :title="m.name">{{ m.name }}</div>
             <div class="sub">
-              <el-tag size="small" :type="m.source === 'builtin' ? 'info' : 'success'">{{ m.source === 'builtin' ? '示例' : '我的' }}</el-tag>
+              <el-tag size="small" :type="m.source === 'builtin' ? 'info' : 'success'">{{ m.source === 'builtin' ? t('timeline.music.sourceBuiltin') : t('timeline.music.sourceUser') }}</el-tag>
               {{ formatDuration(m.duration_ms) }} · {{ formatSize(m.size_bytes) }}
             </div>
           </div>
           <div class="ops">
-            <el-button size="small" text @click="toggleAudition(m)">{{ playingId === m.id ? '停止' : '试听' }}</el-button>
-            <el-button size="small" type="primary" :loading="attachingId === m.id" @click="attach(m)">添加到音乐轨</el-button>
-            <el-button v-if="m.source === 'user'" size="small" text type="danger" @click="remove(m)">删除</el-button>
+            <el-button size="small" text @click="toggleAudition(m)">{{ playingId === m.id ? t('timeline.music.stop') : t('timeline.music.audition') }}</el-button>
+            <el-button size="small" type="primary" :loading="attachingId === m.id" @click="attach(m)">{{ t('timeline.music.attach') }}</el-button>
+            <el-button v-if="m.source === 'user'" size="small" text type="danger" @click="remove(m)">{{ t('common.delete') }}</el-button>
           </div>
         </div>
       </div>
-      <el-checkbox v-model="loop" class="loop">循环铺满视频长度</el-checkbox>
+      <el-checkbox v-model="loop" class="loop">{{ t('timeline.music.loop') }}</el-checkbox>
       <p v-if="hint" class="hint">{{ hint }}</p>
     </section>
   </div>
@@ -86,12 +86,14 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { musicAPI } from '@/api/music'
+import { useI18n } from '@/i18n'
 import { useTimelineStore } from '@/stores/timeline'
 import { resolveAssetUrl } from '@/utils/timelineMath'
 import {
   MUSIC_VOLUME_MAX_PERCENT, MUSIC_EXTENSIONS, toPercent, fromPercent, formatDuration, formatSize, shortTrackHint, checkMusicFile
 } from '@/utils/mixView'
 
+const { t } = useI18n()
 const store = useTimelineStore()
 const items = ref([])
 const loading = ref(false)
@@ -148,7 +150,7 @@ async function onFile(e) {
   uploading.value = true
   try {
     await musicAPI.upload(file, await browserDuration(file))
-    ElMessage.success('已导入')
+    ElMessage.success(t('timeline.music.imported'))
     await load()
   } catch (_) {
     /* 同上 */
@@ -168,7 +170,7 @@ function toggleAudition(m) {
   if (was === m.id) return
   audio = new Audio(resolveAssetUrl(m.file_path))
   audio.onended = () => { playingId.value = '' }
-  audio.play().catch(() => { ElMessage.warning('无法播放该文件'); playingId.value = '' })
+  audio.play().catch(() => { ElMessage.warning(t('timeline.music.playFail')); playingId.value = '' })
   playingId.value = m.id
 }
 
@@ -177,7 +179,7 @@ async function attach(m) {
   attachingId.value = m.id
   try {
     await store.attachMusic(m.id, { loop: loop.value })
-    ElMessage.success('已添加到音乐轨')
+    ElMessage.success(t('timeline.music.attached'))
   } catch (_) {
     /* 同上 */
   } finally {
@@ -187,7 +189,7 @@ async function attach(m) {
 
 async function remove(m) {
   try {
-    await ElMessageBox.confirm(`删除「${m.name}」？文件会从本机音乐库移除。`, '删除音乐', { type: 'warning' })
+    await ElMessageBox.confirm(t('timeline.music.removeConfirm', { name: m.name }), t('timeline.music.removeTitle'), { type: 'warning' })
   } catch (_) { return }
   try {
     if (playingId.value === m.id) stopAudition()

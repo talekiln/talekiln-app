@@ -1,0 +1,4 @@
+[
+  "components/VersionHistoryDrawer.vue",
+  "utils/versionHistory.js"
+]

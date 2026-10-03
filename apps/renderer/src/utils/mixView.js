@@ -1,4 +1,5 @@
 // 音乐/混音设置的纯函数。取值范围与后端 normalizeMix 一致（packages/local/src/timeline/service.js）。
+import { t } from '../i18n/index.js'
 
 export const DEFAULT_MIX = { ducking: { enabled: true, gain: 0.25, rampMs: 200 }, loudnorm: true }
 
@@ -45,7 +46,7 @@ export function formatSize(bytes) {
 /** 添加到音乐轨前的提示：曲目比视频短且未选择循环时，结尾会静音 */
 export function shortTrackHint(trackMs, videoMs, loop) {
   if (loop || !videoMs || trackMs >= videoMs) return ''
-  return `曲目 ${formatDuration(trackMs)} 短于视频 ${formatDuration(videoMs)}，不循环时后半段没有音乐`
+  return t('timeline.music.shortTrack', { track: formatDuration(trackMs), video: formatDuration(videoMs) })
 }
 
 /** 本地选择的文件是否可上传（与后端白名单一致） */
@@ -54,8 +55,8 @@ export const MUSIC_MAX_BYTES = 50 * 1024 * 1024
 
 export function checkMusicFile(file) {
   const ext = String(file?.name || '').split('.').pop().toLowerCase()
-  if (!MUSIC_EXTENSIONS.includes(ext)) return '只支持 mp3、wav、m4a、aac、ogg、flac 格式'
-  if (file.size > MUSIC_MAX_BYTES) return '音乐文件不能超过 50MB'
-  if (file.size === 0) return '文件为空'
+  if (!MUSIC_EXTENSIONS.includes(ext)) return t('timeline.music.badExt')
+  if (file.size > MUSIC_MAX_BYTES) return t('timeline.music.tooBig')
+  if (file.size === 0) return t('timeline.music.emptyFile')
   return ''
 }

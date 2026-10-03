@@ -5,6 +5,9 @@ import {
   txLabel, sourceLabel, formatTime, shotNumberMap, nodeLabel, describeVersion, adoptOps, thumbUrl, describeEntry, jumpPlan,
 } from '../src/utils/versionHistory.js'
 import { episodeOfRoute } from '../src/utils/episodeContext.js'
+import { setLocale } from '../src/i18n/index.js'
+
+setLocale('zh-CN')
 
 test('txLabel / sourceLabel map known names and keep unknown ones readable', () => {
   assert.equal(txLabel('rewriteLine'), '改写台词')

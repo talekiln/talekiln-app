@@ -197,7 +197,7 @@ export const useTimelineStore = defineStore('timeline', () => {
 
   /** 修改片段字段（补丁），由 timelineMath 计算出的合法值 */
   function patchClip(clipId, patch) {
-    mutate('修改片段', () => {
+    mutate('patchClip', () => {
       const hit = findClip(tracks.value, clipId)
       if (!hit) return false
       Object.assign(hit.clip, patch)
@@ -206,7 +206,7 @@ export const useTimelineStore = defineStore('timeline', () => {
   }
 
   function deleteClip(clipId) {
-    mutate('删除片段', () => {
+    mutate('deleteClip', () => {
       const hit = findClip(tracks.value, clipId)
       if (!hit) return false
       hit.track.clips = hit.track.clips.filter((c) => c.id !== clipId)
@@ -229,7 +229,7 @@ export const useTimelineStore = defineStore('timeline', () => {
 
   /** 设置某类轨道音量（0..4 的倍数，音乐轨 UI 用 0..2） */
   function setTrackVolume(kind, volume) {
-    return mutate('轨道音量', () => {
+    return mutate('trackVolume', () => {
       const track = tracks.value.find((t) => t.kind === kind)
       if (!track || !Number.isFinite(volume)) return false
       track.volume = Math.min(4, Math.max(0, volume))
@@ -248,7 +248,7 @@ export const useTimelineStore = defineStore('timeline', () => {
   /** 切换轨道静音（trackId 缺省时取选中片段所在轨道） */
   function toggleMute(trackId) {
     const id = trackId ?? selected.value?.track?.id
-    return mutate('轨道静音', () => {
+    return mutate('trackMute', () => {
       const track = tracks.value.find((t) => t.id === id)
       if (!track) return false
       track.muted = !track.muted
@@ -257,7 +257,7 @@ export const useTimelineStore = defineStore('timeline', () => {
 
   /** 在 atMs 切分：有选中片段且包含播放头则切选中，否则切各轨道上穿过播放头的片段中第一个 */
   function splitAt(atMs) {
-    return mutate('切分片段', () => doSplit(atMs)) === true
+    return mutate('splitClip', () => doSplit(atMs)) === true
   }
 
   function doSplit(atMs) {

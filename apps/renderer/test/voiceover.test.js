@@ -1,6 +1,9 @@
+import { setLocale } from '../src/i18n/index.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { estimateText, needsConfirm, resultText, skipText, voiceOptions, voStatusBusy, voStatusText } from '../src/utils/voiceover.js'
+
+setLocale('zh-CN')
 
 test('estimateText 带字数、费用、示例价标记', () => {
   const t = estimateText({ shots: 3, chars: 86, estimate: 0.017, max: 0.02, currency: 'CNY', sample_prices: true })

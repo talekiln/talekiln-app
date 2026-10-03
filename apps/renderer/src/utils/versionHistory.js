@@ -1,38 +1,44 @@
 // 版本历史界面的纯逻辑（无 Vue / DOM 依赖，可 node --test）。
 // 数据来自两个只读接口：GET /episodes/:id/versions（节点版本）与 GET /episodes/:id/history（graph_ops 日志）。
 
-const TYPE_LABEL = { image: '首帧图', video: '视频', narration: '配音', compose: '合成' }
+import { t } from '../i18n/index.js'
 
-/** 事务标签（意图名 / 内核 op 名）-> 中文。未知标签原样显示。 */
-export const TX_LABEL = {
-  rewriteLine: '改写台词', insertLine: '插入台词', deleteLine: '删除台词', splitLine: '拆分台词', mergeLines: '合并台词', reorderLines: '台词排序',
-  setShotField: '修改镜头', splitShot: '拆分镜头', mergeShots: '合并镜头', reorderShots: '镜头排序', moveShotToGroup: '镜头换场景', addShot: '新增镜头',
-  deleteShot: '删除镜头', regenerateShot: '重新生成（换种子）', setVoice: '换音色', setShotReferences: '改参考图 / 模型',
-  trimSegment: '裁剪片段', moveSegment: '移动片段', splitSegment: '拆分片段', deleteSegment: '删除片段', setTransition: '改转场', addMusic: '添加音乐',
-  moveNode: '移动节点', setNodeParam: '改节点参数', connectNodes: '连线', disconnectNodes: '断开连线', addNodeAt: '新增节点', deleteNode: '删除节点',
-  recordGeneration: '记录生成结果', adoptVersion: '采用版本', tx: '修改', moveNodes: '移动节点', assemble: '装配时间线', 'generation inputs': '同步生成输入', 'reference inputs': '同步参考图', 'generation cache hit': '命中缓存（沿用旧素材）',
-  'import assets': '导入素材', 'import timeline': '导入时间线', 'reassemble timeline': '重新装配时间线', regenerate: '重新生成',
+const TYPE_IDS = ['image', 'video', 'narration', 'compose']
+const typeLabel = (type) => (TYPE_IDS.includes(type) ? t(`history.type.${type}`) : type)
+
+/** 事务标签（意图名 / 内核 op 名）-> history.tx.* 的 id。未知标签原样显示。 */
+const TX_IDS = {
+  rewriteLine: 'rewriteLine', insertLine: 'insertLine', deleteLine: 'deleteLine', splitLine: 'splitLine', mergeLines: 'mergeLines', reorderLines: 'reorderLines',
+  setShotField: 'setShotField', splitShot: 'splitShot', mergeShots: 'mergeShots', reorderShots: 'reorderShots', moveShotToGroup: 'moveShotToGroup', addShot: 'addShot',
+  deleteShot: 'deleteShot', regenerateShot: 'regenerateShot', setVoice: 'setVoice', setShotReferences: 'setShotReferences',
+  trimSegment: 'trimSegment', moveSegment: 'moveSegment', splitSegment: 'splitSegment', deleteSegment: 'deleteSegment', setTransition: 'setTransition', addMusic: 'addMusic',
+  moveNode: 'moveNode', setNodeParam: 'setNodeParam', connectNodes: 'connectNodes', disconnectNodes: 'disconnectNodes', addNodeAt: 'addNodeAt', deleteNode: 'deleteNode',
+  recordGeneration: 'recordGeneration', adoptVersion: 'adoptVersion', tx: 'default', moveNodes: 'moveNodes', assemble: 'assemble', 'generation inputs': 'generationInputs',
+  'reference inputs': 'referenceInputs', 'generation cache hit': 'generationCacheHit', 'import assets': 'importAssets', 'import timeline': 'importTimeline',
+  'reassemble timeline': 'reassembleTimeline', regenerate: 'regenerate',
   // P3-R 选镜改片
-  editShotRegion: '选镜改片', adoptShotVersion: '采用版本（参数跟随）', 'region edit': '改片结果入库',
+  editShotRegion: 'editShotRegion', adoptShotVersion: 'adoptShotVersion', 'region edit': 'regionEdit',
 }
 
-const OP_LABEL = {
-  addVersion: '新增版本', adoptVersion: '采用版本', removeVersion: '移除版本', setParam: '改参数', addNode: '新增节点', removeNode: '删除节点',
-  connect: '连线', disconnect: '断开', setLayout: '改布局', setChildren: '改顺序', setGroupOrder: '改场景顺序', setComposeSegments: '改片段',
-  addGroup: '新增场景', removeGroup: '删除场景',
-}
+const OP_IDS = [
+  'addVersion', 'adoptVersion', 'removeVersion', 'setParam', 'addNode', 'removeNode', 'connect', 'disconnect', 'setLayout', 'setChildren', 'setGroupOrder',
+  'setComposeSegments', 'addGroup', 'removeGroup',
+]
+const opLabel = (op) => (OP_IDS.includes(op) ? t(`history.op.${op}`) : op)
 
-const SOURCE_LABEL = { 'legacy-import': '导入', 'legacy-sync': '同步旧素材', rebase: '改记（沿用旧素材）' }
+const SOURCE_IDS = ['legacy-import', 'legacy-sync', 'rebase']
 
-export const STATE_TEXT = { applied: '已生效', undone: '已撤销', discarded: '已被覆盖', event: '' }
+const STATE_IDS = ['applied', 'undone', 'discarded']
+/** 记录状态的显示名（event 与未知状态为空）。 */
+export const stateText = (state) => (STATE_IDS.includes(state) ? t(`history.state.${state}`) : '')
 
-export const txLabel = (label) => TX_LABEL[label] || (label ? String(label) : '修改')
+export const txLabel = (label) => (Object.hasOwn(TX_IDS, label) ? t(`history.tx.${TX_IDS[label]}`) : label ? String(label) : t('history.tx.default'))
 
 export function sourceLabel(source) {
-  if (!source) return '未知来源'
-  if (SOURCE_LABEL[source]) return SOURCE_LABEL[source]
-  if (String(source).startsWith('ai-task:')) return 'AI 生成'
-  if (String(source).startsWith('region-edit:')) return '选镜改片' // P3-R
+  if (!source) return t('history.source.unknown')
+  if (SOURCE_IDS.includes(source)) return t(`history.source.${source}`)
+  if (String(source).startsWith('ai-task:')) return t('history.source.ai')
+  if (String(source).startsWith('region-edit:')) return t('history.source.regionEdit') // P3-R
   return String(source)
 }
 
@@ -55,17 +61,17 @@ export function shotNumberMap(shotsView) {
 
 /** 节点的显示名："镜头 3 · 首帧图" / "合成"。 */
 export function nodeLabel(info, nums = {}) {
-  const t = TYPE_LABEL[info.type] || info.type
-  return info.shot_id ? `${nums[info.shot_id] ? `镜头 ${nums[info.shot_id]}` : '镜头'} · ${t}` : t
+  const label = typeLabel(info.type)
+  return info.shot_id ? `${nums[info.shot_id] ? t('history.node.shot', { n: nums[info.shot_id] }) : t('history.node.shotPlain')} · ${label}` : label
 }
 
 /** 版本卡片的展示模型。info 为 /versions 里的节点项，v 为其中一个版本。 */
 export function describeVersion(info, v) {
   const meta = v.metadata || {}
   const bits = []
-  if (meta.model) bits.push(`模型 ${meta.model}`)
-  if (meta.voice) bits.push(`音色 ${meta.voice}`)
-  if (meta.duration_ms) bits.push(`${(meta.duration_ms / 1000).toFixed(1)} 秒`)
+  if (meta.model) bits.push(t('history.meta.model', { v: meta.model }))
+  if (meta.voice) bits.push(t('history.meta.voice', { v: meta.voice }))
+  if (meta.duration_ms) bits.push(t('history.meta.seconds', { v: (meta.duration_ms / 1000).toFixed(1) }))
   if (meta.aspect_ratio) bits.push(String(meta.aspect_ratio))
   return {
     id: v.id,
@@ -99,11 +105,11 @@ export function thumbUrl(ref, kind) {
 /** 历史条目的展示模型。 */
 export function describeEntry(e) {
   if (e.kind === 'undo' || e.kind === 'redo') {
-    return { seq: e.seq, title: e.kind === 'undo' ? '撤销' : '重做', detail: `目标事务 ${e.target}`, state: 'event', stateText: '', time: formatTime(e.created_at), jump: null, tx_id: e.tx_id, kind: e.kind }
+    return { seq: e.seq, title: e.kind === 'undo' ? t('history.entry.undo') : t('history.entry.redo'), detail: t('history.entry.target', { id: e.target }), state: 'event', stateText: '', time: formatTime(e.created_at), jump: null, tx_id: e.tx_id, kind: e.kind }
   }
-  const kinds = Object.entries(e.op_kinds || {}).map(([k, n]) => `${OP_LABEL[k] || k}${n > 1 ? ` ×${n}` : ''}`).join('、')
+  const kinds = Object.entries(e.op_kinds || {}).map(([k, n]) => `${opLabel(k)}${n > 1 ? ` ×${n}` : ''}`).join(t('history.sep.list'))
   return {
-    seq: e.seq, tx_id: e.tx_id, kind: e.kind, title: txLabel(e.label), detail: kinds, state: e.state, stateText: STATE_TEXT[e.state] || '',
+    seq: e.seq, tx_id: e.tx_id, kind: e.kind, title: txLabel(e.label), detail: kinds, state: e.state, stateText: stateText(e.state),
     time: formatTime(e.created_at), jump: jumpPlan(e),
   }
 }
@@ -113,7 +119,7 @@ export function describeEntry(e) {
  * 返回 { type: 'undo'|'redo', steps, label } 或 null。
  */
 export function jumpPlan(e) {
-  if (e.state === 'applied' && e.undo_steps > 0) return { type: 'undo', steps: e.undo_steps, label: `回到此步（撤销 ${e.undo_steps} 步）` }
-  if (e.state === 'undone' && e.redo_steps > 0) return { type: 'redo', steps: e.redo_steps, label: `恢复到此步（重做 ${e.redo_steps} 步）` }
+  if (e.state === 'applied' && e.undo_steps > 0) return { type: 'undo', steps: e.undo_steps, label: t('history.jump.undo', { n: e.undo_steps }) }
+  if (e.state === 'undone' && e.redo_steps > 0) return { type: 'redo', steps: e.redo_steps, label: t('history.jump.redo', { n: e.redo_steps }) }
   return null
 }

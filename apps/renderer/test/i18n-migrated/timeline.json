@@ -1,0 +1,7 @@
+[
+  "views/TimelineEditor.vue",
+  "components/MusicPanel.vue",
+  "components/VoiceoverPanel.vue",
+  "utils/voiceover.js",
+  "utils/mixView.js"
+]
