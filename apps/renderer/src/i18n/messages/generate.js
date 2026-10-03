@@ -215,6 +215,10 @@ const rows = [
   ['generate.batch.cancel.title', '取消批次', 'Cancel batch'],
   ['generate.batch.cancel.confirm', '取消批次', 'Cancel batch'],
   ['generate.batch.cancel.back', '返回', 'Back'],
+  ['generate.dialog.cannotEstimate', '无法估算', 'No estimate available'],
+  ['generate.dialog.queueHintBefore', '任务在后台队列里执行，关闭窗口或应用也不会丢；进度见', 'Tasks run in the background queue and are kept even if you close this window or the app. Progress is in the '],
+  ['generate.dialog.taskCenter', '任务中心', 'Task Center'],
+  ['generate.dialog.queueHintAfter', '。', '.'],
   // ROWS-END
 ]
 

@@ -5,5 +5,6 @@
   "utils/batchView.js",
   "views/BatchPage.vue",
   "shell/actions/generate.js",
-  "shell/dialogs/generate.js"
+  "shell/dialogs/generate.js",
+  "components/GenerateDialog.vue"
 ]

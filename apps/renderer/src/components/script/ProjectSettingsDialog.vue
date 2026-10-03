@@ -19,7 +19,7 @@
       <div class="grid">
         <el-form-item :label="t('script.settings.aspect')">
           <el-select v-model="form.aspectRatio" data-test="settings-aspect">
-            <el-option v-for="a in ASPECTS" :key="a" :label="a" :value="a" />
+            <el-option v-for="a in ASPECTS" :key="a" :label="aspectLabel(a)" :value="a" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('script.settings.clip')">
@@ -69,6 +69,7 @@ import { useI18n } from '@/i18n'
 import { useShellStore } from '@/stores/shell'
 import { dramaAPI } from '@/api/drama'
 import StylePickerButton from '@/components/StylePickerButton.vue'
+import { ASPECTS, aspectLabel } from '@/utils/aspectRatio'
 import { CUSTOM_STYLE_VALUE, generationStyleOptions } from '@/constants/styleOptions'
 import { CLIP_DURATION_DEFAULT, buildProjectSettingsRequests } from '@/utils/scriptTools'
 
@@ -77,7 +78,6 @@ const emit = defineEmits(['close'])
 const { t } = useI18n()
 const shell = useShellStore()
 
-const ASPECTS = ['16:9', '9:16', '3:4', '1:1', '4:3', '21:9']
 const CLIPS = [4, 5, 8, 10, 12, 15]
 const STORY_STYLES = ['modern', 'ancient', 'fantasy', 'daily']
 const STORY_TYPES = ['drama', 'comedy', 'adventure']

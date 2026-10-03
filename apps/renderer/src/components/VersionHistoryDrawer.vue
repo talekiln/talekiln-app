@@ -83,7 +83,7 @@ import { useProjectViewsStore } from '@/stores/projectViews'
 import { historyFocusNode, historyOpen } from '@/composables/useHistoryDrawer'
 import { episodeOfRoute } from '@/utils/episodeContext'
 import { adoptOps, describeEntry, describeVersion, nodeLabel, shotNumberMap, thumbUrl } from '@/utils/versionHistory'
-import { STATE_LABEL } from '@/utils/projectViews'
+import { stateLabel } from '@/components/canvas/canvasModel'
 
 const route = useRoute()
 const views = useProjectViewsStore()
@@ -112,7 +112,7 @@ const entries = computed(() => {
   return list.map((e) => ({ ...e, head: e === head }))
 })
 
-const stateText = (s) => ({ ...STATE_LABEL, fresh: '最新' }[s] || s)
+const stateText = (s) => stateLabel(s) || s
 const stateType = (s) => ({ fresh: 'success', stale: 'warning', none: 'info' }[s] || 'info')
 const kindText = (v) => ({ video: '视频', audio: '音频', image: '图片' }[v.kind] || '素材')
 

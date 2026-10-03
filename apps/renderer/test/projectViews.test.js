@@ -2,11 +2,12 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import {
-  ADD_NODE_TYPES, addNodeArgs, newNodePos, sceneRows, sceneTitleInput,
+  ADD_NODE_TYPES, addNodeArgs, newNodePos, sceneRows,
   buildIndex, canvasToFlow, coerceField, diffParams, displayPos, editableFields, emptyState, firstSegmentOfShot, focusIn,
-  fromKernelClipId, groupBoxes, lineStaleInfo, newTxId, normalizeSelection, nodeSummary, playheadFor, reduceGraph, reduceSummary,
+  fromKernelClipId, groupBoxes, lineStaleInfo, newTxId, normalizeSelection, playheadFor, reduceGraph, reduceSummary,
   reduceViews, reorderedIds, sameSelection, selKey, shotIdOf, shotNumbers, staleCount, toKernelClipId, validSplitAt, viewLocation, viewOfRoute,
 } from '../src/utils/projectViews.js'
+import { newNodeParams } from '../src/components/canvas/canvasModel.js'
 
 // 用真实的内核投影做夹具（与 REST 返回的 views 同形）
 const K = createRequire(import.meta.url)('../../../packages/kernel/src/index.js')
@@ -183,12 +184,7 @@ test('displayPos: stored layout is used as is; auto layout is spread so cards do
   assert.deepEqual(displayPos(moved), { x: 1, y: 2 })
 })
 
-test('nodeSummary / editable fields / diffParams', () => {
-  const { views } = fixture()
-  const n = (t) => views.canvas.nodes.find((x) => x.type === t)
-  assert.match(nodeSummary(n('shot'))[1], /3\.0s|4\.0s|6\.0s/)
-  assert.deepEqual(nodeSummary(n('image')), ['模型 default', '种子 0'])
-  assert.match(nodeSummary(n('compose'))[0], /^3 个片段/)
+test('editable fields / diffParams', () => {
   assert.ok(editableFields('shot').some((f) => f.key === 'duration_ms' && f.type === 'number'))
   assert.deepEqual(editableFields('script_line').find((f) => f.key === 'kind').options.map((o) => o.value), ['scene_heading', 'narration', 'dialogue', 'action'])
   assert.deepEqual(editableFields('unknown'), [])
@@ -267,28 +263,24 @@ test('canvas add-node: types, placement to the right of the graph, group and def
   const shot = addNodeArgs(views.canvas, 'shot')
   assert.equal(shot.type, 'shot')
   assert.equal(shot.group, views.canvas.groups[0].id, 'defaults to the first scene')
-  assert.deepEqual(shot.params, { title: '新镜头' })
+  assert.equal(shot.params, undefined, 'default content is localized by canvasModel.newNodeParams, not here')
   assert.equal(typeof shot.x, 'number')
   const line = addNodeArgs(views.canvas, 'script_line', { group: views.canvas.groups[1].id })
   assert.equal(line.group, views.canvas.groups[1].id)
-  assert.equal(line.params.kind, 'action')
   const nar = addNodeArgs(views.canvas, 'narration')
   assert.equal(nar.group, undefined)
   assert.equal(nar.params, undefined)
   // 内核接受这些参数：新镜头进组、新图节点落在指定位置
   const K2 = createRequire(import.meta.url)('../../../packages/kernel/src/index.js')
   const { g } = fixture()
-  const tx = K2.intents.canvas.addNodeAt(g, shot.type, { x: shot.x, y: shot.y, group: shot.group, params: shot.params }, { tx_id: 't1' })
+  const tx = K2.intents.canvas.addNodeAt(g, shot.type, { x: shot.x, y: shot.y, group: shot.group, params: newNodeParams('shot') }, { tx_id: 't1' })
   assert.ok(tx.meta.node_id)
 })
 
-test('scene rows and title validation mirror the kernel renameGroup rule', () => {
+test('scene rows list the scene groups with their counts', () => {
   const { views } = fixture()
   const rows = sceneRows(views.canvas)
   assert.deepEqual(rows.map((r) => r.title), ['雨夜', '清晨'])
   assert.deepEqual([rows[0].lines, rows[0].shots], [3, 2])
   assert.deepEqual(sceneRows(null), [])
-  assert.deepEqual(sceneTitleInput('  黄昏 '), { value: '黄昏' })
-  assert.ok(sceneTitleInput('   ').error)
-  assert.ok(sceneTitleInput('x'.repeat(201)).error)
 })

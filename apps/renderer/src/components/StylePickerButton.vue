@@ -10,7 +10,7 @@
         <span class="spt-swatch" :style="triggerSwatchStyle" />
         <span class="spt-label">{{ displayLabel }}</span>
       </template>
-      <span v-else class="spt-placeholder">{{ placeholder }}</span>
+      <span v-else class="spt-placeholder">{{ placeholderText }}</span>
       <el-icon class="spt-arrow"><ArrowDown /></el-icon>
       <span v-if="modelValue" class="spt-clear" @click.stop="clearSelection">
         <el-icon><CircleClose /></el-icon>
@@ -20,7 +20,7 @@
     <!-- 选择弹窗 -->
     <el-dialog
       v-model="visible"
-      title="选择生成风格"
+      :title="t('common.style.title')"
       width="90vw"
       style="max-width: 1100px"
       class="style-picker-dialog"
@@ -31,14 +31,14 @@
       <div class="spd-search">
         <el-input
           v-model="search"
-          placeholder="搜索风格名称..."
+          :placeholder="t('common.style.search')"
           clearable
           style="width: 240px"
         >
           <template #prefix><el-icon><Search /></el-icon></template>
         </el-input>
         <span v-if="modelValue" class="spd-selected-hint">
-          已选：{{ getStyleLabel(modelValue) || displayLabel }}
+          {{ t('common.style.selected', { name: getStyleLabel(modelValue) || displayLabel }) }}
         </span>
       </div>
 
@@ -70,7 +70,7 @@
         </template>
 
         <template v-if="showCustomSection">
-          <div class="spd-group-title">其他</div>
+          <div class="spd-group-title">{{ t('common.style.other') }}</div>
           <div class="spd-grid">
             <div
               class="spd-item"
@@ -78,9 +78,9 @@
               @click="openCustomEditor"
             >
               <div class="spd-thumb" :style="{ background: CUSTOM_SWATCH }">
-                <span class="spd-thumb-text">自定</span>
+                <span class="spd-thumb-text">{{ t('common.style.customShort') }}</span>
               </div>
-              <div class="spd-name">自定义</div>
+              <div class="spd-name">{{ t('common.style.custom') }}</div>
               <div v-if="modelValue === CUSTOM_STYLE_VALUE" class="spd-check">✓</div>
             </div>
           </div>
@@ -93,20 +93,20 @@
             :rows="4"
             maxlength="500"
             show-word-limit
-            placeholder="描述画面风格，例如：赛博朋克水墨，霓虹灯映在宣纸上…"
+            :placeholder="t('common.style.customPlaceholder')"
           />
           <div class="spd-custom-actions">
-            <el-button @click="showCustomEditor = false">取消</el-button>
-            <el-button type="primary" @click="confirmCustom">确认</el-button>
+            <el-button @click="showCustomEditor = false">{{ t('common.cancel') }}</el-button>
+            <el-button type="primary" @click="confirmCustom">{{ t('common.ok') }}</el-button>
           </div>
         </div>
 
-        <div v-if="filteredGroups.length === 0 && !showCustomSection" class="spd-empty">没有匹配的风格</div>
+        <div v-if="filteredGroups.length === 0 && !showCustomSection" class="spd-empty">{{ t('common.style.noMatch') }}</div>
       </div>
 
       <template #footer>
-        <el-button @click="clearAndClose">清除选择</el-button>
-        <el-button type="primary" @click="visible = false">完成</el-button>
+        <el-button @click="clearAndClose">{{ t('common.style.clear') }}</el-button>
+        <el-button type="primary" @click="visible = false">{{ t('common.style.done') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -116,6 +116,7 @@
 import { ref, computed } from 'vue'
 import { ArrowDown, CircleClose, Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { useI18n } from '@/i18n'
 import { CUSTOM_STYLE_VALUE, getStyleLabel } from '@/constants/styleOptions'
 
 const CUSTOM_SWATCH = 'linear-gradient(135deg,#5b8def,#2dd4bf)'
@@ -124,10 +125,12 @@ const props = defineProps({
   modelValue: { type: String, default: '' },
   customPrompt: { type: String, default: '' },
   options: { type: Array, default: () => [] },
-  placeholder: { type: String, default: '图片/视频风格' },
+  placeholder: { type: String, default: '' }, // 空 = 用默认提示（跟随语言）
 })
 
 const emit = defineEmits(['update:modelValue', 'update:customPrompt', 'change'])
+const { t } = useI18n()
+const placeholderText = computed(() => props.placeholder || t('common.style.placeholder'))
 
 const visible = ref(false)
 const search = ref('')
@@ -140,7 +143,7 @@ const selectedOption = computed(() => allOptions.value.find((o) => o.value === p
 const isCustom = computed(() => props.modelValue === CUSTOM_STYLE_VALUE)
 
 const displayLabel = computed(() => {
-  if (isCustom.value) return '自定义'
+  if (isCustom.value) return t('common.style.custom')
   return selectedOption.value?.label || ''
 })
 
@@ -152,7 +155,8 @@ const triggerSwatchStyle = computed(() => {
 const showCustomSection = computed(() => {
   const kw = search.value.trim().toLowerCase()
   if (!kw) return true
-  return '自定义'.includes(kw) || 'custom'.includes(kw) || kw.includes('自定义') || kw.includes('custom')
+  const word = t('common.style.custom').toLowerCase()
+  return word.includes(kw) || 'custom'.includes(kw) || kw.includes(word) || kw.includes('custom')
 })
 
 const filteredGroups = computed(() => {
@@ -180,7 +184,7 @@ function openCustomEditor() {
 function confirmCustom() {
   const text = customDraft.value.trim()
   if (!text) {
-    ElMessage.warning('请填写画风描述')
+    ElMessage.warning(t('common.style.customEmpty'))
     return
   }
   emit('update:customPrompt', text)
