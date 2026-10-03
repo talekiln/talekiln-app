@@ -74,11 +74,11 @@ const tick = ref(0) // 面板打开时刷新一次上下文
 
 // 搜索时现取：当前剧集、撤销状态
 function getCtx() {
-  const ep = episodeOfRoute(route, views.episodeId)
+  const ep = episodeOfRoute(route)
   const loaded = ep && views.episodeId === ep
   return {
     episodeId: ep,
-    dramaId: loaded ? views.dramaId : (Number(route.query.drama) || null),
+    dramaId: loaded ? views.dramaId : (Number(route.params.dramaId) || null),
     canUndo: !!(loaded && views.canUndo),
     canRedo: !!(loaded && views.canRedo),
     busy: !!views.busy,

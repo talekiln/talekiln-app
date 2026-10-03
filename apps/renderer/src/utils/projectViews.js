@@ -371,21 +371,18 @@ export function shotNumbers(shotsView) {
 
 export function staleCount(stale) { return Array.isArray(stale) ? stale.length : 0 }
 
-/** 保持 episode / drama 切到另一个视图的路由位置。 */
+/**
+ * 保持 episode / drama 切到另一个视图的路由位置：具名路由 `episode-<view>`（/p/:dramaId/e/:episodeId/...）。
+ * 不知道 dramaId 时才退回按剧集 id 的旧地址，由 router.beforeEach 经 utils/legacyRoutes 查出所属项目后重定向。
+ */
 export function viewLocation(view, episodeId, dramaId, query = {}) {
-  const q = { ...query }
-  if (dramaId) q.drama = String(dramaId)
-  if (view === 'storyboard') {
-    return dramaId
-      ? { path: `/project/${dramaId}/storyboard`, query: { ...q, episode: String(episodeId) } }
-      : { path: `/episodes/${episodeId}/storyboard`, query: q }
-  }
-  return { path: `/episodes/${episodeId}/${view}`, query: q }
+  if (dramaId) return { name: `episode-${view}`, params: { dramaId, episodeId }, query: { ...query } }
+  return { path: `/episodes/${episodeId}/${view}`, query: { ...query } }
 }
 
 /** 路由名属于哪个视图（用于高亮）。 */
 export function viewOfRoute(name) {
-  return { 'episode-script': 'script', storyboard: 'storyboard', 'episode-storyboard': 'storyboard', 'episode-timeline': 'timeline', 'episode-canvas': 'canvas' }[name] || null
+  return { 'episode-script': 'script', 'episode-storyboard': 'storyboard', 'episode-timeline': 'timeline', 'episode-canvas': 'canvas' }[name] || null
 }
 
 // ---------- 时间线片段 id ----------

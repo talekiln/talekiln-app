@@ -146,7 +146,7 @@ const rawOpen = ref(new Set())
 const costOpen = ref(new Set())
 
 // 打开时指定的剧集优先（工作台不在剧集路由上）；否则按当前路由推断
-const episodeId = computed(() => directorEpisodeId.value || episodeOfRoute(route, views.episodeId))
+const episodeId = computed(() => directorEpisodeId.value || episodeOfRoute(route))
 const canSubmit = computed(() => validateMessage(message.value).ok && !planning.value)
 const cards = computed(() => turns.value.map((t) => describeTurn(t, { busy: views.busy || !!acting.value })))
 

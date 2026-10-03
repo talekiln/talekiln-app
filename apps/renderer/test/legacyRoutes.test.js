@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { isLegacyPath, resolveLegacyRoute } from '../src/utils/legacyRoutes.js'
+import { isLegacyPath, resolveLegacyRoute, LEGACY_ROUTE_RECORDS } from '../src/utils/legacyRoutes.js'
 
 // 剧集 7 属于项目 12；项目 12 的第 1 集是 3；项目 13 没有剧集
 const deps = {
@@ -91,4 +91,14 @@ test('non-legacy paths return null; trailing slash and hash are tolerated', asyn
   assert.equal(isLegacyPath('/p/12'), false)
   assert.equal(isLegacyPath('/project/1/library?x=1'), true)
   assert.equal(isLegacyPath('/media-library'), false)
+})
+
+test('/free-create (page removed) -> home; legacy route records are stubs that import nothing', async () => {
+  assert.equal(await go('/free-create'), '/')
+  assert.equal(isLegacyPath('/free-create'), true)
+  assert.ok(LEGACY_ROUTE_RECORDS.length >= 4)
+  for (const rec of LEGACY_ROUTE_RECORDS) {
+    assert.equal(typeof rec.component.render, 'function', rec.name)
+    assert.equal(rec.component.render(), null, rec.name)
+  }
 })

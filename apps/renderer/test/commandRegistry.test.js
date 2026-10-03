@@ -247,9 +247,9 @@ test('builtin commands execute: view switch keeps episode and drama; undo/redo r
   await r.execute('history.open', ctx)
   await assert.rejects(() => r.execute('edit.redo', ctx), /disabled/)
   await assert.rejects(() => r.execute('edit.undo', { ...ctx, busy: true }), /disabled/)
-  assert.deepEqual(calls[0], ['go', { path: '/episodes/5/canvas', query: { drama: '9' } }])
-  assert.deepEqual(calls[1], ['go', { path: '/project/9/storyboard', query: { drama: '9', episode: '5' } }])
-  assert.deepEqual(calls[2], ['go', { path: '/episodes/5/export', query: { drama: '9' } }])
+  assert.deepEqual(calls[0], ['go', { name: 'episode-canvas', params: { dramaId: 9, episodeId: 5 }, query: {} }])
+  assert.deepEqual(calls[1], ['go', { name: 'episode-storyboard', params: { dramaId: 9, episodeId: 5 }, query: {} }])
+  assert.deepEqual(calls[2], ['go', { name: 'episode-export', params: { dramaId: 9, episodeId: 5 } }])
   assert.deepEqual(calls[3], ['undo'])
   assert.deepEqual(calls[4], ['history'])
   await r.execute('project.new', {})
@@ -270,11 +270,11 @@ test('content provider: searches shots and script lines; empty query or no episo
   const hit = r.search('车内', ctx)[0]
   await r.execute(hit.cmd, ctx)
   assert.deepEqual(calls[0], ['select', { kind: 'shot', id: 's2' }])
-  assert.deepEqual(calls[1], ['go', { path: '/project/9/storyboard', query: { drama: '9', episode: '5' } }])
+  assert.deepEqual(calls[1], ['go', { name: 'episode-storyboard', params: { dramaId: 9, episodeId: 5 }, query: {} }])
   const line = r.search('雨越下越大', ctx).find((x) => x.cmd.id === 'line:l2')
   await r.execute(line.cmd, ctx)
   assert.deepEqual(calls[2], ['select', { kind: 'line', id: 'l2' }])
-  assert.deepEqual(calls[3], ['go', { path: '/episodes/5/script', query: { drama: '9' } }])
+  assert.deepEqual(calls[3], ['go', { name: 'episode-script', params: { dramaId: 9, episodeId: 5 }, query: {} }])
 })
 
 test('content provider: does not repeat the speaker when the line text already starts with it', () => {

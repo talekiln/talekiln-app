@@ -32,9 +32,9 @@ export function createBuiltinCommands(deps) {
     { id: 'edit.undo', title: '撤销', group: '编辑', keywords: ['undo', '回退'], hint: 'Ctrl+Z', when: hasEpisode, enabled: (c) => c.canUndo && !c.busy, run: () => deps.undo() },
     { id: 'edit.redo', title: '重做', group: '编辑', keywords: ['redo'], hint: 'Ctrl+Shift+Z', when: hasEpisode, enabled: (c) => c.canRedo && !c.busy, run: () => deps.redo() },
     { id: 'history.open', title: '打开版本历史', group: '编辑', keywords: ['历史', '版本', 'history', 'versions', '操作记录'], when: hasEpisode, run: () => deps.openHistory() },
-    { id: 'project.export', title: '导出视频', group: '项目', keywords: ['导出', 'export', '渲染', '成片'], when: hasEpisode, run: (ctx) => deps.go({ path: `/episodes/${ctx.episodeId}/export`, query: ctx.dramaId ? { drama: String(ctx.dramaId) } : {} }) },
+    { id: 'project.export', title: '导出视频', group: '项目', keywords: ['导出', 'export', '渲染', '成片'], when: hasEpisode, run: (ctx) => deps.go(ctx.dramaId ? { name: 'episode-export', params: { dramaId: ctx.dramaId, episodeId: ctx.episodeId } } : { path: `/episodes/${ctx.episodeId}/export` }) },
     // P3-B
-    { id: 'project.batch', title: '批量生成', group: '项目', keywords: ['批量', '多集', '批次', 'batch', '并发', '预算'], when: (ctx) => !!ctx.dramaId, run: (ctx) => deps.go(`/project/${ctx.dramaId}/batch`) },
+    { id: 'project.batch', title: '批量生成', group: '项目', keywords: ['批量', '多集', '批次', 'batch', '并发', '预算'], when: (ctx) => !!ctx.dramaId, run: (ctx) => deps.go({ name: 'batch', params: { dramaId: ctx.dramaId } }) },
     // P3-T
     page('nav.templates', '模板市场', '/templates', ['模板', '套用', '市场', 'template', 'templates']),
     // P3-D

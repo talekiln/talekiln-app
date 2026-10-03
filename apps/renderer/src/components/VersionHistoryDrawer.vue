@@ -96,7 +96,7 @@ const truncated = ref(false)
 const loadError = ref('')
 const jumping = ref(false)
 
-const episodeId = computed(() => episodeOfRoute(route, views.episodeId))
+const episodeId = computed(() => episodeOfRoute(route))
 const nums = computed(() => shotNumberMap(views.views.shots))
 const nodes = computed(() => rawNodes.value.map((n) => ({ ...n, label: nodeLabel(n, nums.value) })))
 const selected = computed(() => nodes.value.find((n) => n.node === nodeId.value) || null)

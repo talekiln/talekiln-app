@@ -116,7 +116,7 @@ test('applyBody / applyTarget / cloudItemState', () => {
   assert.deepEqual(applyBody({ mode: 'new', title: ' 我的剧 ', map: { heroine: 1, hero: '', villain: null } }), { mode: 'new', title: '我的剧', character_map: { heroine: 1 } })
   assert.deepEqual(applyBody({ mode: 'episode', dramaId: '7', title: '', map: { host: '3' } }), { mode: 'episode', drama_id: 7, character_map: { host: 3 } })
   assert.deepEqual(applyBody({ mode: 'weird' }), { mode: 'new', character_map: {} })
-  assert.deepEqual(applyTarget({ drama_id: 2, episode_id: 9 }), { path: '/project/2/storyboard', query: { episode: '9' } })
+  assert.deepEqual(applyTarget({ drama_id: 2, episode_id: 9 }), { name: 'episode-storyboard', params: { dramaId: 2, episodeId: 9 } })
   assert.equal(cloudItemState({ installed: false }).action, '安装')
   assert.equal(cloudItemState({ installed: true, version: '1.1.0', installed_version: '1.0.0' }).action, '更新')
   assert.equal(cloudItemState({ installed: true, version: '1.0.0', installed_version: '1.0.0' }).label, '已安装')

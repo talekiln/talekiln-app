@@ -29,12 +29,6 @@ export const dramaAPI = {
   saveProgress(id, data) {
     return request.put(`/dramas/${id}/progress`, data)
   },
-  saveCanvasLayout(id, canvasLayout, workflowGroups) {
-    const body = {}
-    if (canvasLayout != null) body.canvas_layout = canvasLayout
-    if (workflowGroups !== undefined) body.workflow_groups = workflowGroups
-    return request.put(`/dramas/${id}/canvas-layout`, body)
-  },
   getStoryboards(episodeId) {
     return request.get(`/episodes/${episodeId}/storyboards`)
   },
@@ -48,9 +42,6 @@ export const dramaAPI = {
        body = options || {};
     }
     return request.post(`/episodes/${episodeId}/storyboards`, body)
-  },
-  finalizeEpisode(episodeId, data) {
-    return request.post(`/episodes/${episodeId}/finalize`, data || {})
   },
   extractBackgrounds(episodeId, body) {
     return request.post(`/images/episode/${episodeId}/backgrounds/extract`, body || {})

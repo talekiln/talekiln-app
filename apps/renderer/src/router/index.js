@@ -2,7 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { shouldShowOnboarding } from '@/utils/onboarding'
 import { useAccountStore } from '@/stores/account'
 import { useShellStore } from '@/stores/shell'
-import { isLegacyPath, resolveLegacyRoute } from '@/utils/legacyRoutes'
+import { isLegacyPath, resolveLegacyRoute, LEGACY_ROUTE_RECORDS } from '@/utils/legacyRoutes'
 import { routeDecision, isStale } from '@/utils/account'
 
 const router = createRouter({
@@ -107,74 +107,8 @@ const router = createRouter({
         }
       ]
     },
-    {
-      path: '/project/:dramaId/storyboard',
-      name: 'storyboard',
-      component: () => import('@/views/StoryboardPage.vue'),
-      meta: { title: '分镜表' }
-    },
-    {
-      path: '/project/:dramaId/library',
-      name: 'reference-library',
-      component: () => import('@/views/ReferenceLibrary.vue'),
-      meta: { title: '角色与场景库' }
-    },
-    {
-      path: '/project/:dramaId/shot/:shotId',
-      name: 'legacy-shot-workbench',
-      component: () => import('@/views/ShotWorkbench.vue'),
-      meta: { title: '分镜工作台' }
-    },
-    {
-      path: '/drama/:id',
-      name: 'drama-detail',
-      component: () => import('@/views/DramaDetail.vue'),
-      meta: { title: '剧集管理' }
-    },
-    {
-      path: '/film/:id',
-      name: 'film',
-      component: () => import('@/views/FilmCreate.vue'),
-      meta: { title: 'AI 视频生成' }
-    },
-    {
-      path: '/film/:id/canvas',
-      name: 'film-canvas',
-      component: () => import('@/views/DramaCanvas.vue'),
-      meta: { title: '画布模式' }
-    },
-    {
-      path: '/episodes/:id/timeline',
-      name: 'legacy-episode-timeline',
-      component: () => import('@/views/TimelineEditor.vue'),
-      meta: { title: '时间线编辑' }
-    },
-    // 四视图：同一份项目图的剧本 / 分镜 / 时间线 / 画布投影，选择与历史共享
-    {
-      path: '/episodes/:id/script',
-      name: 'legacy-episode-script',
-      component: () => import('@/views/ScriptView.vue'),
-      meta: { title: '剧本视图' }
-    },
-    {
-      path: '/episodes/:id/canvas',
-      name: 'legacy-episode-canvas',
-      component: () => import('@/views/CanvasView.vue'),
-      meta: { title: '画布视图' }
-    },
-    {
-      // 只有剧集 id 时（如从剧本 / 画布视图的直达链接）：查出所属项目后进入分镜表
-      path: '/episodes/:id/storyboard',
-      name: 'legacy-episode-storyboard',
-      component: () => import('@/views/StoryboardPage.vue'),
-      meta: { title: '分镜表' }
-    },
-    {
-      path: '/episodes/:id/export',
-      name: 'legacy-episode-export',
-      component: () => import('@/views/ExportPage.vue'),
-      meta: { title: '导出视频' }
-    },
+    // 旧地址（/film /drama /episodes /project /free-create）：占位记录，beforeEach 里先重定向（utils/legacyRoutes）
+    ...LEGACY_ROUTE_RECORDS,
     {
       path: '/settings/shortcuts',
       name: 'keyboard-settings',
@@ -194,12 +128,6 @@ const router = createRouter({
       meta: { title: 'AI 配置' }
     },
     {
-      path: '/free-create',
-      name: 'free-create',
-      component: () => import('@/views/FreeCreate.vue'),
-      meta: { title: '自由创作' }
-    },
-    {
       path: '/task-center',
       name: 'task-center',
       component: () => import('@/views/TaskCenter.vue'),
@@ -216,13 +144,6 @@ const router = createRouter({
       name: 'media-library',
       component: () => import('@/views/MediaLibrary.vue'),
       meta: { title: '媒体素材库' }
-    },
-    // P3-B
-    {
-      path: '/project/:dramaId/batch',
-      name: 'legacy-batch',
-      component: () => import('@/views/BatchPage.vue'),
-      meta: { title: '批量生成' }
     },
     // P3-T
     {

@@ -144,7 +144,7 @@ export function applyBody({ mode, dramaId, title, map }) {
 
 /** 套用成功后跳转：分镜表，定位到新建的那一集。 */
 export function applyTarget(result) {
-  return { path: `/project/${result.drama_id}/storyboard`, query: { episode: String(result.episode_id) } }
+  return { name: 'episode-storyboard', params: { dramaId: result.drama_id, episodeId: result.episode_id } }
 }
 
 /** 云端目录条目相对本地的状态。 */

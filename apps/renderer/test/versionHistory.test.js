@@ -93,13 +93,11 @@ test('describeEntry: label, op summary, state text, jump; undo/redo records are 
   assert.equal(describeEntry({ seq: 1, tx_id: 'd', kind: 'apply', label: 'x', state: 'discarded' }).stateText, '已被覆盖')
 })
 
-test('episodeOfRoute: episode routes use the param, storyboard uses query then loaded store, others none', () => {
-  assert.equal(episodeOfRoute({ name: 'episode-canvas', params: { id: '12' }, query: {} }), 12)
-  assert.equal(episodeOfRoute({ name: 'episode-export', params: { id: '3' }, query: {} }), 3)
-  assert.equal(episodeOfRoute({ name: 'episode-script', params: { id: 'x' }, query: {} }), null)
-  assert.equal(episodeOfRoute({ name: 'storyboard', params: {}, query: { episode: '8' } }, 99), 8)
-  assert.equal(episodeOfRoute({ name: 'storyboard', params: {}, query: {} }, 99), 99)
-  assert.equal(episodeOfRoute({ name: 'storyboard', params: {}, query: {} }, null), null)
-  assert.equal(episodeOfRoute({ name: 'list', params: {}, query: {} }, 5), null)
+test('episodeOfRoute: episode routes use the :episodeId param, others none', () => {
+  assert.equal(episodeOfRoute({ name: 'episode-canvas', params: { episodeId: '12' }, query: {} }), 12)
+  assert.equal(episodeOfRoute({ name: 'episode-export', params: { episodeId: '3' }, query: {} }), 3)
+  assert.equal(episodeOfRoute({ name: 'episode-script', params: { episodeId: 'x' }, query: {} }), null)
+  assert.equal(episodeOfRoute({ name: 'storyboard', params: {}, query: { episode: '8' } }), null)
+  assert.equal(episodeOfRoute({ name: 'list', params: {}, query: {} }), null)
   assert.equal(episodeOfRoute(null), null)
 })

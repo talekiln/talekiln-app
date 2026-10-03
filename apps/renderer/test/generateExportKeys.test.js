@@ -10,7 +10,7 @@ const src = path.join(here, '../src')
 
 const FILES = [
   'components/export', 'components/generate', 'composables/usePipeline.js', 'utils/exportJob.js', 'utils/exportSrt.js',
-  'utils/exportStoryboardSheet.js', 'utils/pipelinePlan.js', 'utils/batchView.js', 'views/BatchPage.vue', 'views/ExportPage.vue',
+  'utils/exportStoryboardSheet.js', 'utils/pipelinePlan.js', 'utils/batchView.js', 'views/BatchPage.vue',
   'shell/actions/generate.js', 'shell/actions/export.js', 'shell/dialogs/generate.js', 'shell/dialogs/export.js',
 ]
 

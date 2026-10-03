@@ -17,9 +17,22 @@ const RULES = [
   { re: new RegExp(`^/episodes/${ID}/(script|canvas|timeline|storyboard|export)/?$`), kind: 'episode' },
   { re: new RegExp(`^/project/${ID}/(storyboard|library|batch)/?$`), kind: 'project' },
   { re: new RegExp(`^/project/${ID}/shot/([^/]+)/?$`), kind: 'projectShot' },
+  // 自由创作页已删除（Task 12）：旧书签落到首页
+  { re: /^\/free-create\/?$/, kind: 'freeCreate' },
 ]
 // 形似旧地址但 id 不是数字（如 /film/abc）：也当作旧地址，落到首页而不是匹配不到任何路由
 const LOOSE = /^\/(drama|film|episodes|project)\/[^/]+/
+
+// 路由记录：只是占位（render 为空），让旧地址能匹配到一条记录；真正的重定向在 router.beforeEach
+// 里先经 resolveLegacyRoute 完成，所以这些记录永远不会渲染。不引用任何已删除的页面组件。
+const STUB = { render: () => null }
+export const LEGACY_ROUTE_RECORDS = [
+  { path: '/drama/:rest(.*)*', name: 'legacy-drama', component: STUB },
+  { path: '/film/:rest(.*)*', name: 'legacy-film', component: STUB },
+  { path: '/episodes/:rest(.*)*', name: 'legacy-episodes', component: STUB },
+  { path: '/project/:rest(.*)*', name: 'legacy-project', component: STUB },
+  { path: '/free-create', name: 'legacy-free-create', component: STUB },
+]
 
 const asId = (v) => {
   const raw = Array.isArray(v) ? v[0] : v
@@ -44,6 +57,7 @@ export async function resolveLegacyRoute(to, deps = {}) {
   const first = (dramaId) => safe(deps.firstEpisode, dramaId).then(asId)
 
   if (kind === 'filmNew') return '/new-project'
+  if (kind === 'freeCreate') return '/'
 
   if (kind === 'drama') {
     const dramaId = Number(m[1])

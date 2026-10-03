@@ -228,13 +228,14 @@ test('script helpers: reorder, split position, stale marker, numbering', () => {
 })
 
 test('routes: view locations keep episode and drama; route name -> view', () => {
-  assert.deepEqual(viewLocation('script', 7, 3), { path: '/episodes/7/script', query: { drama: '3' } })
+  assert.deepEqual(viewLocation('script', 7, 3), { name: 'episode-script', params: { dramaId: 3, episodeId: 7 }, query: {} })
+  assert.deepEqual(viewLocation('timeline', 7, 3, { x: '1' }), { name: 'episode-timeline', params: { dramaId: 3, episodeId: 7 }, query: { x: '1' } })
+  assert.deepEqual(viewLocation('storyboard', 7, 3), { name: 'episode-storyboard', params: { dramaId: 3, episodeId: 7 }, query: {} })
+  // 不知道项目时退回按剧集 id 的旧地址（由 router.beforeEach 重定向）
   assert.deepEqual(viewLocation('canvas', 7, null), { path: '/episodes/7/canvas', query: {} })
-  assert.deepEqual(viewLocation('timeline', 7, 3, { x: '1' }), { path: '/episodes/7/timeline', query: { x: '1', drama: '3' } })
-  assert.deepEqual(viewLocation('storyboard', 7, 3), { path: '/project/3/storyboard', query: { drama: '3', episode: '7' } })
-  assert.deepEqual(viewLocation('storyboard', 7, null), { path: '/episodes/7/storyboard', query: {} })
   assert.equal(viewOfRoute('episode-script'), 'script')
-  assert.equal(viewOfRoute('storyboard'), 'storyboard')
+  assert.equal(viewOfRoute('episode-storyboard'), 'storyboard')
+  assert.equal(viewOfRoute('storyboard'), null)
   assert.equal(viewOfRoute('episode-timeline'), 'timeline')
   assert.equal(viewOfRoute('episode-canvas'), 'canvas')
   assert.equal(viewOfRoute('list'), null)

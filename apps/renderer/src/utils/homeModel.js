@@ -20,7 +20,7 @@ export function sortedEpisodes(project) {
  * - 记录里的集仍存在且视图合法 -> 'last'：那一集的那个视图
  * - 否则有剧集 -> 'first'：第 1 集（按集号）的剧本
  * - 没有剧集 -> 'empty'：project-home（外壳决定落点，没有剧集时是资产页 / 剧本空状态）
- * 返回的 location 是具名路由，永远不是 /film/ 或 /drama/ 这类旧路径。
+ * 返回的 location 是具名路由，永远不是旧版的项目页路径。
  */
 export function cardNextStop(project, lastVisited) {
   if (!project || project.id == null) return { kind: 'none', location: { name: 'list' }, episodeId: null, episodeNumber: null, view: null }
