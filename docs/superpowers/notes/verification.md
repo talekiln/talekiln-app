@@ -41,3 +41,19 @@
 - Electron 打包与安装包。
 - 渲染核心的 MP4 导出（核心未连接，菜单项软禁用）。
 - `apps/renderer/e2e/run.mjs` 的完整执行：已改到新路由并加了主流程，选择器逐个在真实页面核对过，但本机没有 Playwright（装它是下载，未获许可），`node e2e/run.mjs` 在第一步报 `Cannot find module 'playwright'`，0 通过 / 0 失败。需要有 Playwright 的环境重跑。
+
+## 遗留问题修复（bugfix worker，同一分支）
+
+| 问题 | 修法 | 回归测试 |
+|---|---|---|
+| 状态栏显示原始画风键（`realistic`）和原始画幅 | `StatusBar.vue` 用新的 `utils/styleName.js`（`custom` 走 `common.style.custom`，预设走 `getStyleLabel`）和 `aspectLabel` | `test/bugfixLabels.test.js` |
+| 内核合成节点对 16:9 项目仍是 1080x1920 | `packages/local/src/kernel/legacy.js`：导入旧表时按 `dramas.metadata.aspect_ratio` 设置 compose 的 `size`（16:9 -> 1920x1080，9:16 -> 1080x1920，1:1、4:3、3:4、21:9 同理；未知或缺失保留内核默认）。内核包没动 | `packages/local/test/kernelComposeSize.test.js` |
+| 时间线片段标签是素材哈希 | 新增 `utils/clipLabel.js`：字幕显示文字，属于镜头的片段显示“镜 5 · 标题”/“Shot 5 · title”，音乐显示文件名；`TimelineEditor.vue` 的 `clipLabel` 改为调用它；新键 `common.shot.number / numberTitled` | `test/bugfixLabels.test.js` |
+| 没有可生成内容时仍显示“采用已有结果” | `previewSummary` 新增 `nothingToDo`（免费、没有可采用的缓存命中、未被拦截）；确认框此时不显示确认按钮，显示提示“没有需要生成的内容，也没有可采用的已有结果”，取消键变“关闭”；加载中 / 加载失败也不再显示灰掉的确认键 | `test/bugfixLabels.test.js` |
+| 顶栏“生成”菜单窄屏偏紧 | “生成”“导出”包进 `.menus`，窄屏换行时相邻、靠右、整体换行；下拉面板宽度不超过视口。真实浏览器 1000 px / 420 px 核对过 | `test/bugfixLabels.test.js`（源码断言） |
+
+没修的：
+
+- 已经存在的项目图里合成节点仍是旧的 1080x1920（只在首次导入旧表时设置；之后在项目设置里改画幅不会回写 compose.size）。
+- 时间线页在 1000 px 下标题“时间线编辑”被挤成竖排（TimelineEditor 样式，i18n 之外的另一个小问题）。
+- 状态栏“风格”的预设名是否随语言变化取决于 `constants/styleOptions` 的本地化（仍是中文名，i18n 另有人在做）。

@@ -111,6 +111,7 @@ import { useTimelineStore } from '@/stores/timeline'
 import MusicPanel from '@/components/MusicPanel.vue'
 import { useProjectViewsStore } from '@/stores/projectViews'
 import { fromKernelClipId, toKernelClipId } from '@/utils/projectViews'
+import { shotLabelsByLegacy, clipDisplayLabel } from '@/utils/clipLabel'
 import VoiceoverPanel from '@/components/VoiceoverPanel.vue'
 import { useKeymap } from '@/composables/useKeymap'
 import { SCOPE_TIMELINE, SCOPE_WORKBENCH } from '@/utils/keymap'
@@ -248,10 +249,10 @@ function clipStyle(clip) {
   return { left: msToPx(c.start_ms, pxPerSec.value) + 'px', width: Math.max(msToPx(c.duration_ms, pxPerSec.value), 4) + 'px' }
 }
 
+// 片段属于某个镜头时显示“镜 5 · 标题”，不是素材哈希（见 utils/clipLabel.js）
+const shotLabels = computed(() => shotLabelsByLegacy(views.views.shots))
 function clipLabel(clip) {
-  if (clip.text) return clip.text
-  const ref = clip.asset_ref ? String(clip.asset_ref).split('/').pop() : ''
-  return ref || (clip.storyboard_id ? `分镜 ${clip.storyboard_id}` : '片段')
+  return clipDisplayLabel(clip, shotLabels.value, '片段')
 }
 
 function clipTitle(clip) {

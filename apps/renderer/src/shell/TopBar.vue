@@ -90,31 +90,33 @@
 
     <LocaleSwitch />
 
-    <el-dropdown v-for="m in menus" :key="m.id" trigger="click" placement="bottom-end" :max-height="480">
-      <el-button size="small" :type="m.primary ? 'primary' : 'default'" :data-test="`menu-${m.id}`">
-        {{ t(`shell.menu.${m.id}`) }}<el-icon class="caret"><ArrowDown /></el-icon>
-      </el-button>
-      <template #dropdown>
-        <el-dropdown-menu class="shell-menu">
-          <template v-for="(g, gi) in m.groups" :key="g.key">
-            <li class="grp" :class="{ first: gi === 0 }" role="presentation">{{ t(g.labelKey) }}</li>
-            <el-dropdown-item
-              v-for="it in g.items"
-              :key="it.id"
-              :class="{ 'is-soft-disabled': !it.state.enabled }"
-              :aria-disabled="!it.state.enabled"
-              :data-test="`item-${it.id}`"
-              @click="pick(it)"
-            >
-              <div class="mi">
-                <span class="mi-t">{{ t(it.labelKey) }}</span>
-                <span class="mi-d">{{ it.state.enabled ? t(it.descKey) : t(it.state.reasonKey) }}</span>
-              </div>
-            </el-dropdown-item>
-          </template>
-        </el-dropdown-menu>
-      </template>
-    </el-dropdown>
+    <div class="menus" data-test="menus">
+      <el-dropdown v-for="m in menus" :key="m.id" trigger="click" placement="bottom-end" :max-height="480">
+        <el-button size="small" :type="m.primary ? 'primary' : 'default'" :data-test="`menu-${m.id}`">
+          {{ t(`shell.menu.${m.id}`) }}<el-icon class="caret"><ArrowDown /></el-icon>
+        </el-button>
+        <template #dropdown>
+          <el-dropdown-menu class="shell-menu">
+            <template v-for="(g, gi) in m.groups" :key="g.key">
+              <li class="grp" :class="{ first: gi === 0 }" role="presentation">{{ t(g.labelKey) }}</li>
+              <el-dropdown-item
+                v-for="it in g.items"
+                :key="it.id"
+                :class="{ 'is-soft-disabled': !it.state.enabled }"
+                :aria-disabled="!it.state.enabled"
+                :data-test="`item-${it.id}`"
+                @click="pick(it)"
+              >
+                <div class="mi">
+                  <span class="mi-t">{{ t(it.labelKey) }}</span>
+                  <span class="mi-d">{{ it.state.enabled ? t(it.descKey) : t(it.state.reasonKey) }}</span>
+                </div>
+              </el-dropdown-item>
+            </template>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+    </div>
   </header>
 </template>
 
@@ -241,6 +243,7 @@ function pick(it) {
 .tab:hover { color: var(--text-primary); }
 .tab.on { background: var(--bg-card); color: var(--el-color-primary); font-weight: 700; box-shadow: var(--shadow); }
 .tab.off { opacity: .45; cursor: default; }
+.menus { display: inline-flex; align-items: center; gap: 8px; flex: none; }
 .spacer { flex: 1; }
 .stale {
   height: 26px; padding: 0 10px; border-radius: 13px; border: 1px solid #f59e0b; background: rgba(245, 158, 11, .14);
@@ -262,12 +265,14 @@ function pick(it) {
   .topbar > * { flex-shrink: 0; }
   .ep-btn { max-width: 180px; }
   .tab { padding: 4px 10px; }
+  /* 生成 / 导出两个菜单按钮始终相邻、整体靠右，换行时一起换 */
+  .menus { margin-left: auto; gap: 6px; }
 }
 .topbar :deep(.el-radio-group) { flex-wrap: nowrap; white-space: nowrap; }
 </style>
 
 <style>
-.shell-menu { min-width: 280px; max-width: 360px; }
+.shell-menu { min-width: min(280px, calc(100vw - 16px)); max-width: min(360px, calc(100vw - 16px)); }
 .shell-menu .grp { padding: 8px 16px 2px; font-size: 11px; letter-spacing: .04em; color: var(--text-subtle); list-style: none; }
 .shell-menu .grp:not(.first) { margin-top: 4px; border-top: 1px solid var(--border-color); }
 .shell-menu .mi { display: flex; flex-direction: column; gap: 2px; line-height: 1.3; }

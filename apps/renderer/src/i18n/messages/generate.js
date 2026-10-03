@@ -42,6 +42,7 @@ const rows = [
   ['generate.dialog.loadFailed', '无法获取预估：{message}', 'Could not get the estimate: {message}'],
   ['generate.dialog.confirm', '确认并开始生成', 'Confirm and generate'],
   ['generate.dialog.useExisting', '采用已有结果', 'Use existing results'],
+  ['generate.dialog.nothingToAdopt', '没有需要生成的内容，也没有可采用的已有结果', 'Nothing to generate and no existing results to use'],
   ['generate.dialog.submitFailed', '提交失败', 'Submit failed'],
   ['generate.dialog.title.allVoice', '生成全部旁白配音', 'Generate all narration voiceover'],
   ['generate.voice.voice', '音色', 'Voice'],

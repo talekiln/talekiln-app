@@ -17,11 +17,12 @@
       </ul>
       <el-alert v-for="(w, i) in summary.warnings" :key="`w${i}`" class="gc-alert" type="warning" show-icon :closable="false" :title="w" />
       <el-alert v-if="summary.blocked" class="gc-alert" type="error" show-icon :closable="false" :title="summary.blockedText" data-test="confirm-blocked" />
+      <el-alert v-if="summary.nothingToDo" class="gc-alert" type="info" show-icon :closable="false" :title="t('generate.dialog.nothingToAdopt')" data-test="confirm-nothing" />
       <el-alert v-if="submitError" class="gc-alert" type="error" show-icon :closable="false" :title="submitError" />
     </template>
     <template #footer>
-      <el-button @click="visible = false">{{ t('common.cancel') }}</el-button>
-      <el-button type="primary" :loading="submitting" :disabled="loading || !!loadError || !summary.canConfirm" data-test="confirm-submit" @click="submit">
+      <el-button @click="visible = false">{{ !loading && summary.nothingToDo ? t('common.close') : t('common.cancel') }}</el-button>
+      <el-button v-if="showConfirm" type="primary" :loading="submitting" :disabled="!summary.canConfirm" data-test="confirm-submit" @click="submit">
         {{ summary.free ? t('generate.dialog.useExisting') : t('generate.dialog.confirm') }}
       </el-button>
     </template>
@@ -54,6 +55,8 @@ let result
 
 const spec = kindOf(props.action) || { kind: 'both', regenerate: false }
 const summary = computed(() => previewSummary(preview.value))
+// Nothing to generate and nothing to adopt: the confirm button would be a dead end, so it is not shown at all.
+const showConfirm = computed(() => !loading.value && !loadError.value && !summary.value.nothingToDo)
 const title = computed(() => t(`generate.dialog.title.${props.action.replace('generate.', '')}`))
 
 onMounted(async () => {

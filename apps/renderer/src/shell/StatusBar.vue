@@ -4,8 +4,8 @@
       <i class="dot" />{{ t(`shell.status.${saveState}`) }}
     </span>
     <span v-if="summary" class="item sum" data-test="status-summary">{{ summary }}</span>
-    <span v-if="shell.aspectRatio" class="item">{{ t('shell.status.ratio', { v: shell.aspectRatio }) }}</span>
-    <span v-if="shell.style" class="item">{{ t('shell.status.style', { v: shell.style }) }}</span>
+    <span v-if="shell.aspectRatio" class="item">{{ t('shell.status.ratio', { v: aspectLabel(shell.aspectRatio) }) }}</span>
+    <span v-if="shell.style" class="item">{{ t('shell.status.style', { v: styleName(shell.style) }) }}</span>
     <span v-if="modelText" class="item">{{ t('shell.status.model', { v: modelText }) }}</span>
     <span class="spacer" />
     <span class="core" :class="{ off: !shell.renderCoreOk }" data-test="core-state">
@@ -18,6 +18,8 @@
 <script setup>
 import { computed } from 'vue'
 import { useI18n } from '@/i18n'
+import { aspectLabel } from '@/utils/aspectRatio'
+import { styleName } from '@/utils/styleName'
 import { useShellStore } from '@/stores/shell'
 import { useProjectViewsStore } from '@/stores/projectViews'
 

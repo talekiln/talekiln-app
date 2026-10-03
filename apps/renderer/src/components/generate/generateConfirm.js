@@ -19,7 +19,7 @@ export function kindOf(actionId) {
  * { title, lines, warnings, blocked, blockedText, canConfirm, free }
  */
 export function previewSummary(preview) {
-  if (!preview) return { title: t('generate.confirm.title.free'), lines: [], warnings: [], blocked: false, blockedText: '', canConfirm: false, free: true }
+  if (!preview) return { title: t('generate.confirm.title.free'), lines: [], warnings: [], blocked: false, blockedText: '', canConfirm: false, free: true, nothingToDo: false }
   const items = preview.items || []
   const count = (kind, action) => items.filter((i) => i.kind === kind && i.action === action).length
   const images = count('image', 'create')
@@ -53,14 +53,17 @@ export function previewSummary(preview) {
   if (items.some((i) => (i.warnings || []).includes('first_frame_stale'))) warnings.push(t('generate.warn.staleFirstFrame'))
 
   const blocked = preview.allowed === false
+  const canConfirm = !blocked && preview.provider_ready !== false && (preview.billable > 0 || hits > 0)
   return {
     title: t(free ? 'generate.confirm.title.free' : 'generate.confirm.title.paid'),
     lines,
     warnings,
     blocked,
     blockedText: blocked ? (preview.refusal && preview.refusal.message) || t('generate.blocked.default') : '',
-    canConfirm: !blocked && preview.provider_ready !== false && (preview.billable > 0 || hits > 0),
+    canConfirm,
     free,
+    // free and nothing to adopt either: every shot is already up to date (or cannot be generated)
+    nothingToDo: free && !canConfirm && !blocked && preview.provider_ready !== false,
   }
 }
 
