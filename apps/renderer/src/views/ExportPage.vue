@@ -120,6 +120,7 @@
             <span v-if="job.encoder" class="job-meta">编码器 {{ job.encoder }}</span>
             <span v-if="elapsedMs" class="job-meta">已用时 {{ formatElapsed(elapsedMs) }}</span>
           </div>
+          <el-alert v-if="job.warning" type="warning" :closable="false" show-icon :title="job.warning" data-test="placeholder-warning" />
           <el-alert v-if="job.status === 'failed'" type="error" :closable="false" show-icon :title="errorText(job.error)" data-test="job-error" />
           <el-alert v-if="job.status === 'cancelled'" type="warning" :closable="false" show-icon title="导出已取消" />
           <div v-if="job.status === 'done'" class="done">
@@ -243,7 +244,8 @@ async function onStart() {
   job.value = null
   try {
     const r = await exportAPI.start(buildStartRequest(form, sizes.value, episodeId.value))
-    job.value = { job_id: r.job_id, status: 'queued', percent: 0, stage: 'queued', output_path: r.output_path, encoder: r.encoder }
+    // warning：空镜头黑场占位提示（后端 start / status 都带，轮询覆盖 job 后仍在）
+    job.value = { job_id: r.job_id, status: 'queued', percent: 0, stage: 'queued', output_path: r.output_path, encoder: r.encoder, warning: r.warning || null }
     startClock()
     poller.start(r.job_id)
   } catch (_) {

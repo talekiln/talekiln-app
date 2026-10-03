@@ -24,6 +24,13 @@ describe('export through the real core', { skip }, () => {
   let db;
   let storageRoot;
   const frameHash = (file, t) => execFileSync('ffmpeg', ['-v', 'error', '-ss', String(t), '-i', file, '-frames:v', '1', '-f', 'md5', '-'], { encoding: 'utf8' }).trim();
+  // average luma (0..255) of the frame at t, via signalstats
+  const frameLuma = (file, t) => {
+    const out = execFileSync('ffmpeg', ['-v', 'info', '-ss', String(t), '-i', file, '-frames:v', '1', '-vf', 'signalstats,metadata=print:file=-', '-f', 'null', '-'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const m = /lavfi\.signalstats\.YAVG=([\d.]+)/.exec(out);
+    assert.ok(m, 'signalstats output: ' + out.slice(-300));
+    return Number(m[1]);
+  };
 
   before(async () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'export-e2e-'));
@@ -52,21 +59,36 @@ describe('export through the real core', { skip }, () => {
         { kind: 'music', volume: 0.5, clips: [{ id: 'm1', start_ms: 0, duration_ms: 2000, asset_ref: 'library/music/bgm.wav', asset_kind: 'audio', src_in_ms: 0, src_out_ms: 2000 }] },
       ],
     });
+    // episode 2: a real 2 s clip followed by an empty storyboard shot (asset_ref null) that must render as black
+    db.exec("INSERT INTO storyboards (id, episode_id, storyboard_number, title) VALUES (7, 2, 2, '')");
+    tl.saveTimeline(db, {
+      episode_id: 2, mix: { ducking: { enabled: false, gain: 0.3, rampMs: 100 }, loudnorm: false },
+      tracks: [
+        { kind: 'video', volume: 1, clips: [
+          { id: 'v2', start_ms: 0, duration_ms: 2000, asset_ref: 'v/a.mp4', asset_kind: 'video', src_in_ms: 0, src_out_ms: 2000 },
+          { id: 'empty', start_ms: 2000, duration_ms: 1000, asset_ref: null, asset_kind: 'video', src_in_ms: 0, src_out_ms: 1000, storyboard_id: 7 },
+        ] },
+        { kind: 'subtitle', volume: 1, clips: [] },
+        { kind: 'narration', volume: 1, clips: [] },
+        { kind: 'music', volume: 0.5, clips: [] },
+      ],
+    });
   });
 
   after(() => { try { client && client.close(); } catch (_) { /* closed */ } if (child) child.kill(); });
 
-  async function run(name) {
+  async function run(name, episodeId = 1) {
     const svc = createExportService(db, { getCore: async () => client, storageRoot, ffmpegPath: 'ffmpeg', opener() {} });
     const out = path.join(dir, `${name}.mp4`);
-    const { job_id: id } = await svc.start({ episode_id: 1, width: 640, height: 360, fps: 15, encoder: 'libx264', output_path: out });
+    const started = await svc.start({ episode_id: episodeId, width: 640, height: 360, fps: 15, encoder: 'libx264', output_path: out });
+    const id = started.job_id;
     let s;
     for (let i = 0; i < 300; i++) {
       s = await svc.status(id);
       if (['done', 'failed', 'cancelled'].includes(s.status)) break;
       await new Promise((r) => setTimeout(r, 100));
     }
-    return { s, out };
+    return { s, out, started };
   }
 
   it('renders with music, visible label and AIGC metadata; label setting changes the picture', async () => {
@@ -89,5 +111,19 @@ describe('export through the real core', { skip }, () => {
       execFileSync('ffmpeg', ['-v', 'error', '-y', '-ss', '0.5', '-i', on.out, '-frames:v', '1', path.join(process.env.KEEP_E2E_FRAMES, 'label-intro.png')]);
       execFileSync('ffmpeg', ['-v', 'error', '-y', '-ss', '1.5', '-i', on.out, '-frames:v', '1', path.join(process.env.KEEP_E2E_FRAMES, 'label-persistent.png')]);
     }
+  });
+
+  it('renders an empty storyboard shot as a black placeholder and names it in the start warning', async () => {
+    aigc.setSettings(db, { watermark: false, metadata: false });
+    const r = await run('black', 2);
+    assert.equal(r.s.status, 'done', JSON.stringify(r.s.error));
+    assert.match(r.started.warning, /第 2 镜/);
+    assert.match(r.started.warning, /黑场/);
+    assert.equal(r.started.placeholders.length, 1);
+    assert.equal(r.s.warning, r.started.warning); // still there on the final status
+    const probe = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'json', r.out], { encoding: 'utf8' }));
+    assert.ok(Math.abs(Number(probe.format.duration) - 3) < 0.3, probe.format.duration);
+    assert.ok(frameLuma(r.out, 0.5) > 40, 'real clip is not black'); // 0x205080 blue
+    assert.ok(frameLuma(r.out, 2.5) < 20, 'placeholder shot is black');
   });
 });

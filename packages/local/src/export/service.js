@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const { spawn } = require('child_process');
 const timeline = require('../timeline');
 const aigc = require('./aigc');
-const { resolveTimelineAssets, describeProblems } = require('./resolve');
+const { resolveTimelineAssets, describeProblems, describePlaceholders } = require('./resolve');
 const { PLATFORM_PRESETS } = require('./exporters/presets');
 
 class ExportError extends Error {
@@ -141,11 +141,14 @@ function createExportService(db, {
     if (typeof encoder !== 'string' || !ENCODER_RE.test(encoder)) throw new ExportError('编码器名称无效');
     if (!usable.includes(encoder)) throw new ExportError(`编码器 ${encoder} 在本机不可用`, 400, 'ENCODER_UNAVAILABLE');
 
-    const { timeline: resolved, problems } = resolveTimelineAssets(tl, storageRoot);
+    const { timeline: resolved, problems, placeholders } = resolveTimelineAssets(tl, storageRoot);
     if (problems.length) {
       labelShots(problems);
       throw new ExportError(describeProblems(problems), 400, 'EXPORT_ASSETS', { problems });
     }
+    // Empty shots (video clips without an asset) are rendered black by lycore; tell the user which ones.
+    labelShots(placeholders);
+    const warning = describePlaceholders(placeholders) || null;
 
     const settings = aigc.getSettings(db);
     const produceId = newId();
@@ -178,9 +181,11 @@ function createExportService(db, {
       postState: 'pending', // pending -> running -> done | failed (the AIGC metadata pass)
       post: null,
       postError: null,
+      placeholders,
+      warning,
     };
     jobs.set(job.id, job);
-    return { job_id: job.id, output_path: outputPath, encoder, aigc: { watermark: settings.watermark, metadata: settings.metadata } };
+    return { job_id: job.id, output_path: outputPath, encoder, aigc: { watermark: settings.watermark, metadata: settings.metadata }, placeholders, warning };
   }
 
   /** Runs once per job after render.status reports done. Sets job.postState to done | failed. */
@@ -210,7 +215,10 @@ function createExportService(db, {
     const c = await core();
     let s;
     try { s = await c.renderStatus(job.id); } catch (e) { throw mapCoreError(e); }
-    const base = { ...s, job_id: job.id, output_path: job.outputPath, aigc: { watermark: job.aigc.watermark, metadata: job.aigc.metadata } };
+    const base = {
+      ...s, job_id: job.id, output_path: job.outputPath, aigc: { watermark: job.aigc.watermark, metadata: job.aigc.metadata },
+      ...(job.warning ? { warning: job.warning, placeholders: job.placeholders } : {}),
+    };
     if (s.status !== 'done') return base;
     if (job.postState === 'pending') {
       job.postState = 'running';
