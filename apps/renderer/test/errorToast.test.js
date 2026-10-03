@@ -1,6 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { parseApiError, toastText, lookupError } from '../src/utils/errorToast.js'
+import { setLocale } from '../src/i18n/index.js'
+
+setLocale('zh-CN')
 
 const http = (data, message = 'Request failed with status code 500') => ({ message, response: { data } })
 
@@ -36,4 +39,16 @@ test('numeric core codes and prototype keys', () => {
   assert.match(lookupError(-32031).message, /素材/)
   assert.equal(lookupError('constructor'), null)
   assert.equal(lookupError('__proto__'), null)
+})
+
+test('English locale: client-generated parts follow the language, server text stays as is', () => {
+  setLocale('en')
+  try {
+    assert.equal(toastText(null), 'Network error')
+    assert.equal(toastText(http({ error: { code: 'CONFLICT', message: '服务端文案', action: 'Reload' } })), '服务端文案. Suggestion: Reload')
+    assert.equal(toastText({ message: 'Network Error' }), 'Network Error')
+  } finally {
+    setLocale('zh-CN')
+  }
+  assert.equal(toastText(http({ error: { code: 'CONFLICT', message: 'm', action: 'a' } })), 'm。建议：a')
 })

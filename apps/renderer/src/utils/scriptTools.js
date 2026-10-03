@@ -7,7 +7,7 @@ import { stylePromptMetadataForSave, CUSTOM_STYLE_VALUE } from '../constants/sty
 
 /** 默认章节标题：第N章/回/节/集（中文数字、阿拉伯数字、全角数字）或 Chapter N。 */
 export const DEFAULT_CHAPTER_PATTERN =
-  '^[ \\t\\u3000]*(第[0-9０-９零一二三四五六七八九十百千万]+[章回节集][^\\n\\r]*|(?:Chapter|CHAPTER|chapter)[ \\t]+\\d+[^\\n\\r]*)'
+  '^[ \\t\\u3000]*(第[0-9０-９零一二三四五六七八九十百千万]+[章回节集][^\\n\\r]*|(?:Chapter|CHAPTER|chapter)[ \\t]+\\d+[^\\n\\r]*)' // i18n-ignore: 解析中文剧本章节标题用的模式，不是界面文案
 
 export const DEFAULT_SIZE_PER_EPISODE = 3000
 

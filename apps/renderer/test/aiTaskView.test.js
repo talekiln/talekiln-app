@@ -2,8 +2,11 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   stateLabel, canRetry, canCancel, errorText, consoleUrl, showConsoleLink, retryRequest, filterStates,
-  refreshInterval, formatTime, stateTagType, ERROR_TEXT, UNCERTAIN_TEXT
+  refreshInterval, formatTime, stateTagType, ERROR_TEXT, uncertainText, FILTERS, STATE_LABELS
 } from '../src/utils/aiTaskView.js'
+import { setLocale } from '../src/i18n/index.js'
+
+setLocale('zh-CN')
 
 test('state labels and button availability', () => {
   assert.equal(stateLabel('polling'), '生成中')
@@ -21,7 +24,7 @@ test('error text is readable Chinese for every provider error code', () => {
   }
   assert.equal(errorText({ state: 'queued' }), '')
   assert.equal(errorText({ error_code: 'NOPE' }), ERROR_TEXT.UNKNOWN)
-  assert.equal(errorText({ error_code: 'UNKNOWN', error_message: 'SUBMIT_UNCERTAIN: x' }), UNCERTAIN_TEXT)
+  assert.equal(errorText({ error_code: 'UNKNOWN', error_message: 'SUBMIT_UNCERTAIN: x' }), uncertainText())
   assert.equal(errorText({ error_code: 'NETWORK', error_readable: '服务端文案' }), '服务端文案')
 })
 
@@ -46,4 +49,22 @@ test('filters, refresh interval, time format', () => {
   assert.equal(refreshInterval([{ state: 'failed' }]), 15000)
   assert.equal(formatTime(0), '')
   assert.match(formatTime(1700000000000), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
+})
+
+test('English locale: state labels, fallback error text, uncertain text and filters', () => {
+  setLocale('en')
+  try {
+    assert.equal(stateLabel('polling'), 'Generating')
+    assert.equal(stateLabel(''), 'Unknown')
+    assert.equal(STATE_LABELS.cancelled, 'Cancelled')
+    assert.equal(errorText({ error_code: 'NETWORK' }), 'The network request failed')
+    assert.equal(errorText({ error_code: 'NOPE' }), 'Unknown error')
+    assert.equal(errorText({ error_code: 'NETWORK', error_readable: '服务端文案' }), '服务端文案', 'server text is shown as is')
+    assert.match(errorText({ error_code: 'UNKNOWN', uncertain: true }), /uncertain/)
+    for (const code of Object.keys(ERROR_TEXT)) assert.doesNotMatch(errorText({ error_code: code }), /[一-鿿]|^aiTask\./)
+    assert.deepEqual(FILTERS.map((f) => f.label), ['All', 'In progress', 'Failed', 'Done'])
+  } finally {
+    setLocale('zh-CN')
+  }
+  assert.deepEqual(FILTERS.map((f) => f.label), ['全部', '进行中', '失败', '已完成'])
 })

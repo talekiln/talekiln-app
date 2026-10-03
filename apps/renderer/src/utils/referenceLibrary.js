@@ -7,7 +7,7 @@ export function buildCandidateRequest({ kind, entity, dramaId, model, style }) {
   const base = kind === 'scene'
     ? [entity.location, entity.time, entity.prompt].filter(Boolean).join('，')
     : [entity.name, entity.appearance, entity.description].filter(Boolean).join('，')
-  const hint = kind === 'scene' ? '场景参考图，无人物，环境设定' : '角色设定参考图，全身，纯色背景，正面站姿'
+  const hint = kind === 'scene' ? '场景参考图，无人物，环境设定' : '角色设定参考图，全身，纯色背景，正面站姿' // i18n-ignore: 发给生图模型的提示词，保持中文
   return {
     drama_id: Number(dramaId) || 0,
     prompt: `${base}。${hint}`,

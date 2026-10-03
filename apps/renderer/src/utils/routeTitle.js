@@ -1,4 +1,4 @@
-// 浏览器标题：优先用当前语言的 route.title.<路由名>，没有登记时退回 meta.title（中文）。
+// 浏览器标题：优先用当前语言的 routes.title.<路由名>，没有登记时退回 meta.title（router/index.js 里写的是英文）。
 export function routeTitle(route, t) {
   if (!route) return ''
   const key = `routes.title.${String(route.name || '')}`

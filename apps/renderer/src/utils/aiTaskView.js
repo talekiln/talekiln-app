@@ -1,32 +1,34 @@
 // Pure presentation logic for the task center (no Vue / DOM).
+import { t } from '../i18n/index.js'
 
 export const STATE_LABELS = {
-  queued: '排队中',
-  submitting: '提交中',
-  submitted: '已提交',
-  polling: '生成中',
-  downloading: '下载中',
-  succeeded: '已完成',
-  failed: '失败',
-  cancelled: '已取消'
+  get queued() { return t('aiTask.state.queued') },
+  get submitting() { return t('aiTask.state.submitting') },
+  get submitted() { return t('aiTask.state.submitted') },
+  get polling() { return t('aiTask.state.polling') },
+  get downloading() { return t('aiTask.state.downloading') },
+  get succeeded() { return t('aiTask.state.succeeded') },
+  get failed() { return t('aiTask.state.failed') },
+  get cancelled() { return t('aiTask.state.cancelled') }
 }
 
 // Mirrors packages/local/src/providers/errors.js READABLE; used when the server sent no error_readable.
+// Getters, so the text follows the language at the time it is read.
 export const ERROR_TEXT = {
-  INVALID_API_KEY: 'API Key 无效或已过期，请检查设置中的 Key',
-  MODEL_NOT_ENABLED: '该模型未开通或无权限，请在服务商控制台开通后重试',
-  INSUFFICIENT_BALANCE: '账户余额不足或已欠费，请充值后重试',
-  RATE_LIMITED: '请求过于频繁或额度受限，请稍后重试',
-  INVALID_PARAMS: '请求参数不合法',
-  TASK_FAILED: '生成任务失败',
-  NETWORK: '网络请求失败',
-  BAD_RESPONSE: '服务商返回格式异常',
-  PROVIDER_NOT_AVAILABLE: '该服务商暂未开放',
-  CAPABILITY_NOT_SUPPORTED: '该服务商不支持此能力',
-  UNKNOWN: '未知错误'
+  get INVALID_API_KEY() { return t('aiTask.error.INVALID_API_KEY') },
+  get MODEL_NOT_ENABLED() { return t('aiTask.error.MODEL_NOT_ENABLED') },
+  get INSUFFICIENT_BALANCE() { return t('aiTask.error.INSUFFICIENT_BALANCE') },
+  get RATE_LIMITED() { return t('aiTask.error.RATE_LIMITED') },
+  get INVALID_PARAMS() { return t('aiTask.error.INVALID_PARAMS') },
+  get TASK_FAILED() { return t('aiTask.error.TASK_FAILED') },
+  get NETWORK() { return t('aiTask.error.NETWORK') },
+  get BAD_RESPONSE() { return t('aiTask.error.BAD_RESPONSE') },
+  get PROVIDER_NOT_AVAILABLE() { return t('aiTask.error.PROVIDER_NOT_AVAILABLE') },
+  get CAPABILITY_NOT_SUPPORTED() { return t('aiTask.error.CAPABILITY_NOT_SUPPORTED') },
+  get UNKNOWN() { return t('aiTask.error.UNKNOWN') }
 }
 
-export const UNCERTAIN_TEXT = '提交结果不确定：请求可能已到达服务商。为避免重复扣费未自动重试，请先到服务商控制台确认后再手动重试'
+export const uncertainText = () => t('aiTask.uncertain')
 
 // Fallback consoles when the server did not send console_url (https only).
 export const VENDOR_CONSOLES = {
@@ -37,7 +39,7 @@ export const VENDOR_CONSOLES = {
 const TERMINAL = ['succeeded', 'failed', 'cancelled']
 
 export const isTerminal = (state) => TERMINAL.includes(state)
-export const stateLabel = (state) => STATE_LABELS[state] || state || '未知'
+export const stateLabel = (state) => STATE_LABELS[state] || state || t('aiTask.state.unknown')
 export const canRetry = (task) => !!task && task.state === 'failed'
 export const canCancel = (task) => !!task && !isTerminal(task.state)
 
@@ -52,7 +54,7 @@ export function stateTagType(state) {
 export function errorText(task) {
   if (!task || !task.error_code) return ''
   if (task.error_readable) return task.error_readable
-  if (task.uncertain || String(task.error_message || '').startsWith('SUBMIT_UNCERTAIN')) return UNCERTAIN_TEXT
+  if (task.uncertain || String(task.error_message || '').startsWith('SUBMIT_UNCERTAIN')) return uncertainText()
   return ERROR_TEXT[task.error_code] || ERROR_TEXT.UNKNOWN
 }
 
@@ -75,10 +77,10 @@ export function formatTime(ms) {
 }
 
 export const FILTERS = [
-  { key: 'all', label: '全部', states: '' },
-  { key: 'running', label: '进行中', states: 'queued,submitting,submitted,polling,downloading' },
-  { key: 'failed', label: '失败', states: 'failed' },
-  { key: 'done', label: '已完成', states: 'succeeded' }
+  { key: 'all', get label() { return t('aiTask.filter.all') }, states: '' },
+  { key: 'running', get label() { return t('aiTask.filter.running') }, states: 'queued,submitting,submitted,polling,downloading' },
+  { key: 'failed', get label() { return t('aiTask.filter.failed') }, states: 'failed' },
+  { key: 'done', get label() { return t('aiTask.filter.done') }, states: 'succeeded' }
 ]
 
 export const filterStates = (key) => (FILTERS.find((f) => f.key === key) || FILTERS[0]).states

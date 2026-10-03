@@ -1,6 +1,6 @@
 # i18n-migrated
 
-Each lane owns one JSON file here (`shell.json`, `script.json`, `assets.json`, `storyboard.json`,
+Each lane owns one JSON file here (`shell.json`, `script.json`, `assets.json`, `storyboard.json`, `sweep2.json`,
 `generate.json`, `export.json`, `canvas.json`, `home.json`). The file is an array of paths relative to
 `apps/renderer/src/`. `test/i18nLiterals.test.js` checks every registered `.vue` / `.js` file:
 

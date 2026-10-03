@@ -1,0 +1,45 @@
+// 角色一致性评分的纯逻辑文案（utils/consistencyView.js）：评分芯片、建议句、重做估价、自动挑图结果。
+// key 必须以 consistency. 开头；用 [key, 中文, English] 三元组书写，保证两种语言键集合一致。
+const rows = [
+  ['consistency.suggestion.ok', '一致', 'Consistent'],
+  ['consistency.suggestion.check', '需检查', 'Needs a check'],
+  ['consistency.suggestion.retry', '建议重做', 'Redo suggested'],
+  ['consistency.kind.image', '首帧图', 'First frame'],
+  ['consistency.kind.video', '视频', 'Video'],
+  ['consistency.kind.both', '首帧图 + 视频', 'First frame + video'],
+  ['consistency.source.main', '主图', 'Main image'],
+  ['consistency.source.extra', '额外图', 'Extra image'],
+  ['consistency.source.generated', '生成图', 'Generated image'],
+  ['consistency.source.candidate', '候选', 'Candidate'],
+  ['consistency.badge', '一致性 {score}', 'Consistency {score}'],
+  ['consistency.face.noRef', '参考图未检测到人脸', 'No face found in the reference image'],
+  ['consistency.face.noMatch', '未检测到人脸', 'No face found'],
+  ['consistency.face.score', '人脸 {score}', 'Face {score}'],
+  ['consistency.face.noModel', '人脸模型未安装', 'The face model is not installed'],
+  ['consistency.regen', '重做{kind}预计 {est}（最高 {max}）', 'Redoing {kind} is estimated at {est} (up to {max})'],
+  ['consistency.regen.noPrice', '，部分模型没有价格', ', some models have no price'],
+  ['consistency.regen.overCap', '，已超出花费上限', ', over the spending cap'],
+  ['consistency.hint.who', '「{name}」的', ' of "{name}"'],
+  ['consistency.hint.subject', '{node}与{who}锁定参考图', '{node} against the locked reference image{who}'],
+  ['consistency.hint.low', '最低 {score} 分{face}', 'lowest {score}{face}'],
+  ['consistency.hint.face', '，{face}', ', {face}'],
+  ['consistency.hint.threshold', '，阈值 {min}', ', threshold {min}'],
+  ['consistency.hint.ok', '{base}一致（{low}）', '{base}: consistent ({low})'],
+  ['consistency.hint.retry', '{base}相差较大（{low}{th}）：{tail}', '{base}: very different ({low}{th}). {tail}'],
+  ['consistency.hint.retryDefault', '建议重新生成', 'Regenerating is suggested'],
+  ['consistency.hint.check', '{base}有差异（{low}{th}）：请检查画面{cost}', '{base}: some difference ({low}{th}). Check the frame{cost}'],
+  ['consistency.hint.costTail', '；{cost}', '; {cost}'],
+  ['consistency.unavailable.disabled', '一致性评分已在配置里关闭', 'Consistency scoring is turned off in the settings'],
+  ['consistency.unavailable.noCore', '渲染核心未启动，暂时无法评分', 'The render core is not running, so scoring is not available'],
+  ['consistency.auto.none', '没有可排序的候选图', 'There are no candidate images to rank'],
+  ['consistency.auto.anchor', '与四视图相似度', ' and similarity to the four views'],
+  ['consistency.auto.summary', '已按清晰度、分辨率{anchor}排序 {n} 张候选，第一名：{src}（{score} 分）', 'Ranked {n} candidates by sharpness and resolution{anchor}; top pick: {src} (score {score})'],
+  ['consistency.auto.locked', '，已锁定为参考图', ', locked as the reference image'],
+  ['consistency.auto.skipped', '；{n} 张远程或缺失的图未参与', '; {n} remote or missing image(s) were not ranked'],
+  // ROWS-END
+]
+
+export default {
+  'zh-CN': Object.fromEntries(rows.map(([k, zh]) => [k, zh])),
+  en: Object.fromEntries(rows.map(([k, , en]) => [k, en])),
+}

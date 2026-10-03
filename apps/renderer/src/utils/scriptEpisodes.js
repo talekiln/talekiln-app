@@ -15,7 +15,7 @@ export function parseScriptIntoEpisodes(text) {
 
   /** 行首各类括号包住「第…集/章/节」时，先展平成「第一集 …」再匹配 markerRe */
   const TITLE_IN_EP =
-    '第\\s*(?:[零一二三四五六七八九十百千]|\\d|[\\uFF10-\\uFF19])+\\s*(?:集|章|节)'
+    '第\\s*(?:[零一二三四五六七八九十百千]|\\d|[\\uFF10-\\uFF19])+\\s*(?:集|章|节)' // i18n-ignore: 解析中文剧本集标题用的模式，不是界面文案
   const EP_LINE_UNWRAPPERS = [
     new RegExp(`^【\\s*(${TITLE_IN_EP})(?:\\s*】\\s*|\\s{1,})(.*)$`),
     new RegExp(`^《\\s*(${TITLE_IN_EP})(?:\\s*》\\s*|\\s{1,})(.*)$`),

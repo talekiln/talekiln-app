@@ -57,8 +57,25 @@
 
 上面的遗留缺口 4、5、6、9 已处理。顺带：`stores/timeline.js` 里 `mutate()` 的（未被读取的）label 参数改成英文标识。
 
-仍含中文字面量的文件（`findCjkLiterals` 口径，共 40 个，补扫前 56 个）：
+仍含中文字面量的文件（`findCjkLiterals` 口径，第二轮后共 27 个，第一轮后 40 个，补扫前 56 个）：
 
 - 旧的独立页面，范围外：`views/{About,AiConfig,BackupPage,KeyboardSettings,Login,Onboarding,PluginsPage,SpendPage,StudioPage,TemplateMarket}.vue`，以及它们的 `utils/{account,backupView,keymap,keymapPresets,legal,loginView,onboarding,pluginsView,studioView,updatesView,templateMarket,spendView}.js`、`components/{AIConfigContent,PromptEditor,SceneModelMap,Sd2AssetManagement}.vue`、`composables/useDesktopCloud.js`。
-- 可能在四视图里弹出、但不在这次范围内：`stores/projectViews.js`、`router/index.js`、`utils/{errorToast,request,scriptTools,scriptEpisodes,regionEdit,referenceLibrary,consistencyView,aiTaskView,modelSelection,providerEnablement}.js`、`api/storyboards.js`。下一轮建议先扫这一组（错误提示和路由标题最容易在切到英文后露出中文）。
+- 第二轮（SWEEP-2）已处理，不再列在这里：`stores/projectViews.js`、`router/index.js`、`api/storyboards.js`、`utils/{errorToast,request,scriptTools,scriptEpisodes,regionEdit,referenceLibrary,consistencyView,aiTaskView,modelSelection,providerEnablement}.js`。
 - 有意保留中文：风格 `prompt`、命令关键词里的中文搜索词、`exportJob.js`（见缺口 7）。
+
+### 第二轮（SWEEP-2）：四视图里还会露出的错误提示、路由标题和纯逻辑文案
+
+登记在 `test/i18n-migrated/sweep2.json`（13 个文件，现在也被 `i18nLiterals` 守着），新增文案文件 `messages/{request,aiTask,model,region,consistency}.js`：
+
+| 范围 | 做法 |
+|---|---|
+| 请求层：`utils/request.js`、`utils/errorToast.js`、`api/storyboards.js`、`stores/projectViews.js` | 「请求失败 / 网络错误 / 操作失败 / 加载失败 / 不支持流式读取 / 「…。建议：…」」走 `request.*`。服务端返回的 message / action（含 `error-codes.json` 里的兜底文案）不翻译，原样显示；`projectViews.setParam` 的事务名 `改节点参数` 是存进内核的标识，`history.tx.*` 按它查译文，保留并标 `i18n-ignore` |
+| 路由：`router/index.js` | `meta.title` 改成英文（只剩「有没有标题」和未登记路由的兜底作用），实际标题仍由 `routeTitle()` + `routes.title.*` 决定 |
+| 任务中心：`utils/aiTaskView.js` | `STATE_LABELS` / `ERROR_TEXT` / `FILTERS[].label` 改成 getter（读取时才取当前语言），`UNCERTAIN_TEXT` 常量换成函数 `uncertainText()`；服务端给的 `error_readable` 优先，原样显示 |
+| 选镜改片：`utils/regionEdit.js` | 位置、费用、策略、拒绝原因、状态、来源、采用提示走 `region.*`；与 `storyboard.wb.*` 完全相同的几条（整段、导入、AI 生成、选镜改片、模型、秒、采用提示、模式名）直接复用。镜头工作台界面本来就用 `components/shot/workbenchLabels.js`，这里是旧纯逻辑的同步迁移，中文输出不变 |
+| 一致性：`utils/consistencyView.js` | 评分芯片、建议句、人脸部分、重做估价、自动挑图摘要走 `consistency.*`（整句带参数，英文语序独立）；内部比较 `'视频'` 的地方改成比较 `'image' 或 'video'` |
+| 其余：`modelSelection`（价格单位）、`providerEnablement`（默认服务商名、分隔符）、`referenceLibrary`（发给生图模型的提示词）、`scriptTools` / `scriptEpisodes`（解析中文章节标题的正则） | 前两者走 `model.*`；后三者是发给模型 / 解析中文剧本的内容，保持中文并标 `i18n-ignore` |
+
+测试：相关测试文件补了 `setLocale('zh-CN')`，并为 consistencyView、regionEdit、aiTaskView、errorToast、providerEnablement、catalogModels 各加了一条英文语言用例。
+
+遗留（需要后端配合）：`packages/local/src/errors/error-codes.json` 的 130 条 message / action 是中文单语言数据，服务端没带 message 时的兜底、以及几乎总是由表补上的 action（「建议：…」）在英文界面下仍是中文。要彻底解决，需要错误码表加英文字段并让 `/api/v1` 按 `Accept-Language` 返回，或在前端按错误码加 `errors.code.*` 译文；这次没有动。

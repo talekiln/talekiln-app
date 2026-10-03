@@ -1,0 +1,15 @@
+[
+  "stores/projectViews.js",
+  "router/index.js",
+  "api/storyboards.js",
+  "utils/errorToast.js",
+  "utils/request.js",
+  "utils/scriptTools.js",
+  "utils/scriptEpisodes.js",
+  "utils/regionEdit.js",
+  "utils/referenceLibrary.js",
+  "utils/consistencyView.js",
+  "utils/aiTaskView.js",
+  "utils/modelSelection.js",
+  "utils/providerEnablement.js"
+]

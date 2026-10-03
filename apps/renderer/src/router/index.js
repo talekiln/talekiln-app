@@ -15,25 +15,25 @@ const router = createRouter({
       path: '/login',
       name: 'login',
       component: () => import('@/views/Login.vue'),
-      meta: { title: '登录' }
+      meta: { title: 'Sign in' }
     },
     {
       path: '/',
       name: 'list',
       component: () => import('@/views/FilmList.vue'),
-      meta: { title: '项目列表' }
+      meta: { title: 'Projects' }
     },
     {
       path: '/onboarding',
       name: 'onboarding',
       component: () => import('@/views/Onboarding.vue'),
-      meta: { title: '首次配置' }
+      meta: { title: 'First-time setup' }
     },
     {
       path: '/new-project',
       name: 'new-project',
       component: () => import('@/views/NewProject.vue'),
-      meta: { title: '新建项目' }
+      meta: { title: 'New project' }
     },
     // 项目外壳：顶栏 / 左栏 / 状态栏 + 子页面。四个视图与资产、批量、镜头工作台都是它的子路由。
     // 旧地址（/film /drama /episodes /project）在 beforeEach 里先经 utils/legacyRoutes 重定向到这里。
@@ -51,44 +51,44 @@ const router = createRouter({
             await shell.loadProject(Number(to.params.dramaId))
             return { path: shell.landingPath(to.params.dramaId), replace: true }
           },
-          meta: { title: '项目' }
+          meta: { title: 'Project' }
         },
         {
           path: 'e/:episodeId(\\d+)/script',
           name: 'episode-script',
           component: () => import('@/views/ScriptView.vue'),
-          meta: { title: '剧本视图', view: 'script' }
+          meta: { title: 'Script', view: 'script' }
         },
         {
           path: 'e/:episodeId(\\d+)/storyboard',
           name: 'episode-storyboard',
           component: () => import('@/views/StoryboardPage.vue'),
-          meta: { title: '分镜表', view: 'storyboard' }
+          meta: { title: 'Storyboard', view: 'storyboard' }
         },
         {
           path: 'e/:episodeId(\\d+)/timeline',
           name: 'episode-timeline',
           component: () => import('@/views/TimelineEditor.vue'),
-          meta: { title: '时间线编辑', view: 'timeline' }
+          meta: { title: 'Timeline', view: 'timeline' }
         },
         {
           path: 'e/:episodeId(\\d+)/canvas',
           name: 'episode-canvas',
           component: () => import('@/views/CanvasView.vue'),
-          meta: { title: '画布视图', view: 'canvas' }
+          meta: { title: 'Canvas', view: 'canvas' }
         },
         {
           path: 'e/:episodeId(\\d+)/shot/:shotId',
           name: 'shot-workbench',
           component: () => import('@/views/ShotWorkbench.vue'),
-          meta: { title: '分镜工作台' }
+          meta: { title: 'Shot workbench' }
         },
         {
           // 导出已改为对话框：直达链接 / 旧地址重定向到时间线，并在其上打开“导出视频”对话框
           path: 'e/:episodeId(\\d+)/export',
           name: 'episode-export',
           component: { render: () => null }, // 占位：beforeEnter 一定会重定向
-          meta: { title: '导出视频' },
+          meta: { title: 'Export video' },
           beforeEnter: (to) => {
             import('@/shell/dialogs').then(({ openDialog }) => {
               openDialog('export.video', { dramaId: Number(to.params.dramaId), episodeId: Number(to.params.episodeId) })
@@ -100,13 +100,13 @@ const router = createRouter({
           path: 'assets',
           name: 'assets',
           component: () => import('@/views/AssetLibrary.vue'),
-          meta: { title: '角色与场景库' }
+          meta: { title: 'Characters and scenes' }
         },
         {
           path: 'batch',
           name: 'batch',
           component: () => import('@/views/BatchPage.vue'),
-          meta: { title: '批量生成' }
+          meta: { title: 'Batch generate' }
         }
       ]
     },
@@ -116,65 +116,65 @@ const router = createRouter({
       path: '/settings/shortcuts',
       name: 'keyboard-settings',
       component: () => import('@/views/KeyboardSettings.vue'),
-      meta: { title: '快捷键设置' }
+      meta: { title: 'Keyboard shortcuts' }
     },
     {
       path: '/settings/about',
       name: 'about',
       component: () => import('@/views/About.vue'),
-      meta: { title: '关于' }
+      meta: { title: 'About' }
     },
     {
       path: '/ai-config',
       name: 'ai-config',
       component: () => import('@/views/AiConfig.vue'),
-      meta: { title: 'AI 配置' }
+      meta: { title: 'AI settings' }
     },
     {
       path: '/task-center',
       name: 'task-center',
       component: () => import('@/views/TaskCenter.vue'),
-      meta: { title: '任务中心' }
+      meta: { title: 'Task center' }
     },
     {
       path: '/spend',
       name: 'spend',
       component: () => import('@/views/SpendPage.vue'),
-      meta: { title: '花费统计' }
+      meta: { title: 'Spend' }
     },
     {
       path: '/media-library',
       name: 'media-library',
       component: () => import('@/views/MediaLibrary.vue'),
-      meta: { title: '媒体素材库' }
+      meta: { title: 'Media library' }
     },
     // P3-T
     {
       path: '/templates',
       name: 'templates',
       component: () => import('@/views/TemplateMarket.vue'),
-      meta: { title: '模板市场' }
+      meta: { title: 'Template market' }
     },
     // P3-P
     {
       path: '/settings/plugins',
       name: 'plugins',
       component: () => import('@/views/PluginsPage.vue'),
-      meta: { title: '插件与服务商' }
+      meta: { title: 'Plugins and providers' }
     },
     // P3-K
     {
       path: '/settings/backup',
       name: 'backup',
       component: () => import('@/views/BackupPage.vue'),
-      meta: { title: '云备份' }
+      meta: { title: 'Cloud backup' }
     },
     // P3-S
     {
       path: '/settings/studio',
       name: 'studio',
       component: () => import('@/views/StudioPage.vue'),
-      meta: { title: '工作室' }
+      meta: { title: 'Studio' }
     }
   ]
 })
