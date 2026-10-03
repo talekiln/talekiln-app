@@ -1,0 +1,9 @@
+[
+  "components/export/*",
+  "shell/actions/export.js",
+  "shell/dialogs/export.js",
+  "utils/exportJob.js",
+  "utils/exportSrt.js",
+  "utils/exportStoryboardSheet.js",
+  "views/ExportPage.vue"
+]

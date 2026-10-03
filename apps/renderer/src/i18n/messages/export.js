@@ -1,5 +1,5 @@
 // export lane（导出菜单 + 导出对话框 + 批量页）的文案。key 必须以 export. 开头，两种语言键集合一致。
-export default {
+const base = {
   'zh-CN': {
     // ---- 分镜表（utils/exportStoryboardSheet.js）----
     'export.sheet.col.index': '镜头序号',
@@ -222,4 +222,74 @@ export default {
     'export.coreError.allEncodersFailed': 'No encoder could finish the export. Try another encoder or a lower resolution.',
     'export.elapsed': '{m} min {s} s',
   },
+}
+
+// 导出菜单 / 导出对话框 / 批量页的新增文案：[key, 中文, English]，保证两种语言键集合一致。
+const rows = [
+  // ROWS-BEGIN
+  ['export.assetPack.fileSuffix', '素材包', 'assets'],
+  ['export.noEpisode', '请先打开一个剧集', 'Open an episode first'],
+  ['export.noProject', '请先打开一个项目', 'Open a project first'],
+  ['export.srt.empty', '时间线上没有字幕可导出', 'The timeline has no subtitles to export'],
+  ['export.srt.done', '已导出字幕文件（{n} 条）', 'Subtitle file exported ({n} cues)'],
+  ['export.sheet.empty', '本集还没有分镜，无法导出分镜表', 'This episode has no storyboards yet, so there is nothing to export'],
+  ['export.sheet.done', '已导出分镜表（{n} 个镜头）', 'Storyboard sheet exported ({n} shots)'],
+  ['export.sheet.doneCsv', 'Excel 格式不可用，已改为导出 CSV（{n} 个镜头）', 'Excel format is unavailable, exported as CSV instead ({n} shots)'],
+  ['export.zip.started', '已开始下载项目包', 'Project package download started'],
+  ['export.assetPack.empty', '本集的镜头还没有首帧、视频或配音文件', 'No first frame, video or voiceover files in this episode yet'],
+  ['export.assetPack.start', '正在下载并打包 {n} 个文件…', 'Downloading and packing {n} files...'],
+  ['export.assetPack.failed', '素材下载全部失败，没有生成素材包', 'Every download failed, so no asset pack was created'],
+  ['export.assetPack.skipped', '有 {n} 个文件下载失败，已跳过', '{n} file(s) could not be downloaded and were skipped'],
+  ['export.assetPack.done', '素材包已生成（{n} 个文件）', 'Asset pack created ({n} files)'],
+  ['export.backup.unavailable', '当前版本还不支持完整项目备份', 'Full project backup is not available in this version'],
+  ['export.backup.failed', '完整备份失败：{message}', 'Full backup failed: {message}'],
+  ['export.backup.done', '完整项目备份已开始下载', 'Full project backup download started'],
+  ['export.dialog.title.video', '导出视频', 'Export video'],
+  ['export.dialog.title.media', '导出到{target}', 'Export to {target}'],
+  ['export.dialog.settings', '导出设置', 'Export settings'],
+  ['export.dialog.resolution', '分辨率', 'Resolution'],
+  ['export.dialog.groupGeneral', '通用', 'General'],
+  ['export.dialog.groupPlatform', '平台预设', 'Platform presets'],
+  ['export.dialog.fps', '帧率', 'Frame rate'],
+  ['export.dialog.encoder', '编码器', 'Encoder'],
+  ['export.dialog.redetect', '重新检测', 'Detect again'],
+  ['export.dialog.encoderHint', '硬件编码失败时会自动回退到其他可用编码器，最后是软件编码。', 'If hardware encoding fails, other available encoders are tried automatically, ending with software encoding.'],
+  ['export.dialog.outputPath', '导出位置', 'Output file'],
+  ['export.dialog.outputPathPlaceholder', 'D:\\导出\\第1集.mp4', 'D:\\Exports\\Episode1.mp4'],
+  ['export.dialog.outputPathHint', '请填写本机的完整路径（以 .mp4 结尾），文件夹不存在时会自动创建；同名文件会被覆盖。', 'Enter the full local path ending in .mp4. Missing folders are created; an existing file with the same name is overwritten.'],
+  ['export.dialog.draftHint', '本集有 {n} 个草稿档产物，导出会直接使用它们。需要成片质量时，请先在“生成”菜单里选“按成片质量重跑草稿产物”。', 'This episode has {n} draft-quality result(s) and the export will use them as they are. For final quality, run "Re-run drafts at final quality" from the Generate menu first.'],
+  ['export.dialog.loadFailed', '无法读取导出选项', 'Could not load the export options'],
+  ['export.dialog.progressFailed', '无法获取导出进度', 'Could not get the export progress'],
+  ['export.dialog.start', '开始导出', 'Start export'],
+  ['export.dialog.cancelExport', '取消导出', 'Cancel export'],
+  ['export.dialog.cancelRequested', '已请求取消，正在停止渲染', 'Cancel requested; stopping the render'],
+  ['export.dialog.cancelled', '导出已取消', 'Export cancelled'],
+  ['export.dialog.done', '导出完成', 'Export finished'],
+  ['export.dialog.encoderUsed', '编码器 {name}', 'Encoder {name}'],
+  ['export.dialog.elapsedLabel', '已用时 {time}', 'Elapsed {time}'],
+  ['export.dialog.doneMeta', '时长 {duration} · 渲染 {rendered} 个分镜，缓存命中 {cached} 个', 'Duration {duration} · {rendered} shot(s) rendered, {cached} from cache'],
+  ['export.dialog.openFolder', '打开所在文件夹', 'Open containing folder'],
+  ['export.dialog.aigc.title', 'AI 生成内容标识', 'AI-generated content marking'],
+  ['export.dialog.aigc.watermark', '在画面上显示“AI生成”文字（片头较大，之后持续显示）', 'Show an "AI generated" text on the picture (large at the start, then kept on screen)'],
+  ['export.dialog.aigc.metadata', '在文件元数据中写入 AI 生成标识（AIGC）', 'Write the AI-generated marker (AIGC) into the file metadata'],
+  ['export.dialog.aigc.producer', '制作方名称', 'Producer name'],
+  ['export.dialog.aigc.warn', '已关闭部分标识。发布 AI 生成内容时，标识义务由发布者承担，请确认符合平台及相关法规要求。', 'Some markings are off. The publisher is responsible for marking AI-generated content; make sure it meets the platform and legal requirements.'],
+  ['export.dialog.aigc.hint', '此功能的实现范围与需法务确认的事项见 docs/aigc-marking.md，未经确认请勿据此声称合规。', 'See docs/aigc-marking.md for what this covers and what legal must confirm. Do not claim compliance without that confirmation.'],
+  ['export.dialog.media.hint', '把当前时间线导出成可编辑的工程，不重新渲染视频。素材使用本机原文件路径，请勿在导入前移动素材。剪映草稿格式随版本变化，需要用你的剪映版本实际打开验证，详见 docs/phase2-export.md。', 'Exports the current timeline as an editable project without re-rendering the video. Media is referenced by its original local path, so do not move it before importing. The Jianying draft format changes between versions; open it in your version to verify (see docs/phase2-export.md).'],
+  ['export.dialog.media.target', '导出到', 'Export to'],
+  ['export.dialog.media.dir', '导出文件夹', 'Output folder'],
+  ['export.dialog.media.dirPlaceholder', 'D:\\导出（路径可含中文和空格）', 'D:\\Exports (the path may contain spaces and non-ASCII characters)'],
+  ['export.dialog.media.name', '工程名称', 'Project name'],
+  ['export.dialog.media.namePlaceholder', '留空则用剧集标题', 'Leave empty to use the episode title'],
+  ['export.dialog.media.export', '导出', 'Export'],
+  ['export.dialog.media.check', '仅检查素材', 'Check media only'],
+  ['export.dialog.media.conflict', '导出位置已有同名工程', 'A project with this name already exists in the folder'],
+  ['export.dialog.media.overwrite', '覆盖并重新导出', 'Overwrite and export again'],
+  ['export.dialog.media.failed', '导出失败', 'Export failed'],
+  // ROWS-END
+]
+
+export default {
+  'zh-CN': { ...base['zh-CN'], ...Object.fromEntries(rows.map(([k, zh]) => [k, zh])) },
+  en: { ...base.en, ...Object.fromEntries(rows.map(([k, , en]) => [k, en])) },
 }

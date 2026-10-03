@@ -38,7 +38,7 @@ function escapeHtml(s) {
 
 function escapeCsvCell(s) {
   const text = cellText(s)
-  if (/[",\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`
+  if (/[",\n\r]/.test(text)) return '"' + text.replace(/"/g, '""') + '"'
   return text
 }
 
@@ -194,7 +194,8 @@ function formatExcelCellContent(s) {
 export function buildExcelHtml(rows) {
   const tdStyle = 'style="white-space:normal;vertical-align:top;mso-data-placement:same-cell;"'
   const header = sheetColumns().map((c) => `<th>${escapeHtml(c)}</th>`).join('')
-  const body = rows.map((row) => `<tr>${row.map((c) => `<td ${tdStyle}>${formatExcelCellContent(c)}</td>`).join('')}</tr>`).join('')
+  const cell = (c) => `<td ${tdStyle}>${formatExcelCellContent(c)}</td>`
+  const body = rows.map((row) => `<tr>${row.map(cell).join('')}</tr>`).join('')
   return `<!DOCTYPE html>
 <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
 <head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>

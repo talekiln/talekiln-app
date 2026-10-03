@@ -1,10 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { setLocale } from '../src/i18n/index.js'
 import {
   formatCents, estimateText, remainingText, clampConcurrency, concurrencyBody, validatePolicy, parseBudgetYuan, buildCreateBody,
   batchStatusTag, itemStatusTag, progressPercent, kindsLabel, nightText, elapsedText, pollInterval, summaryCards,
   canPause, canResume, canCancel, canRetryFailed, itemTasksText, itemShotsText, waitingText,
 } from '../src/utils/batchView.js'
+
+setLocale('zh-CN')
 
 test('formatCents / estimateText / remainingText', () => {
   assert.equal(formatCents(1234), '¥12.34')
@@ -112,4 +115,22 @@ test('pollInterval and summaryCards', () => {
   assert.equal(cards[2].sub, '剩余预计 ¥3.00–3.60')
   assert.equal(cards[3].value, '1 分 05 秒')
   assert.deepEqual(summaryCards(null), [])
+})
+
+test('labels follow the locale (English)', async () => {
+  const m = await import('../src/utils/batchView.js')
+  setLocale('en')
+  try {
+    assert.equal(m.batchStatusLabel('paused'), 'Paused')
+    assert.equal(m.itemStatusLabel('succeeded'), 'Done')
+    assert.equal(m.kindsLabel(['image', 'video']), 'First frames + videos')
+    assert.equal(m.elapsedText(185_000), '3 min 05 s')
+    assert.equal(m.nightText({ start: '22:00', end: '06:00' }), '22:00–06:00 (crosses midnight)')
+    assert.equal(m.estimateText({ estimate_min_cents: 1000, estimate_max_cents: 1200 }, 1500), 'Estimated total ¥10.00–12.00 (up to ¥15.00)')
+    assert.equal(m.KINDS_OPTIONS[1].label, 'First frames only')
+    assert.equal(m.batchStatusLabel('weird'), 'weird')
+    assert.equal(m.validatePolicy({ retry: 11, on_fail: 'skip' }).errors[0], 'Automatic retries must be a whole number from 0 to 10')
+  } finally {
+    setLocale('zh-CN')
+  }
 })

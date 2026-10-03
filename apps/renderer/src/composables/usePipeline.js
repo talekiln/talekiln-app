@@ -403,10 +403,12 @@ export function createDefaultDeps(ctx, { sleep = sleepReal } = {}) {
     sleep,
     async collectState() {
       const a = await get()
+      // kernelAPI.view 返回 { view, seq, data }，视图内容在 .data 里
+      const unwrap = (r) => (r && r.data) || r || null
       const [d, script, shots] = await Promise.all([
         a.dramaAPI.get(dramaId),
-        a.kernelAPI.view(episodeId, 'script').catch(() => null),
-        a.kernelAPI.view(episodeId, 'shots').catch(() => null),
+        a.kernelAPI.view(episodeId, 'script').then(unwrap).catch(() => null),
+        a.kernelAPI.view(episodeId, 'shots').then(unwrap).catch(() => null),
       ])
       const characters = d.characters || []
       const scenes = d.scenes || []

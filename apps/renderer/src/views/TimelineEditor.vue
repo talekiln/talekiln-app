@@ -162,7 +162,9 @@ function goBack() {
 
 async function goExport() {
   await store.flushPending()
-  router.push({ name: 'episode-export', params: { dramaId: route.params.dramaId, episodeId: episodeId.value } })
+  // 导出已改为对话框（export.video）；先落盘再开，避免导出读到旧时间线
+  const { openDialog } = await import('@/shell/dialogs')
+  openDialog('export.video', { dramaId: Number(route.params.dramaId), episodeId: Number(episodeId.value) })
 }
 
 function zoom(factor) {

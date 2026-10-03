@@ -1,0 +1,9 @@
+[
+  "components/generate/*",
+  "composables/usePipeline.js",
+  "utils/pipelinePlan.js",
+  "utils/batchView.js",
+  "views/BatchPage.vue",
+  "shell/actions/generate.js",
+  "shell/dialogs/generate.js"
+]

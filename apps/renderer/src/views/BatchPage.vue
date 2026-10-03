@@ -1,80 +1,74 @@
 <template>
-  <div class="batch-page">
-    <header class="header">
-      <div class="header-inner">
-        <el-button text @click="goProject"><el-icon><ArrowLeft /></el-icon>项目</el-button>
-        <h1 class="logo">批量生成</h1>
-        <span class="sub">{{ dramaTitle || `项目 ${dramaId}` }}</span>
-        <span class="spacer" />
-        <el-button text @click="$router.push('/task-center')">任务中心</el-button>
-        <el-button text @click="$router.push('/spend')">花费统计</el-button>
-      </div>
-    </header>
+  <div class="batch-page" data-test="batch-page">
+    <div class="page-head">
+      <h1 class="page-title">{{ t('generate.batch.page.title') }}</h1>
+      <span class="sub">{{ dramaTitle || t('generate.batch.page.project', { id: dramaId }) }}</span>
+    </div>
 
-    <main v-loading="loading" class="main">
+    <div v-loading="loading" class="main">
       <el-alert v-if="loadError" type="error" :closable="false" show-icon :title="loadError" />
 
       <!-- 新建批次 -->
       <section class="panel" data-test="create-panel">
-        <h2>新建批次</h2>
+        <h2>{{ t('generate.batch.create.title') }}</h2>
         <div class="create-grid">
           <div class="col">
             <div class="field-title">
-              选择分集
-              <el-button link type="primary" size="small" data-test="select-all" @click="selectAll">全选</el-button>
-              <el-button link size="small" @click="form.episodeIds = []">清空</el-button>
-              <span class="hint-inline">已选 {{ form.episodeIds.length }} / {{ episodes.length }} 集</span>
+              {{ t('generate.batch.create.pickEpisodes') }}
+              <el-button link type="primary" size="small" data-test="select-all" @click="selectAll">{{ t('generate.batch.create.selectAll') }}</el-button>
+              <el-button link size="small" @click="form.episodeIds = []">{{ t('generate.batch.create.clear') }}</el-button>
+              <span class="hint-inline">{{ t('generate.batch.create.selected', { n: form.episodeIds.length, total: episodes.length }) }}</span>
             </div>
-            <div v-if="!episodes.length" class="empty">该项目还没有分集</div>
+            <div v-if="!episodes.length" class="empty">{{ t('generate.batch.create.noEpisodes') }}</div>
             <el-checkbox-group v-model="form.episodeIds" class="episode-list" data-test="episode-list">
               <el-checkbox v-for="ep in episodes" :key="ep.id" :value="ep.id" :label="ep.id" class="episode-row">
-                <span class="ep-num">第 {{ ep.episode_number ?? '?' }} 集</span>
-                <span class="ep-title">{{ ep.title || '未命名' }}</span>
-                <span class="ep-meta">{{ ep.storyboards?.length ?? 0 }} 镜</span>
+                <span class="ep-num">{{ t('generate.batch.create.epNum', { n: ep.episode_number ?? '?' }) }}</span>
+                <span class="ep-title">{{ ep.title || t('generate.batch.create.untitled') }}</span>
+                <span class="ep-meta">{{ t('generate.batch.create.shots', { n: ep.storyboards?.length ?? 0 }) }}</span>
               </el-checkbox>
             </el-checkbox-group>
           </div>
 
           <div class="col">
-            <div class="field-title">生成内容</div>
+            <div class="field-title">{{ t('generate.batch.create.what') }}</div>
             <el-radio-group v-model="form.kinds" data-test="kinds">
               <el-radio v-for="k in KINDS_OPTIONS" :key="k.value" :value="k.value">{{ k.label }}</el-radio>
             </el-radio-group>
 
-            <div class="field-title">每个服务商的并发上限</div>
+            <div class="field-title">{{ t('generate.batch.create.concurrency') }}</div>
             <div v-for="p in providers" :key="p.id" class="prov-row" :data-test="`concurrency-${p.id}`">
               <span class="prov-name">{{ p.label }}</span>
               <el-input-number v-model="form.concurrency[p.id]" :min="1" :max="p.limit" size="small" controls-position="right" @change="onConcurrency(p)" />
-              <span class="hint-inline">队列上限 {{ p.limit }}（批次上限不能超过它）</span>
+              <span class="hint-inline">{{ t('generate.batch.create.queueLimit', { limit: p.limit }) }}</span>
             </div>
-            <div v-if="!providers.length" class="hint">还没有已启用的服务商</div>
+            <div v-if="!providers.length" class="hint">{{ t('generate.batch.create.noProviders') }}</div>
 
-            <div class="field-title">预算上限</div>
-            <el-input v-model="form.budget" size="small" placeholder="留空 = 不限制" class="budget-input" data-test="budget">
+            <div class="field-title">{{ t('generate.batch.create.budget') }}</div>
+            <el-input v-model="form.budget" size="small" :placeholder="t('generate.batch.create.budgetPlaceholder')" class="budget-input" data-test="budget">
               <template #prepend>¥</template>
             </el-input>
-            <div class="hint">已花费 + 在途任务的最高价 + 下一镜头的最高价超过预算时停止提交；在途按最高价（示例价 × 1.2）记账，预算建议不低于「最多」那一档。</div>
+            <div class="hint">{{ t('generate.batch.create.budgetHint') }}</div>
           </div>
 
           <div class="col">
-            <div class="field-title">失败策略</div>
+            <div class="field-title">{{ t('generate.batch.create.failurePolicy') }}</div>
             <div class="policy-row">
-              <span>自动重试</span>
+              <span>{{ t('generate.batch.create.retryBefore') }}</span>
               <el-input-number v-model="form.retry" :min="0" :max="MAX_RETRY" size="small" controls-position="right" data-test="retry" />
-              <span>次后</span>
+              <span>{{ t('generate.batch.create.retryAfter') }}</span>
             </div>
             <el-radio-group v-model="form.on_fail" data-test="on-fail">
               <el-radio v-for="o in ON_FAIL_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</el-radio>
             </el-radio-group>
             <div class="policy-row">
               <el-switch v-model="form.night_enabled" data-test="night-switch" />
-              <span>只在夜间时段提交</span>
+              <span>{{ t('generate.batch.create.nightOnly') }}</span>
             </div>
             <div v-if="form.night_enabled" class="policy-row">
               <el-input v-model="form.night_start" size="small" placeholder="22:00" class="time-input" data-test="night-start" />
-              <span>至</span>
+              <span>{{ t('generate.batch.create.nightTo') }}</span>
               <el-input v-model="form.night_end" size="small" placeholder="06:00" class="time-input" data-test="night-end" />
-              <span class="hint-inline">本机时间，结束早于开始表示跨午夜；时段外不提交新任务，已提交的照常完成</span>
+              <span class="hint-inline">{{ t('generate.batch.create.nightHint') }}</span>
             </div>
             <div v-for="e in policy.errors" :key="e" class="warn">{{ e }}</div>
           </div>
@@ -82,8 +76,8 @@
 
         <div class="estimate-row">
           <div class="estimate-text" data-test="estimate">
-            <template v-if="!form.episodeIds.length">先选择要生成的分集</template>
-            <template v-else-if="estimating">估算中…</template>
+            <template v-if="!form.episodeIds.length">{{ t('generate.batch.create.pickFirst') }}</template>
+            <template v-else-if="estimating">{{ t('generate.batch.create.estimating') }}</template>
             <template v-else-if="estimate">
               <b>{{ estimateText(estimate.totals, estimate.budget_cap_cents, estimate.currency) }}</b>
               <span v-if="estimate.refusal" class="warn">{{ estimate.refusal.message }}</span>
@@ -91,22 +85,22 @@
             </template>
             <template v-else-if="estimateError"><span class="warn">{{ estimateError }}</span></template>
           </div>
-          <el-button type="primary" :loading="starting" :disabled="!canStart" data-test="start" @click="onStart">开始批量生成</el-button>
+          <el-button type="primary" :loading="starting" :disabled="!canStart" data-test="start" @click="onStart">{{ t('generate.batch.create.start') }}</el-button>
         </div>
       </section>
 
       <!-- 批次列表 -->
-      <section v-if="!batches.length" class="panel empty-panel">还没有批次。选好分集后点「开始批量生成」。</section>
+      <section v-if="!batches.length" class="panel empty-panel">{{ t('generate.batch.list.empty') }}</section>
       <section v-for="b in batches" :key="b.id" class="panel batch" :data-test="`batch-${b.id}`">
         <div class="batch-head">
           <el-tag :type="batchStatusTag(b.status)" size="small" data-test="batch-status">{{ batchStatusLabel(b.status) }}</el-tag>
-          <span class="batch-title">{{ kindsLabel(b.kinds) }} · {{ b.episode_ids.length }} 集</span>
-          <span class="batch-meta">并发 {{ concurrencyText(b) }} · 重试 {{ b.failure_policy.retry }} 次后{{ b.failure_policy.on_fail === 'pause' ? '暂停' : '跳过' }} · {{ nightText(b.failure_policy.night) }}<template v-if="b.budget_cap_cents != null"> · 预算 {{ formatCents(b.budget_cap_cents, b.currency) }}</template></span>
+          <span class="batch-title">{{ t('generate.batch.list.title', { kinds: kindsLabel(b.kinds), n: b.episode_ids.length }) }}</span>
+          <span class="batch-meta">{{ metaText(b) }}</span>
           <span class="spacer" />
-          <el-button v-if="canPause(b)" size="small" :loading="acting === b.id" data-test="pause" @click="act(b, 'pause')">暂停</el-button>
-          <el-button v-if="canResume(b)" size="small" type="primary" :loading="acting === b.id" data-test="resume" @click="onResume(b)">继续</el-button>
-          <el-button v-if="canRetryFailed(b)" size="small" type="warning" plain :loading="acting === b.id" data-test="retry-failed" @click="onRetry(b)">重试失败的集</el-button>
-          <el-button v-if="canCancel(b)" size="small" type="danger" plain :loading="acting === b.id" data-test="cancel" @click="onCancel(b)">取消</el-button>
+          <el-button v-if="canPause(b)" size="small" :loading="acting === b.id" data-test="pause" @click="act(b, 'pause')">{{ t('generate.batch.act.pause') }}</el-button>
+          <el-button v-if="canResume(b)" size="small" type="primary" :loading="acting === b.id" data-test="resume" @click="onResume(b)">{{ t('generate.batch.act.resume') }}</el-button>
+          <el-button v-if="canRetryFailed(b)" size="small" type="warning" plain :loading="acting === b.id" data-test="retry-failed" @click="onRetry(b)">{{ t('generate.batch.act.retryFailed') }}</el-button>
+          <el-button v-if="canCancel(b)" size="small" type="danger" plain :loading="acting === b.id" data-test="cancel" @click="onCancel(b)">{{ t('generate.batch.act.cancel') }}</el-button>
         </div>
         <el-alert v-if="b.error" type="warning" :closable="false" show-icon :title="b.error" class="batch-alert" data-test="batch-error" />
         <div v-else-if="b.waiting && waitingText(b.waiting)" class="hint waiting" data-test="batch-waiting">{{ waitingText(b.waiting) }}</div>
@@ -121,44 +115,44 @@
         <el-progress :percentage="progressPercent(b)" :status="b.status === 'failed' ? 'exception' : b.status === 'completed' ? 'success' : undefined" :stroke-width="10" />
 
         <el-table :data="b.items" size="small" row-key="episode_id" class="items" data-test="items">
-          <el-table-column label="分集" width="150">
-            <template #default="{ row }">第 {{ row.episode_number ?? '?' }} 集 <span class="ep-title-sm">{{ row.title }}</span></template>
+          <el-table-column :label="t('generate.batch.col.episode')" width="150">
+            <template #default="{ row }">{{ t('generate.batch.create.epNum', { n: row.episode_number ?? '?' }) }} <span class="ep-title-sm">{{ row.title }}</span></template>
           </el-table-column>
-          <el-table-column label="状态" width="90">
+          <el-table-column :label="t('generate.batch.col.status')" width="90">
             <template #default="{ row }"><el-tag size="small" :type="itemStatusTag(row.status)">{{ itemStatusLabel(row.status) }}</el-tag></template>
           </el-table-column>
-          <el-table-column label="镜头" width="90" align="center">
+          <el-table-column :label="t('generate.batch.col.shots')" width="90" align="center">
             <template #default="{ row }">{{ itemShotsText(row) }}</template>
           </el-table-column>
-          <el-table-column label="任务" min-width="150">
-            <template #default="{ row }">{{ itemTasksText(row) }}<span v-if="row.attempts" class="hint-inline">已重试 {{ row.attempts }} 次</span></template>
+          <el-table-column :label="t('generate.batch.col.tasks')" min-width="150">
+            <template #default="{ row }">{{ itemTasksText(row) }}<span v-if="row.attempts" class="hint-inline">{{ t('generate.batch.item.retried', { n: row.attempts }) }}</span></template>
           </el-table-column>
-          <el-table-column label="花费" width="110" align="right">
+          <el-table-column :label="t('generate.batch.col.spent')" width="110" align="right">
             <template #default="{ row }">{{ formatCents(row.spent_cents, b.currency) }}</template>
           </el-table-column>
-          <el-table-column label="预计" width="140" align="right">
+          <el-table-column :label="t('generate.batch.col.estimate')" width="140" align="right">
             <template #default="{ row }">{{ formatCents(row.estimate_min_cents, b.currency) }}–{{ formatCents(row.estimate_max_cents, b.currency).replace(/^¥/, '') }}</template>
           </el-table-column>
-          <el-table-column label="说明" min-width="220">
+          <el-table-column :label="t('generate.batch.col.note')" min-width="220">
             <template #default="{ row }"><span :class="{ warn: row.status === 'failed' }">{{ row.error || '' }}</span></template>
           </el-table-column>
-          <el-table-column label="操作" width="110" align="center">
+          <el-table-column :label="t('generate.batch.col.actions')" width="110" align="center">
             <template #default="{ row }">
-              <el-button v-if="row.status === 'failed' && b.status !== 'cancelled'" link type="primary" size="small" data-test="retry-item" @click="onRetry(b, row)">重试本集</el-button>
-              <el-button link size="small" @click="$router.push({ name: 'episode-storyboard', params: { dramaId, episodeId: row.episode_id } })">分镜</el-button>
+              <el-button v-if="row.status === 'failed' && b.status !== 'cancelled'" link type="primary" size="small" data-test="retry-item" @click="onRetry(b, row)">{{ t('generate.batch.act.retryItem') }}</el-button>
+              <el-button link size="small" @click="$router.push({ name: 'episode-storyboard', params: { dramaId, episodeId: row.episode_id } })">{{ t('generate.batch.act.storyboard') }}</el-button>
             </template>
           </el-table-column>
         </el-table>
       </section>
-    </main>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft } from '@element-plus/icons-vue'
+import { useI18n } from '@/i18n'
 import { dramaAPI } from '@/api/drama'
 import { batchesAPI } from '@/api/batches'
 import {
@@ -168,7 +162,7 @@ import {
 } from '@/utils/batchView'
 
 const route = useRoute()
-const router = useRouter()
+const { t } = useI18n()
 const dramaId = computed(() => Number(route.params.dramaId))
 
 const dramaTitle = ref('')
@@ -202,7 +196,13 @@ function body() {
 function selectAll() { form.episodeIds = episodes.value.map((e) => e.id) }
 function onConcurrency(p) { form.concurrency[p.id] = clampConcurrency(form.concurrency[p.id], p.limit, p.limit) }
 function concurrencyText(b) {
-  return Object.entries(b.concurrency || {}).map(([p, n]) => `${(providers.value.find((x) => x.id === p) || {}).label || p} ${n}/${(b.provider_limits || {})[p] ?? '?'}`).join('，') || '-'
+  return Object.entries(b.concurrency || {}).map(([p, n]) => `${(providers.value.find((x) => x.id === p) || {}).label || p} ${n}/${(b.provider_limits || {})[p] ?? '?'}`).join(', ') || '-'
+}
+function metaText(b) {
+  const fp = b.failure_policy || {}
+  const action = t(fp.on_fail === 'pause' ? 'generate.batch.list.actionPause' : 'generate.batch.list.actionSkip')
+  const base = t('generate.batch.list.meta', { conc: concurrencyText(b), retry: fp.retry, action, night: nightText(fp.night) })
+  return b.budget_cap_cents != null ? base + t('generate.batch.list.metaBudget', { v: formatCents(b.budget_cap_cents, b.currency) }) : base
 }
 
 /** 选择 / 参数变化后重新估算（防抖；只估算不建）。 */
@@ -220,7 +220,7 @@ function scheduleEstimate() {
       estimate.value = r
     } catch (e) {
       if (seq !== estimateSeq) return
-      estimateError.value = e?.message || '估算失败'
+      estimateError.value = e?.message || t('generate.batch.create.estimateFailed')
     } finally {
       if (seq === estimateSeq) estimating.value = false
     }
@@ -235,7 +235,7 @@ async function loadBatches(silent = false) {
     providers.value = data.providers || []
     for (const p of providers.value) if (form.concurrency[p.id] == null) form.concurrency[p.id] = p.limit
   } catch (e) {
-    if (!silent) loadError.value = e?.message || '读取批次失败'
+    if (!silent) loadError.value = e?.message || t('generate.batch.loadBatchesFailed')
   } finally {
     clearTimeout(pollTimer)
     pollTimer = setTimeout(() => loadBatches(true), pollInterval(batches.value))
@@ -251,7 +251,7 @@ async function load() {
     episodes.value = (d.episodes || []).slice().sort((a, b) => (a.episode_number ?? 0) - (b.episode_number ?? 0))
     await loadBatches()
   } catch (e) {
-    loadError.value = e?.message || '读取项目失败'
+    loadError.value = e?.message || t('generate.batch.loadProjectFailed')
   } finally {
     loading.value = false
   }
@@ -260,17 +260,18 @@ async function load() {
 async function onStart() {
   if (!canStart.value) return
   const est = estimate.value
+  // 花钱之前一定先确认：显示预计费用（含上限）
   try {
     await ElMessageBox.confirm(
-      `${estimateText(est.totals, est.budget_cap_cents, est.currency)}。任务在后台队列里按并发与预算逐集提交，进度在本页与任务中心查看。`,
-      `确认批量生成 ${form.episodeIds.length} 集`,
-      { confirmButtonText: '开始', cancelButtonText: '取消', type: 'warning' }
+      t('generate.batch.confirm.body', { estimate: estimateText(est.totals, est.budget_cap_cents, est.currency) }),
+      t('generate.batch.confirm.title', { n: form.episodeIds.length }),
+      { confirmButtonText: t('generate.batch.confirm.start'), cancelButtonText: t('common.cancel'), type: 'warning' }
     )
   } catch (_) { return }
   starting.value = true
   try {
     await batchesAPI.create(body())
-    ElMessage.success('批次已创建，开始排队生成')
+    ElMessage.success(t('generate.batch.created'))
     form.episodeIds = []
     await loadBatches(true)
   } catch (_) {
@@ -293,10 +294,12 @@ async function act(b, action, ...args) {
 }
 
 async function onResume(b) {
-  // 预算不够而暂停：顺便问要不要提高预算
-  if (b.budget_cap_cents != null && /预算/.test(b.error || '')) {
+  // 预算不够而暂停：顺便问要不要提高预算（后端的暂停原因是中文文案，按“预算”二字判断）
+  if (b.budget_cap_cents != null && /预算/.test(b.error || '')) { // i18n-ignore
     try {
-      const { value } = await ElMessageBox.prompt('提高预算上限后继续（元，留空 = 不限制）', '继续批次', { inputValue: String(b.budget_cap_cents / 100), confirmButtonText: '继续', cancelButtonText: '取消' })
+      const { value } = await ElMessageBox.prompt(t('generate.batch.resume.message'), t('generate.batch.resume.title'), {
+        inputValue: String(b.budget_cap_cents / 100), confirmButtonText: t('generate.batch.resume.confirm'), cancelButtonText: t('common.cancel'),
+      })
       const r = parseBudgetYuan(value)
       if (r.error) return ElMessage.warning(r.error)
       return act(b, 'resume', r.value === null ? null : r.value)
@@ -311,24 +314,24 @@ async function onRetry(b, item) {
 
 async function onCancel(b) {
   try {
-    await ElMessageBox.confirm('取消后不再提交新任务；已提交给服务商的任务会跑完并照常写回（费用已产生）。', '取消批次', { confirmButtonText: '取消批次', cancelButtonText: '返回', type: 'warning' })
+    await ElMessageBox.confirm(t('generate.batch.cancel.message'), t('generate.batch.cancel.title'), {
+      confirmButtonText: t('generate.batch.cancel.confirm'), cancelButtonText: t('generate.batch.cancel.back'), type: 'warning',
+    })
   } catch (_) { return }
   return act(b, 'cancel')
 }
-
-function goProject() { router.push({ name: 'project-home', params: { dramaId: dramaId.value } }) }
 
 onMounted(load)
 onBeforeUnmount(() => { clearTimeout(pollTimer); clearTimeout(estimateTimer) })
 </script>
 
 <style scoped>
-.batch-page { min-height: 100vh; background: var(--bg-page); color: var(--text-primary); }
-.header-inner { display: flex; align-items: center; gap: 12px; padding: 12px 24px; }
-.logo { margin: 0; font-size: 18px; }
+.batch-page { padding: 16px 24px; color: var(--text-primary); }
+.page-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.page-title { margin: 0; font-size: 18px; }
 .sub { color: var(--text-muted); font-size: 13px; }
 .spacer { flex: 1; }
-.main { padding: 16px 24px; display: flex; flex-direction: column; gap: 16px; }
+.main { display: flex; flex-direction: column; gap: 16px; }
 .panel { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; }
 .panel h2 { margin: 0 0 12px; font-size: 15px; color: var(--text-bright); }
 .empty-panel, .empty { color: var(--text-subtle); font-size: 13px; }

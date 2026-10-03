@@ -81,11 +81,17 @@ const router = createRouter({
           meta: { title: '分镜工作台' }
         },
         {
-          // 页面形式保留；Task 9 改为时间线上的导出对话框后，此路由重定向到 timeline 并打开对话框
+          // 导出已改为对话框：直达链接 / 旧地址重定向到时间线，并在其上打开“导出视频”对话框
           path: 'e/:episodeId(\\d+)/export',
           name: 'episode-export',
-          component: () => import('@/views/ExportPage.vue'),
-          meta: { title: '导出视频' }
+          component: { render: () => null }, // 占位：beforeEnter 一定会重定向
+          meta: { title: '导出视频' },
+          beforeEnter: (to) => {
+            import('@/shell/dialogs').then(({ openDialog }) => {
+              openDialog('export.video', { dramaId: Number(to.params.dramaId), episodeId: Number(to.params.episodeId) })
+            }).catch(() => {})
+            return { name: 'episode-timeline', params: to.params, replace: true }
+          }
         },
         {
           path: 'assets',
