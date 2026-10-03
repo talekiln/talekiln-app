@@ -8,6 +8,9 @@ import {
   signatureLabel, sourceLabel, summaryLines, tierLabel, validateSlotMapping,
 } from '../src/utils/templateMarket.js'
 import { createBuiltinCommands } from '../src/utils/builtinCommands.js'
+import { setLocale } from '../src/i18n/index.js'
+
+setLocale('zh-CN')
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 

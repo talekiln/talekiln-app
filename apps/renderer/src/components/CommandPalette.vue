@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <div v-if="paletteOpen" class="cp-mask" data-test="palette" @mousedown.self="closePalette">
-      <div class="cp-box" role="dialog" aria-modal="true" aria-label="命令面板">
+      <div class="cp-box" role="dialog" aria-modal="true" :aria-label="t('commands.palette')">
         <input
           ref="inputEl"
           v-model="query"
@@ -11,14 +11,14 @@
           aria-expanded="true"
           aria-controls="cp-list"
           :aria-activedescendant="rows[active] ? `cp-opt-${active}` : undefined"
-          placeholder="输入命令，或搜索镜头、台词…（↑↓ 选择，Enter 执行，Esc 关闭）"
+          :placeholder="t('commands.placeholder')"
           data-test="palette-input"
           autocomplete="off"
           spellcheck="false"
           @keydown="onKey"
         >
         <ul id="cp-list" ref="listEl" class="cp-list" role="listbox" data-test="palette-list">
-          <li v-if="!rows.length" class="cp-empty" data-test="palette-empty">没有匹配的命令</li>
+          <li v-if="!rows.length" class="cp-empty" data-test="palette-empty">{{ t('commands.empty') }}</li>
           <template v-for="(r, i) in rows" :key="r.cmd.id">
             <li v-if="showHeader(i)" class="cp-group" role="presentation">{{ headerOf(r) }}</li>
             <li
@@ -49,6 +49,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useProjectViewsStore } from '@/stores/projectViews'
+import { useI18n } from '@/i18n'
 import { useKeymap } from '@/composables/useKeymap'
 import { registry, paletteOpen, closePalette, togglePalette } from '@/composables/useCommandPalette'
 import { openHistory } from '@/composables/useHistoryDrawer'
@@ -60,6 +61,7 @@ import { resolveAction, formatCombo } from '@/utils/keymap'
 // 快捷键提示随平台显示（macOS 上 Ctrl+K 显示为 ⌘K）；不是组合键写法的提示原样输出
 const hintText = (h) => (/^(Ctrl|Alt|Shift)\+/.test(h) ? formatCombo(h) : h)
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const views = useProjectViewsStore()
@@ -97,8 +99,8 @@ function showHeader(i) {
   return i === 0 || rows.value[i - 1].cmd.group !== r.cmd.group
 }
 function headerOf(r) {
-  if (!query.value.trim() && r.recent) return '最近使用'
-  return r.cmd.group || '其它'
+  if (!query.value.trim() && r.recent) return t('commands.recent')
+  return r.cmd.group || t('commands.group.other')
 }
 
 watch(rows, (v) => { if (active.value >= v.length) active.value = Math.max(0, v.length - 1) })
@@ -126,7 +128,7 @@ async function run(r) {
     closePalette()
   } catch (e) {
     // 命令失败：面板保持打开并显示原因（不静默吞掉）
-    errorText.value = e?.message || '命令执行失败'
+    errorText.value = e?.message || t('commands.failed')
   }
 }
 

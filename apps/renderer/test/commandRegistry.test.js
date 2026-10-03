@@ -3,6 +3,9 @@ import assert from 'node:assert/strict'
 
 import { createRegistry, fuzzyScore, scoreCommand, RECENT_STORAGE_KEY } from '../src/utils/commandRegistry.js'
 import { createBuiltinCommands, createContentProvider } from '../src/utils/builtinCommands.js'
+import { setLocale } from '../src/i18n/index.js'
+
+setLocale('zh-CN')
 
 const memStorage = () => {
   const m = new Map()
@@ -292,4 +295,24 @@ test('content provider: caps the number of results and tolerates missing views',
   const many = { script: { groups: [{ id: 'g', lines: Array.from({ length: 100 }, (_, i) => ({ id: `l${i}`, text: `雨 ${i}` })) }] } }
   const out = createContentProvider({ ...deps, getViews: () => many }, { limit: 5 })('雨', { episodeId: 1 })
   assert.equal(out.length, 5)
+})
+
+test('builtin commands follow the locale (titles, groups) and keep both languages searchable', () => {
+  const cmds = createBuiltinCommands({ go() {} })
+  const undo = cmds.find((c) => c.id === 'edit.undo')
+  try {
+    setLocale('en')
+    assert.equal(undo.title, 'Undo')
+    assert.equal(undo.group, 'Edit')
+    assert.ok(undo.keywords.includes('撤销'), 'Chinese title stays searchable in English')
+    const r = createRegistry({ storage: memStorage() })
+    r.registerAll(cmds)
+    assert.equal(r.search('export', { episodeId: 1 })[0].cmd.title, 'Export video')
+    assert.equal(r.search('导出', { episodeId: 1 })[0].cmd.id, 'project.export')
+    setLocale('zh-CN')
+    assert.equal(undo.title, '撤销')
+    assert.equal(undo.group, '编辑')
+  } finally {
+    setLocale('zh-CN')
+  }
 })

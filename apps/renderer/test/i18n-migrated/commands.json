@@ -1,0 +1,4 @@
+[
+  "components/CommandPalette.vue",
+  "utils/builtinCommands.js"
+]
