@@ -70,7 +70,7 @@ import AssetCard from './AssetCard.vue'
 import AssetDetail from './AssetDetail.vue'
 import { useAssetContext } from './assetContext'
 
-// 左侧可折叠的资产面板。四个视图各自挂载 <AssetPanel />，是否显示由外壳状态 assetsPanelOpen 决定。
+// 左侧可折叠的资产面板。由 ProjectShell 统一挂载，是否显示由外壳状态 assetsPanelOpen 决定。
 // 事件：select({kind, asset}) 选中一项；pick({kind, asset, token}) 点“+”，token 为 @名字 / #名字，可直接插入提示词。
 const emit = defineEmits(['select', 'pick'])
 const { t } = useI18n()

@@ -112,3 +112,10 @@ test('every dialog loader points at a component file that exists', () => {
   }
   assert.deepEqual(missing, [])
 })
+
+test('the assets panel that LeftRail opens is mounted by the shell (nothing else mounts it)', () => {
+  const shell = read('shell/ProjectShell.vue')
+  assert.match(shell, /<AssetPanel v-if="showAssetPanel" @pick="onPickAsset" \/>/)
+  const mounts = walk(src).filter((f) => readFileSync(f, 'utf8').includes('<AssetPanel'))
+  assert.deepEqual(mounts.map((f) => path.basename(f)), ['ProjectShell.vue'])
+})

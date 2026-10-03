@@ -14,6 +14,7 @@
       <el-drawer v-else v-model="railOpen" direction="ltr" size="260px" :with-header="false" class="rail-drawer">
         <LeftRail @navigate="railOpen = false" />
       </el-drawer>
+      <AssetPanel v-if="showAssetPanel" @pick="onPickAsset" />
       <main class="main">
         <el-button v-if="narrow" class="rail-toggle" size="small" :aria-label="t('shell.rail.open')" data-test="rail-toggle" @click="railOpen = true">
           <el-icon><Menu /></el-icon>
@@ -30,6 +31,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { useI18n } from '@/i18n'
 import { useShellStore } from '@/stores/shell'
 import { useProjectViewsStore } from '@/stores/projectViews'
@@ -39,6 +41,7 @@ import { formatSpend } from './spend.js'
 import DialogHost from './DialogHost.vue'
 import TopBar from './TopBar.vue'
 import LeftRail from './LeftRail.vue'
+import AssetPanel from '@/components/assets/AssetPanel.vue'
 import StatusBar from './StatusBar.vue'
 import TaskDrawer from './TaskDrawer.vue'
 
@@ -74,6 +77,18 @@ watch(
   ([d, e, v]) => { if (d && e && !v) views.load(e, { drama: d }) },
   { immediate: true }
 )
+
+// 资产面板：四视图和镜头工作台旁边显示（资产页本身就是资产库，不再叠一层）。
+// 点“引用到提示词”目前只把 @名称 记号复制到剪贴板（各视图还没有接收记号的输入焦点，见 notes/cleanup.md）。
+const showAssetPanel = computed(() => !!route.meta?.view || route.name === 'shot-workbench')
+async function onPickAsset({ token }) {
+  try {
+    await globalThis.navigator.clipboard.writeText(token)
+    ElMessage.success(t('assets.panel.tokenCopied', { token }))
+  } catch (_) {
+    ElMessage.warning(t('assets.panel.copyFailed', { token }))
+  }
+}
 
 // ---- 窄屏：左栏变抽屉 ----
 const narrow = ref(false)
