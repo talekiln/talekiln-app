@@ -1,6 +1,8 @@
 // 首页（项目列表）的纯函数：卡片落点、卡片摘要、搜索、小说分章、备份文件名、"最近删除"记录。
 // 不依赖 Vue / 路由 / 网络，可直接在 node --test 下运行。
 
+import { ASPECT_RATIOS, DURATION_RANGE, STORY_MAX_CHARS } from './storyboardTable.js'
+
 export const HOME_VIEWS = ['script', 'storyboard', 'timeline', 'canvas']
 
 function asList(v) {
@@ -232,4 +234,25 @@ export function taskTargetInfo(task) {
   const g = p._gen
   if (!g) return null
   return { key: g.kind === 'video' ? 'home.tasks.target.video' : 'home.tasks.target.frame', shot: g.storyboard_id ?? '?' }
+}
+
+/** 「一句话写剧本」表单校验：返回错误码数组（界面按 code 翻译）；空数组表示通过。 */
+export function validateOneLine(form) {
+  const f = form || {}
+  const errors = []
+  const story = String(f.story || '').trim()
+  if (!story) errors.push('STORY_EMPTY')
+  else if (story.length > STORY_MAX_CHARS) errors.push('STORY_TOO_LONG')
+  if (!f.templateId) errors.push('TEMPLATE')
+  if (!ASPECT_RATIOS.includes(f.aspectRatio)) errors.push('RATIO')
+  const d = Number(f.durationSec)
+  if (!Number.isFinite(d) || d < DURATION_RANGE.min || d > DURATION_RANGE.max) errors.push('DURATION')
+  return errors
+}
+
+// 小说 / 剧本分章的预设正则（第 1 个捕获组是章节标题）。中文字符用 \u 转义写，保持本文件没有中文字面量。
+export const CHAPTER_PATTERNS = {
+  zh: '^\\s*(\\u7b2c[0-9\\u96f6\\u4e00\\u4e8c\\u4e09\\u56db\\u4e94\\u516d\\u4e03\\u516b\\u4e5d\\u5341\\u767e\\u5343\\u4e24]+[\\u7ae0\\u56de\\u8282\\u96c6][^\\n]*)',
+  en: '^\\s*((?:Chapter|CHAPTER|Episode|EPISODE)\\s+\\d+[^\\n]*)',
+  none: '',
 }

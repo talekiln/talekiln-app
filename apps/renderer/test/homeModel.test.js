@@ -182,3 +182,27 @@ test('task helpers map to translation keys', () => {
   assert.equal(taskTargetInfo({}), null)
   assert.equal(taskTargetInfo({ params: {} }), null)
 })
+
+import { validateOneLine } from '../src/utils/homeModel.js'
+
+test('validateOneLine returns error codes, not sentences', () => {
+  const ok = { story: 'a story', templateId: 't1', aspectRatio: '9:16', durationSec: 45 }
+  assert.deepEqual(validateOneLine(ok), [])
+  assert.deepEqual(validateOneLine({ ...ok, story: '  ' }), ['STORY_EMPTY'])
+  assert.deepEqual(validateOneLine({ ...ok, story: 'x'.repeat(8001) }), ['STORY_TOO_LONG'])
+  assert.deepEqual(validateOneLine({ ...ok, templateId: '' }), ['TEMPLATE'])
+  assert.deepEqual(validateOneLine({ ...ok, aspectRatio: '5:7' }), ['RATIO'])
+  assert.deepEqual(validateOneLine({ ...ok, durationSec: 5 }), ['DURATION'])
+  assert.deepEqual(validateOneLine({ ...ok, durationSec: 'x' }), ['DURATION'])
+  assert.deepEqual(validateOneLine({}), ['STORY_EMPTY', 'TEMPLATE', 'RATIO', 'DURATION'])
+})
+
+import { CHAPTER_PATTERNS } from '../src/utils/homeModel.js'
+
+test('CHAPTER_PATTERNS presets split Chinese and English chapter headings', () => {
+  const zh = splitNovelChapters('序\n第一章 雨夜\n甲\n第十二回 晴\n乙\n第3节\n丙', CHAPTER_PATTERNS.zh)
+  assert.deepEqual(zh.map((c) => c.title), ['第一章 雨夜', '第十二回 晴', '第3节'])
+  const en = splitNovelChapters('Chapter 1 Rain\nx\nCHAPTER 2\ny', CHAPTER_PATTERNS.en)
+  assert.equal(en.length, 2)
+  assert.equal(splitNovelChapters('abc', CHAPTER_PATTERNS.none).length, 1)
+})

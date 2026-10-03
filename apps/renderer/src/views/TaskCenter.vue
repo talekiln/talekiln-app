@@ -2,29 +2,29 @@
   <div class="task-center">
     <header class="header">
       <div class="header-inner">
-        <h1 class="logo" @click="goList">任务中心</h1>
+        <h1 class="logo" role="link" tabindex="0" @click="goList" @keydown.enter="goList">{{ t('home.tasks.title') }}</h1>
         <el-radio-group v-model="filter" size="small" @change="onFilter">
-          <el-radio-button v-for="f in FILTERS" :key="f.key" :value="f.key">{{ f.label }}</el-radio-button>
+          <el-radio-button v-for="key in FILTER_KEYS" :key="key" :value="key">{{ t(`home.tasks.filter.${key}`) }}</el-radio-button>
         </el-radio-group>
-        <el-button class="btn-back" @click="goList">返回</el-button>
+        <el-button class="btn-back" data-test="tasks-back" @click="goList">{{ t('home.back') }}</el-button>
       </div>
     </header>
 
     <main class="main">
-      <el-table :data="tasks" v-loading="loading" empty-text="暂无 AI 任务" row-key="id">
-        <el-table-column label="服务商" width="130">
+      <el-table v-loading="loading" :data="tasks" :empty-text="t('home.tasks.empty')" row-key="id">
+        <el-table-column :label="t('home.tasks.col.provider')" width="130">
           <template #default="{ row }">{{ row.provider_name || row.provider }}</template>
         </el-table-column>
-        <el-table-column prop="kind" label="类型" width="90" />
-        <el-table-column label="对象" width="150">
-          <template #default="{ row }">{{ taskTarget(row) }}</template>
+        <el-table-column prop="kind" :label="t('home.tasks.col.kind')" width="90" />
+        <el-table-column :label="t('home.tasks.col.target')" width="170">
+          <template #default="{ row }">{{ targetText(row) }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="100">
+        <el-table-column :label="t('home.tasks.col.state')" width="110">
           <template #default="{ row }">
-            <el-tag :type="stateTagType(row.state)" size="small">{{ stateLabel(row.state) }}</el-tag>
+            <el-tag :type="stateTagType(row.state)" size="small">{{ t(taskStateKey(row.state)) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="失败原因" min-width="260">
+        <el-table-column :label="t('home.tasks.col.error')" min-width="260">
           <template #default="{ row }">
             <span v-if="errorText(row)" class="err">{{ errorText(row) }}</span>
             <el-link
@@ -33,16 +33,16 @@
               :underline="false"
               class="console-link"
               @click="openConsole(row)"
-            >打开 {{ row.provider_name || row.provider }} 控制台</el-link>
+            >{{ t('home.tasks.openConsole', { name: row.provider_name || row.provider }) }}</el-link>
           </template>
         </el-table-column>
-        <el-table-column label="创建时间" width="170">
+        <el-table-column :label="t('home.tasks.col.created')" width="170">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column :label="t('home.tasks.col.actions')" width="150" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="canRetry(row)" size="small" type="primary" @click="retry(row)">重试</el-button>
-            <el-button v-if="canCancel(row)" size="small" @click="cancel(row)">取消</el-button>
+            <el-button v-if="canRetry(row)" size="small" type="primary" @click="retry(row)">{{ t('home.tasks.retry') }}</el-button>
+            <el-button v-if="canCancel(row)" size="small" @click="cancel(row)">{{ t('common.cancel') }}</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -63,13 +63,17 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useI18n } from '@/i18n'
 import { aiTasksAPI } from '@/api/aiTasks'
 import {
-  FILTERS, filterStates, stateLabel, stateTagType, errorText, canRetry, canCancel,
+  filterStates, stateTagType, canRetry, canCancel,
   showConsoleLink, consoleUrl, formatTime, retryRequest, refreshInterval
 } from '@/utils/aiTaskView'
-import { taskTarget } from '@/utils/generationView'
+import { taskErrorKey, taskStateKey, taskTargetInfo } from '@/utils/homeModel'
 
+const FILTER_KEYS = ['all', 'running', 'failed', 'done']
+
+const { t } = useI18n()
 const router = useRouter()
 const tasks = ref([])
 const total = ref(0)
@@ -79,6 +83,19 @@ const filter = ref('all')
 const loading = ref(false)
 let timer = null
 
+// 失败原因：已知错误码按界面语言翻译；不认识的错误码才用服务端给的可读文字。
+function errorText(task) {
+  const key = taskErrorKey(task)
+  if (!key) return ''
+  if (key === 'home.tasks.err.UNKNOWN' && task.error_readable) return task.error_readable
+  return t(key)
+}
+
+function targetText(task) {
+  const info = taskTargetInfo(task)
+  return info ? t(info.key, { shot: info.shot }) : ''
+}
+
 async function load(silent = false) {
   if (!silent) loading.value = true
   try {
@@ -86,7 +103,7 @@ async function load(silent = false) {
     tasks.value = data.items || []
     total.value = data.pagination ? data.pagination.total : tasks.value.length
   } catch (_) {
-    /* request.js already showed the error */
+    /* request.js 已经提示过错误 */
   } finally {
     loading.value = false
     clearTimeout(timer)
@@ -103,27 +120,27 @@ async function retry(row) {
   const req = retryRequest(row)
   if (req.needsConfirm) {
     try {
-      await ElMessageBox.confirm('提交结果不确定，重试可能在服务商处重复生成并扣费。请确认已在服务商控制台核对过。', '确认重试', {
-        confirmButtonText: '仍然重试', cancelButtonText: '取消', type: 'warning'
+      await ElMessageBox.confirm(t('home.tasks.retryConfirm'), t('home.tasks.retryConfirmTitle'), {
+        confirmButtonText: t('home.tasks.retryAnyway'), cancelButtonText: t('common.cancel'), type: 'warning'
       })
     } catch (_) { return }
   }
   try {
     await aiTasksAPI.retry(req.id, req.body)
-    ElMessage.success('已重新加入队列')
+    ElMessage.success(t('home.tasks.requeued'))
     load()
-  } catch (_) { /* shown by interceptor */ }
+  } catch (_) { /* 拦截器已提示 */ }
 }
 
 async function cancel(row) {
   try {
     await aiTasksAPI.cancel(row.id)
-    ElMessage.success('已取消')
+    ElMessage.success(t('home.tasks.cancelled'))
     load()
-  } catch (_) { /* shown by interceptor */ }
+  } catch (_) { /* 拦截器已提示 */ }
 }
 
-// https links are handed to the system browser by the desktop shell (window open handler).
+// https 链接由桌面外壳交给系统浏览器（window open handler）。
 function openConsole(row) {
   const url = consoleUrl(row)
   if (url) window.open(url, '_blank', 'noopener')
@@ -140,7 +157,7 @@ onBeforeUnmount(() => clearTimeout(timer))
 <style scoped>
 .task-center { min-height: 100vh; background: var(--bg-page); color: var(--text-primary); }
 .header-inner { display: flex; align-items: center; gap: 16px; padding: 12px 24px; }
-.logo { margin: 0; font-size: 18px; cursor: pointer; }
+.logo { margin: 0; font-size: 18px; cursor: pointer; color: var(--text-bright); }
 .btn-back { margin-left: auto; }
 .main { padding: 16px 24px; }
 .err { color: var(--el-color-danger); margin-right: 8px; }
