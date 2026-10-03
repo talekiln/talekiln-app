@@ -90,7 +90,7 @@ Node { id, type, params, legacy_id? }
    - I2 每个 script_line 在 scriptView 出现一次；镜头对白 = 关联行文字拼接；
    - I3 timelineView 总时长 = 片段时长与 gap 之和；
    - I4 只改 layout 的事务，`staleSet` 与 cacheKey 完全不变；
-   - I5 `staleSet` 与“把图序列化再重建后从零计算”的结果一致（独立预言机）；
+   - I5 `staleSet` 与“把图序列化再重建后从零计算”的结果一致（独立预言机）；（已知问题：种子 / 导入得到的基线图带 `legacy-import` 采用版本时 I5 不通过，见 §17.4）
    - I6 撤销再重做，图与四个投影都逐字节相同；
    - I7 崩溃重载：快照 + 日志重放得到的图与内存图相同；同 tx_id 重放无副作用；
    - I8 物化后的旧表与 `toLegacyRows` 一致。
@@ -175,7 +175,7 @@ Node { id, type, params, legacy_id? }
 下列接口仍直接写旧表，之后内核提交的物化会按图覆盖其派生列，或图感知不到这些变化：
 
 - 镜头增删改：`POST/PUT/DELETE /storyboards`、`/storyboards/:id/insert-before`、`PUT /episodes/:id/storyboards/order`、`POST /storyboards/batch-infer-params`、`split-by-audio`、各类 polish / prompt 接口；
-- 整集重建：`POST /episodes/:id/storyboards`（生成分镜，整体替换）、`scriptgen` 的 createProject、`dramaImport`/`novelImport`、`PUT /dramas/:id/episodes`（改 `script_content`）；
+- 整集重建：`POST /episodes/:id/storyboards`（生成分镜，整体替换；已于四视图统一改为可撤销内核事务，见 12.4）、`scriptgen` 的 createProject、`dramaImport`/`novelImport`、`PUT /dramas/:id/episodes`（改 `script_content`）；
 - 时间线：`PUT /timelines/:id`、`POST /timelines/:id/clips`、`PATCH /timelines/:id/clips/:clip_id`、`POST /timelines/episode/:id/assemble`、`POST /timelines/:id/music`（F02/F05 编辑器）；
 - 生成结果落库：图片/视频/配音流程直接写 `storyboards.video_url / local_path / image_url / *_audio_local_path / status`，工作台 `adopt-video` 写 `adopted_video_id`。这些应改为 `recordGeneration`（新增版本并采用）；在此之前物化对 `video_url` 只增不清，不会抹掉旧流程写入的视频，但图里看不到它；
   - **I1 已处理（图片/视频）**：经队列的出图/出视频任务成功后由 `generation/service.js` 在一次 commit 里 `addVersion + adoptVersion`（cacheKey 取建任务时的值），物化 `video_url / local_path / image_url / status`；旧的同步 `/videos`、`/images` 路由仍直接写旧列（界面默认不再调用，`generation.legacy_enabled` 默认关）。配音（narration）与工作台 `adopt-video` 仍未接。
@@ -249,7 +249,7 @@ Node { id, type, params, legacy_id? }
 ### 12.4 其它行为变化
 
 - `assemble`：字幕轨现在由台词行推导（旁白行也出字幕，见 §10.6），不再只取 `dialogue` 列；片段 id 为 `seg_N`。
-- 整集重建分镜（`generateStoryboard`，流式增量入库）直接重写 `storyboards` 行：这些入口在软删除旧行处调用 `compat.resetGraph` 丢弃旧图（撤销历史随之清空），下次写入从新分镜重新导入，避免旧图在下次物化时把新行软删除。
+- 整集重新生成分镜（`generateStoryboard`）是**一次可撤销的内核事务**（四视图统一 Task 3）：`compat.replaceEpisodeShots` 在同一个事务里加入新镜头、删除全部旧镜头并物化回旧表，返回 `tx_id` / `can_undo`；`POST /episodes/:id/undo` 一步还原旧分镜（含首帧 / 视频版本与采用状态），重做回到新分镜。生成期间旧分镜原样保留，流式解析结果只在内存里收集；生成失败不会丢旧分镜。日志不清空（不再调用 `resetGraph`）。替换前调用备份钩子 `beforeDestructive(episodeId, 'regenerate-storyboard')`（见 §17）。实现在 `services/episodeStoryboardService.js`，`compat.js` 只新增 `replaceEpisodeShots`；`tx_id` 在 POST 时预分配（接口立即返回任务 id），真正提交后的结果在任务结果里。
 - 旧生成流程直接写的素材列图里不知情：`assemble` 时补成采用版本；其余时候以旧表为准（物化对 `video_url` 只增不清）。
 - `splitStoryboardByAudio` / `rebuildVideoPromptForStoryboard` 在仓库里引用了未定义的函数（`parseDialogueToEntries`、`charSpeechWeight`、`inferPrimaryOnScreenCharacter`、`loadCharactersForStoryboardPrompt`、`buildCharacterAppearanceText`、`buildVoiceAnchorMap`、`buildCharacterVoiceAnchors`），与本改动无关，调用即抛 ReferenceError；本次只改了它们的写入路径，图写入部分由 `compat.splitShotByPlans` 的测试覆盖。
 
@@ -262,12 +262,13 @@ Node { id, type, params, legacy_id? }
 - **图外的分镜列与关联表**：`scene_id`、`result`、`polished_prompt`、`continuity_snapshot`、`universal_segment_text`、`creation_mode`、`layout_description`、`lighting_style`、`depth_of_field`、`angle_h/v/s`；`frame_prompts`、`storyboard_characters`、`storyboard_props`。
 - **新剧集的初次入库**：`scriptgenService.persist`、`sampleProjectService`、`dramaImportService` 与服务层 `storyboardService.createStoryboard/updateStoryboard` 在图还不存在时直接写行，首次经 REST 写入时才导入；若对已有图的剧集调用它们，图会在下次物化时盖掉这些行——此类入口应走 `compat`。
 - **时间线表里图不管的部分**：轨道 `volume/muted`、`timelines.settings.mix`（`PUT /timelines/:id` 直接写）；服务层 `timeline.saveTimeline/addClip/…/assembleFromStoryboard` 保留为库函数（仅测试与兼容使用，生产路由已不再调用）。
-- **整集重建分镜**：直接写行，靠 `compat.resetGraph` 作废旧图（见 11.4），不经意图层。
+- **整集重新生成分镜**：已走内核（`compat.replaceEpisodeShots`，见 12.4）。图外列（`scene_id` / `result` / 角度分量 `angle_h/v/s` / `lighting_style` / `depth_of_field` / `creation_mode` / `universal_segment_text` / `storyboard_props`）在同一个 SQLite 事务里直接写，撤销 / 重做对它们也对称（被软删除的新行保留新值，重做时被物化「复活」的行带着它们回来）。`resetGraph` 仍保留给「导入 / 恢复整集」等确实要作废整张图的场景，不再被分镜生成调用。角色补全（`syncStoryboardCharacters` 的规则）并进了同一个事务，整次重新生成仍是一步撤销。
 
 ## 13. U1 四视图界面（剧本 / 分镜 / 时间线 / 画布）
 
 代码：`apps/renderer/src/stores/projectViews.js`（共享 store）、`utils/projectViews.js`（纯逻辑，`test/projectViews.test.js`）、`components/ViewSwitcher.vue`、`views/ScriptView.vue`、`views/CanvasView.vue`、`components/canvas/*`；浏览器端到端 `apps/renderer/test/e2e/fourViews.e2e.mjs`（缺 Chromium 时跳过；`--shots docs/screenshots` 重新截图）。
 
+- 2026-10-03 更新（四视图统一）：四视图改为 `ProjectShell` 外壳里的子页面，路由统一为 `/p/:dramaId/e/:episodeId/{script,storyboard,timeline,canvas}`，镜头工作台 `/p/:dramaId/e/:episodeId/shot/:shotId`；`ViewSwitcher` 已删除，其功能（视图标签、待生成徽标、历史、撤销 / 重做）移到外壳顶栏；下面这条是改动前的旧路由，现在由 `utils/legacyRoutes.js` 重定向，保留一个版本。
 - 路由：`/episodes/:id/script`、`/episodes/:id/canvas`、`/episodes/:id/storyboard`（查出项目后跳到 `/project/:dramaId/storyboard?episode=`）、既有 `/episodes/:id/timeline`；入口在项目列表卡片「四视图」与剧集卡片。
 - 共享 store 只存服务端数据（graph / stale / seq / can_undo / can_redo + 四个视图投影）和两项 UI 状态（选择、播放头）。所有编辑 `POST /intent`（画布属性面板里没有意图的字段用 `POST /tx` 的 `setParam`），返回后整体回读；失败时显示内核的错误文案并回读。
 - 选择 `{kind: line|shot|segment|node, id}` 切换视图时不变，各视图用 `focusIn(view, selection)` 找对应对象（行 → 第一个关联镜头 → 第一个视频片段 → 画布节点）。
@@ -327,3 +328,36 @@ Node { id, type, params, legacy_id? }
 - **状态**：`GET /episodes/:id/voiceover/status` 按镜头给 `none | queued | running | failed | stale | fresh` 与计数，抽屉据此轮询。
 - **花费回写**：provider 结果带 `usage`（视频 `duration`/`SR`、配音 `characters`、图片 `images`）；`spend.actual()` 按价目算实际并连同 `{units, unit, unit_price, resolution}` 存 `spend_log.usage/actual`；`summary.total` 多 `estimated / actual / actual_count`，`prices` 带 `version/date/sample`。没有 usage 的任务 `actual` 为空，合计按“有实际用实际，否则估算”。
 - **未做 / 待产品决定**：价目里未逐条核对的模型（`verified:false`）仍按示例价提示；画布属性面板里 image/video/narration/compose 的参数仍用裸 `setParam` 事务（每次点击一步撤销）；时间线轨道音量/静音/混音在图外。
+
+## 17. 四视图统一：内核快照导出 / 导入、本地快照与质量档
+
+来源：`docs/superpowers/notes/backend-backup.md`、`backend-quality.md`、`backend-regenerate.md`。代码：`packages/local/src/backup/{kernelSnapshot,localSnapshot}.js`、`routes/projectBackup.js`、`routes/qualityRerun.js`、`generation/qualityProfiles.js`。
+
+### 17.1 内核快照随项目包导出 / 导入
+
+项目包 ZIP 升到 1.5（≤1.4 的包照常导入）。每集多一份 `kernel/episode-<集号>-<序号>.json`（`talekiln-kernel-snapshot` v1），内容是该集的 `history`（图 + 撤销栈 `past` ≤200 + 重做栈 `future`，即 §10.1 的 `{graph, past, future}`）、`ops`（最近 ≤5000 条 `graph_ops`）、`legacy_map`（即 `graph_legacy_map`）、`refs`（图里出现的 `/static/…` 引用）和 `media`（引用到 zip 内路径）；快照引用而旧表导出没带的媒体放在 `media/kernel/<hash12>_<文件名>`，同内容（sha256）复用已有条目。`project.json` 每集带 `kernel_file` 指针（导入靠指针找文件，不靠文件名），分镜和角色带 `original_id`（导出时的旧行 id）。某一集导出快照失败只记警告，那一集导入时走旧路径。
+
+导入 `kernelSnapshot.importEpisode`：先按 1.4 的逻辑建好旧表并记下「旧分镜 id -> 新 id」「旧角色 id -> 新 id」，再对每个带快照的集改写 id 后写入图：
+
+- 镜头 `legacy_id`、日志 `binds` 映射到新分镜 id；镜头 `params.characters`（含 `setParam` 日志里整值替换 `characters` 的项）映射到新角色 id，对不上的丢掉；字符串里的 `/static/…` 映射到新引用。
+- UUID 形状的时间线片段 id 换成 `seg<32 位 hex>`：`timeline_clips.id` 是全库 TEXT 主键，物化只会给「非 UUID 的确定性 id」自动加 `e<集 id>_` 前缀，UUID 形状的会在新集里撞主键。
+- `cache_key` 因 `characters` / 引用 / 片段 id 进 cacheKey 而全变：先算整图新旧 key，建「旧 key -> 新 key」后整体改写，所以**过期集合与源项目一致**。只有当前图里某节点算得出来的 key 才有映射；撤销栈 / 日志里已不属于任何当前节点的历史 key 保持原值（撤销回到那个状态时，该节点的 key 与采用版本里记的 key 不一致，表现为「需要重新生成」，不会静默用错）。
+- 不改写：资产 hash、节点 id、版本 id、`tx_id`。
+- 默认完整保留撤销 / 重做栈、`graph_ops` 和版本历史（`snapshot_seq` 指向新日志末尾）。写入前在映射后的图上走一圈 `redoAll -> undoAll -> redoAll -> undo(n)`，必须回到起点且 `validateGraph` 通过；失败则**降级为只还原当前图 + 采用版本**（栈清空、不带 `graph_ops`、`can_undo = false`，返回 `mode: 'graph'` 与 `degraded_reason`）；降级也失败则这一集不建图，由首次访问时的 `legacy.importLegacy` 从旧表重建。1.4 及更早的包永远是这条路径。
+- 整个导入在一个 DB 事务里，同时记录落盘的媒体文件；任何一步抛错就回滚并删掉这些文件（以及因此变空的目录），不留半个项目。恢复总是新建项目，不覆盖现有项目。
+
+限制：**轨道音量 / 静音 / 混音等不在图里的设置不随快照恢复**（时间线靠 `legacy.materialize` 从图重新生成，与新建一集的默认值相同，同 §12.5）；`graph_ops` 随包最多 5000 条、撤销栈最多 200 层（`store.MAX_UNDO_DEPTH`）；快照还原失败且降级也失败时，它为这一集写的 `kernel/` 媒体成为新项目目录里的孤儿文件。
+
+### 17.2 本地快照与备份钩子
+
+`backup/hooks.setBeforeDestructive` 是进程级单例钩子，`setupRouter` 注册 `projectBackup` 时由 `localSnapshot.install()` 挂上处理函数（`extras.localSnapshots === false` 可不挂；后一次 `setupRouter` 覆盖前一次）。破坏性操作在**动手之前** `await beforeDestructive(episodeId, reason)`：钩子先查 `drama_id` 再同步做一次整个项目的完整导出，存到 `<应用数据目录>/snapshots/<dramaId>/<id>.talekiln.zip` + `<id>.json`，保留最近 5 份，失败被钩子吞掉、不拦用户操作。当前调用方：重新生成分镜（`regenerate-storyboard`，在事务紧前调用，不是在生成之前）、按成片质量重跑（`quality-rerun`）。每次快照是完整导出（含全部媒体），最多 5 份 × 项目大小，不去重——项目大时有磁盘和时间成本。
+
+### 17.3 质量档与内核
+
+质量档（`dramas.quality`）不进节点参数，也不进 cacheKey，只改 `planGraph` 构造发给服务商的 spec；实际生效的档位记在新版本的 `metadata.quality`（`draft` / `final`），另有 `resolution`、`size`、`rerun_of`。缓存命中在同 key 下优先选非草稿版本。「按成片质量重跑」用同一个 cacheKey 再 `addVersion + adoptVersion`，所以过期集合不变，草稿版本留在版本历史里。
+
+### 17.4 已知问题
+
+- **I5 在种子 / 导入的基线图上不通过**（四视图统一 Task 3 的 regenerate worker 发现，既有问题，未处理）：带 `legacy-import` 采用版本的基线图（例如由 `importLegacy` 或示例项目种子得到的图），其 `staleSet` 与独立预言机重新计算的结果不一致；重新生成分镜之后的图是通过的。因此 `storyboardRegenerate.test.js` 在撤销之后不跑 `checkGraph`，改为断言「撤销后图 + 四视图 + 旧表与重新生成前逐字节相同」。原因没有排查；一致性报告里的数字见 `docs/kernel-conformance.md`，本文不据此下结论。
+- `splitStoryboardByAudio` / `rebuildVideoPromptForStoryboard` 引用未定义函数的问题（§12.4）仍在。
+- 其它缺口（轨道音量不在快照、快照磁盘成本等）汇总在 `docs/phase3-plan.md` 的「四视图统一」一节。

@@ -103,3 +103,70 @@ CI 配额仍未恢复，先做了不依赖 CI 的四路，全部合入 `claude/p
 | 云备份补充实测 | live 套件对 SeaweedFS 与 rclone serve s3 两个真实 S3 实现跑通；修了列举键的 `encoding-type=url` 解码 | MinIO 本体仍没跑过（沙箱拉不到镜像），等 CI 的 `backup-minio` 作业 |
 
 下一步仍是：Jay 恢复 Actions 配额后重跑 CI；Windows 真机过一遍新页面；服务器重装后按部署手册起 MinIO 与签名密钥。
+
+## 四视图统一工作台（2026-10-03，分支 `win/four-view-impl`）
+
+放弃 LocalMiniDrama 的 FilmCreate / DramaDetail / DramaCanvas 交互，剧本 / 分镜 / 时间线 / 画布四视图成为唯一的项目工作区，共用 `ProjectShell` 外壳，全程中英文可切换。规格 `docs/superpowers/specs/2026-10-03-four-view-unification-design.md`，计划 `docs/superpowers/plans/2026-10-03-four-view-unification.md`，各 lane 的实现记录与「旧功能 -> 新位置」对照表在 `docs/superpowers/notes/`（`shell`、`backend-regenerate`、`backend-quality`、`backend-backup`、`script`、`assets`、`storyboard`、`generate-export`、`canvas`、`home`）。进度见 `phase1-status.md` 末尾，测试结果见 `windows-test-results/2026-10-03.md`。
+
+### 评审决定 D1-D8 的结果
+
+规格 §5.2 的 D1-D8 由用户在 2026-10-03 评审（规格 §10.1）；D5、D7、D8 未回复，按建议执行。
+
+| 编号 | 结论 | 落地情况 |
+|---|---|---|
+| D1 资产放哪 | 左侧资产面板 + 整页，不做第五个标签；面板数据全局可引用（任何视图、任何检查器里可用 `@角色` / `#场景` / `#道具`） | 已做：`useAssetsStore`、`AssetPanel`、`/p/:dramaId/assets`（notes/assets.md）。道具也进了资产库 |
+| D2 上游改动是否自动重跑 | 只标记「已过期」，不自动重跑；另增草稿 / 成片质量档和整个项目备份。生成分镜后全文模式只读（按建议） | 已做：质量档（notes/backend-quality.md）、完整备份（notes/backend-backup.md）、剧本视图有镜头后禁用全文编辑（notes/script.md） |
+| D3 重新生成分镜 | 改成多版本管理：新分镜作为一次可撤销事务，旧镜头及其产物靠撤销恢复；执行前自动做本地快照 | 已做：`compat.replaceEpisodeShots` + 备份钩子（notes/backend-regenerate.md，kernel-design §12.4 / §17） |
+| D4 快速拼接 | 删除，导出菜单里没有，旧 `finalize` 随旧页面删除；没有渲染核心时只有「导出成片」置灰 | 界面入口已删。后端 `POST /episodes/:episode_id/finalize` 路由本文写作时仍在 `routes/index.js`，是否一并删除未决定 |
+| D5 字幕烧录 / 对白烧录 / 水印 | 不进本轮，只记为渲染核心缺口，导出对话框不显示这些选项 | 已按此做，见下面「已知缺口」 |
+| D6 旧画布工作流分组 | 放弃；用分镜视图多选 + 生成菜单代替 | 已做：分镜多选批量条；画布节点位置也不迁移（notes/canvas.md、storyboard.md） |
+| D7 通用片段（全能）模式 | 只在支持多参考图的模型（方舟 Seedance 2.0）可用时显示；删除 Grok 格式转换 | 已做，但可用性来自当前视频 AI 配置，方舟路径没有真 Key 验证 |
+| D8 旧路由重定向 | 保留一个版本，之后删除 | 已做：`utils/legacyRoutes.js` 的 `resolveLegacyRoute`。**下一个版本要删除**这个文件和 `router/index.js` 里的 `legacy-*` 记录，并同时去掉 `noLegacyLinks` 测试对它的豁免 |
+
+### 已知缺口（汇总自各 lane 的 notes，未补）
+
+渲染核心与导出：
+
+- 字幕烧录、对白烧录、水印：渲染核心（闭源，未连接时 `503 CORE_UNAVAILABLE`）目前没有对应参数，导出对话框不提供这些开关（D5；notes/generate-export.md）。
+- 分镜表导出没有缩略图，道具列为空（旧分镜列表没有道具 id）；`messages/shell.js` 里 `shell.menu.export.storyboardSheet.desc` 仍写「带缩略图的分镜表」/ "with thumbnails"，与实际不符（该文件不归 generate-export lane，写本文时未改）。
+- 资产包由浏览器端生成 store-only ZIP，整包放在 Blob 里，远程图片受 CORS 限制；完整备份的下载经 `fetch` 读成 blob 再保存，超大项目占内存（后端是流式的，要改需要 GET 路由或桌面端下载钩子）。
+- 导出对话框打开时渲染核心不可用，会看到两次同样的错误文字（对话框顶部 + 全局提示）。
+
+生成（后端与队列）：
+
+- 资产（角色 / 场景 / 道具）图片生成没有进队列：队列只支持分镜首帧图 / 视频，资产出图保留旧同步路由，且只有 `generation.legacy_enabled === true` 时才可点（**默认配置下禁用**，只能上传）。不进任务中心、不受队列的花费确认约束（只有 402 就地提示）。资产出图也没有传画风（notes/assets.md；bailian-flow-coverage.md）。
+- 尾帧生成没有队列路径：`lastFrameGenerate=false`，尾帧槽只能上传、从历史选或用上一镜尾帧（notes/storyboard.md）。
+- 后端不持久化 `lighting_style`、`depth_of_field`：`PUT/GET /storyboards` 不保存，「更多镜头参数」对话框里有提示（notes/storyboard.md）。
+- 道具不能锁定参考图（后端锁定接口只支持角色和场景）；`use_quad_grid` 后端忽略所以没暴露；`identity_anchors` 只读（`PUT /characters/:id` 忽略它，只能靠提取刷新）；团队库 `add-to-team-library` 没有界面入口（无工作室服务的环境返回 501）（notes/assets.md）。
+- 一键成片的费用预估不含角色 / 场景 / 道具图和「提取」步骤；取消只停后续步骤，已提交的任务照常跑完并计费（notes/generate-export.md）。
+- 用户显式选的模型在现状下到不了（每次生成前节点模型被改写成自动挑选的结果；已保存配置的默认模型也被草稿档覆盖），需要先有「在节点上选模型」的入口（notes/backend-quality.md）。
+- 重跑草稿进行中该节点仍显示 `fresh`；重跑首帧后已有的成片视频不会跟着重做（notes/backend-quality.md）。
+
+质量档与服务商（见 `bailian-flow-coverage.md`）：
+
+- 百炼上草稿档只在「不带参考图的出图」有差别（`z-image-turbo` 对 `wan2.6-t2i`），且 `z-image-turbo` 的价目是占位价（`verified:false`），省不省钱取决于它是否属实；草稿视频没有节省。
+- 方舟草稿档只加 `--rs 480p`（不换模型），未经真 Key 验证；方舟出图没有草稿档。
+- 全部新流程（重新生成分镜、质量档重跑、一键成片、备份恢复）只用假服务商验证，没有用真 Key 在界面里跑过。AI 写剧本的成功路径也没有走通（当时本机没配文本模型）。
+
+备份与内核：
+
+- 轨道音量 / 静音 / 混音不在图里，不随内核快照恢复（与时间线撤销不恢复它们是同一个原因，kernel-design §12.5）。
+- 快照的磁盘成本：每次破坏性操作做一次完整导出（含全部媒体），最多 5 份 × 项目大小，不去重；以后可以改成只带上次快照后变化的文件，或对 `media/` 做内容寻址的共享目录（notes/backend-backup.md）。
+- 内核快照还原失败且降级也失败时，它为这一集写的 `kernel/` 媒体成为新项目目录里的孤儿文件。
+- 种子 / 导入的基线图（带 `legacy-import` 采用版本）I5 不通过，原因未查（kernel-design §17.4）。
+- 首页「最近删除」记录只存在这台机器的浏览器存储里，清站点数据后界面里找不到快照（快照文件仍在应用数据目录）（notes/home.md）。
+
+界面与国际化：
+
+- `GenerateDialog.vue` 只有中文：英文界面下画布「应用并重新生成」弹出的确认框仍是中文；`utils/projectViews.js` 里共享的中文标签表其他视图若还在用也是中文（notes/canvas.md）。
+- 画风名（`constants/styleOptions`）、题材模板名 / 描述（`/scriptgen/templates`）、服务端 `error_readable`、画布分组标题等是数据，仍是中文；`StylePickerButton` 标签是中文，画面比例显示原始字符串（notes/home.md、script.md、canvas.md）。
+- 重命名项目不能改画幅（`updateDrama` 只支持 title / description / genre / status），也不能把描述清成空；没有剧集的旧项目点卡片落到 `project-home`（notes/home.md）。
+- 剧本视图：出场资产只来自镜头的 `params.characters` 和行文 / 镜头描述里的 `@` `#` 提及；分集排序是在集号槽位之间交换内容，有镜头的集不能移动，角色 / 场景的分集归属不跟着移动；模板库导入是追加不是覆盖；有镜头的集不能写入导入 / AI 写作（notes/script.md）。
+- 分镜视图：多参考图能力取自当前视频 AI 配置而不是内核能力接口；一致性提示只保留「分数 + 三档建议」；空的「剧本」分组在卡片视图里显示一个 0 镜头的标题（notes/storyboard.md）。
+- 首页的 `GlobalLibraryPanel` 与资产 lane 的 `GlobalLibraryDialog` 是两份相似的全局库面板，尚未合并（notes/home.md、assets.md）。
+- 「只看过期」在全新、什么都没生成的项目里几乎等于全图（约定行为，不是 bug）（notes/canvas.md）。
+
+### 需要用户做的事
+
+- 用真 Key 在本机验收：出图 / 出视频 / 配音经队列生成、草稿档重跑、重新生成分镜后撤销、完整备份与恢复（含大项目）、资产出图（需要先把 `generation.legacy_enabled` 打开）。Claude 只能用假服务商测。
+- 决定：后端 `finalize` 路由是否删除；`z-image-turbo` 价目是否核对；是否验证一个更便宜的百炼视频模型来让草稿视频真的省钱；资产出图要不要进队列（需要扩展队列 kind）；字幕烧录 / 水印是否排进渲染核心。

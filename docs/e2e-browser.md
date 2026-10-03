@@ -33,6 +33,8 @@ pnpm --filter @talekiln/renderer e2e               # 约 1.5–2 分钟
 
 ## 3. 点了哪些页、看到了什么
 
+> 2026-10-03 注：下表是 2026-10-02 的记录。四视图统一之后 `/project/:id/...` 这些旧路由只做重定向到 `/p/:dramaId/e/:episodeId/...`（`utils/legacyRoutes.js`，保留一个版本），批次页现在是 `/p/:dramaId/batch`，镜头工作台是 `/p/:dramaId/e/:episodeId/shot/:shotId`；脚本里的步骤需要按新路由重写。
+
 | 步骤 | 页面 | 操作 | 结果（2026-10-02） |
 |---|---|---|---|
 | templates | `/templates` | 等 11 张模板卡出现 → 点第一张 → 等估价 → 一键套用 → 确认（新建项目） | 估价“预计 ¥30.60，最高 ¥36.72”；套用成功提示，项目数 1 → 2 |

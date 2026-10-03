@@ -32,7 +32,7 @@ Jay 在本机 Windows 用真 Key 跑 `scripts/bailian-e2e.mjs`（结果见 `wind
 | 7 | 字幕 | `subtitles/index.js`（`splitCues`：按逐字时间戳切分，吸附到整帧；SRT/ASS 输出）；时间线字幕轨 | 逐字时间戳来自真实 CosyVoice；字幕与语音误差 <= 1 帧（2 条真实配音） | 渲染端烧录字幕靠 lycore + libass，Linux 上用合成素材验证 | ~~应用里没有任何地方生成按词对齐的字幕~~（I2 已修：配音写回时把 splitCues 的字幕块存进旁白版本，timelineView 在旁白新鲜时按块出字幕，台词一改退回整镜文字字幕）。旧说明：`assembleFromStoryboard` 只按分镜 `dialogue` 文本生成覆盖整镜的字幕块。词级字幕要靠 `voiceShots` + `splitCues`，目前只有 e2e 脚本把它写进时间线。字幕样式（字体、位置）无界面 |
 | 8 | 时间线 | `timeline/service.js`（四轨模型、校验、`assembleFromStoryboard`、切分/裁剪）；`routes/timelines.js`；编辑器 `TimelineEditor.vue` | 无（纯本地逻辑，不涉及百炼） | 单测齐全；与真实 lycore 联测用的是合成素材，没用百炼产出的视频 | ~~装配时镜头时长取分镜的 `duration`~~（I2 已修：内核投影读视频采用版本 `metadata.duration_ms`，没有再退回目标时长；`timeline/kernelAssemble.js` 供旧装配路由改调）。旧说明：百炼视频固定约 5 秒，而分镜常是 6-10 秒，装配出来的片段会超出素材长度（e2e 脚本把 `duration` 改成 5 来规避）。`asset_ref` 必须是本地文件，百炼返回的网络地址要先下载，否则导出报“是网络地址”。编辑器缺波形、缩略图、旁白/音乐播放（F03 已知缺口） |
 | 9 | 背景音乐 | `music/`（音乐库：用户导入 + 程序合成的示例配乐）；`POST /timelines/:id/music`；混音（压低、响度）写入时间线 | **百炼没有音乐生成能力**，不存在百炼来源 | 导入、铺满、压低、响度在 Linux 真 lycore + ffmpeg 上验证 | 只能用户自己导入；示例配乐是占位。e2e 脚本不含音乐 |
-| 10 | 导出 | `export/service.js` -> lycore `render.start`（场景缓存、AIGC 水印与元数据）；`/export/*`；`ExportPage.vue` | 无（纯本地） | Linux 真 lycore + 真 ffmpeg 联测通过（合成素材）；本次新增的 e2e 模拟测试也用真 lycore 导出了 3 段素材拼出的成片 | 桌面主进程已拉起 lycore 并设置 `LYCORE_ENDPOINT`，ffmpeg 随包内置；打包版经接口实测导出成功。Windows 管道、硬件编码器、取消需 Windows 真机。合并后本地验证（2026-10-02）：`encoder.detect` 顺序试编码 7 个候选可能要几十秒，原先吃客户端统一 5 秒超时，机器忙时导出页 `GET /export/options` 与 `start` 会报 `timeout: encoder.detect`，已单独放宽到 120 秒。2026-10-03：空镜头（分镜页插入后没生成画面）投影成 `asset_ref=null` 的视频片段时，`start` 前置检查直接报「第 N 镜还没有画面素材」（`EXPORT_ASSETS`，`details.problems[].error = no_asset`），不再让 lycore 报 `-32031 missingAssets: [""]`。同日改成方案 b：空镜头不再阻止导出，plan.rs 把它当 `gap` 场景渲染成黑场，`start` / `status` 响应带 `placeholders` + `warning`（「第 N 镜还没有画面素材，已用黑场占位」），导出页任务卡片显示该提示 |
+| 10 | 导出 | `export/service.js` -> lycore `render.start`（场景缓存、AIGC 水印与元数据）；`/export/*`；`ExportPage.vue`（2026-10-03 起改为外壳里的导出对话框 `components/export/ExportDialog.vue`，后端不变） | 无（纯本地） | Linux 真 lycore + 真 ffmpeg 联测通过（合成素材）；本次新增的 e2e 模拟测试也用真 lycore 导出了 3 段素材拼出的成片 | 桌面主进程已拉起 lycore 并设置 `LYCORE_ENDPOINT`，ffmpeg 随包内置；打包版经接口实测导出成功。Windows 管道、硬件编码器、取消需 Windows 真机。合并后本地验证（2026-10-02）：`encoder.detect` 顺序试编码 7 个候选可能要几十秒，原先吃客户端统一 5 秒超时，机器忙时导出页 `GET /export/options` 与 `start` 会报 `timeout: encoder.detect`，已单独放宽到 120 秒。2026-10-03：空镜头（分镜页插入后没生成画面）投影成 `asset_ref=null` 的视频片段时，`start` 前置检查直接报「第 N 镜还没有画面素材」（`EXPORT_ASSETS`，`details.problems[].error = no_asset`），不再让 lycore 报 `-32031 missingAssets: [""]`。同日改成方案 b：空镜头不再阻止导出，plan.rs 把它当 `gap` 场景渲染成黑场，`start` / `status` 响应带 `placeholders` + `warning`（「第 N 镜还没有画面素材，已用黑场占位」），导出页任务卡片显示该提示 |
 | 横切 | 花费守卫与估算 | `spend/index.js`；`/ai-tasks` 创建时 `check`，队列提交时再 `guardTask`；`SpendPage.vue` | 价格表里的模型名与真实验证过的模型一致 | 守卫的上限逻辑有完整单测 | 价格表已换为百炼公开价目（2025-12-19，`configs/prices.json`；未逐条核对的模型标 `verified:false`，界面按示例价提示）。`spend_log.actual` 由任务结果 `usage` 回写（视频 `duration`+`SR`、配音 `characters`、图片张数），没回传用量的任务仍只有估算。旧的同步出图/出视频不过守卫。界面没有“提交前花费确认”弹窗，`/spend/estimate` 没人调 |
 | 横切 | 错误映射 | `providers/bailian` 的 `mapError`；`providers/errors.js` | 无效 Key（含 WebSocket 握手无状态码，靠探测 `/models` 区分）、模型不存在、任务级失败 | 余额不足、模型未开通的错误字符串按公开文档匹配，当前 Key 无法触发 | — |
 | 横切 | 连通测试与向导 | `providers.probe`（C05，百炼已真实验证，图像、视频零费用）；向导 `Onboarding.vue` + `onboardingService` | 探测本身已真实验证 | 向导的“连通测试”调的是旧的 `aiConfigService.testConnection`，不是 `providers.probe`，所以真 Key 联通未验证 | 向导只创建一份文本配置；图像/视频/配音依赖队列的“同一 Key 复用”才能工作，旧路径仍需手动加配置 |
@@ -51,6 +51,54 @@ Jay 在本机 Windows 用真 Key 跑 `scripts/bailian-e2e.mjs`（结果见 `wind
 | 8 时间线 | — | 全部（本地逻辑） | 装配时长与视频实际时长不一致 |
 | 9 背景音乐 | — | 导入/混音 | 百炼无来源，只能用户导入 |
 | 10 导出 | Windows 真 lycore 导出 15 秒成片（e2e 脚本里单独起 lycore） | Linux 真 lycore | 桌面主进程已启动 lycore（打包版接口实测导出通过） |
+
+## 2026-10-03 四视图统一：质量档、资产出图路径与其它触及服务商的变更
+
+来源：`docs/superpowers/notes/backend-quality.md`、`assets.md`、`generate-export.md`、`backend-regenerate.md`、`storyboard.md`、`script.md`。以下全部只用假服务商测过，**没有一项用真 Key 在界面里跑过**。
+
+### 草稿 / 成片质量档（`generation/qualityProfiles.js`）
+
+质量档是项目级设置（`dramas.quality`），只改「这一次发给服务商的请求」，不是节点参数，不进 cacheKey，所以切档位不会让任何产物过期；实际生效的档位记在新版本的 `metadata.quality`。档位表里只放有依据的取值，没有依据的写 `null`（照成片档走）。
+
+| 服务商 / 请求形态 | 成片档 | 草稿档 | 依据与状态 |
+|---|---|---|---|
+| 百炼 出图，不带参考图 | `wan2.6-t2i`（0.2 元/张，`verified:true`） | `z-image-turbo`（价目表 0.1 元/张，但是占位价 `verified:false`） | 两个模型都用真 Key 跑通过（第 2 行）。**草稿档是否真的更便宜，取决于 `z-image-turbo` 的占位价是否属实**，没有逐条核对 |
+| 百炼 出图，带 1-4 张参考图 | `wan2.6-image` | 同成片档 | `wan2.6-image` 是唯一验证过的带参考图出图模型，没有更便宜的已验证选项 |
+| 百炼 视频，有首帧 | `wan2.2-kf2v-flash`，适配器默认 480P | 同成片档（请求完全相同，版本记 `final`） | 成片档本来就是已验证里最便宜的组合（第 6 行），草稿档**没有节省** |
+| 百炼 视频，纯文生视频 | `wan2.6-t2v` | 同成片档 | 只验证过 720P；文生视频 480P 的尺寸写法没验证过，不猜 |
+| 方舟 出图 | 适配器默认 | 无 | 方舟适配器没有任何一项经真 Key 验证 |
+| 方舟 视频（有 / 无首帧） | 适配器默认 | 只加 `resolution: 480p`（`--rs 480p`），不换模型 | 适配器已支持该标志，价目表里 480p 最低；**未经真 Key 验证**。方舟服务商默认隐藏（`providers.enabled`） |
+
+结论：在百炼上，「草稿」实际只省出图那一步（不带参考图时 `z-image-turbo` 对 `wan2.6-t2i`，且省不省取决于占位价）；视频成本不变。要让草稿视频更便宜，需要有人用真 Key 验证一个更低价的视频模型或文生视频的 480P 尺寸写法，再往 `PROFILES` 加一行（只改数据表）。本文第 2 行把 `z-image-turbo` 只当作「也可用」的出图模型，草稿档把它用作默认的草稿出图；视频没有新增可选档位。
+
+行为与限制：
+
+- 用户显式选的模型优先于档位表；但现状下每次生成前节点模型都被改写成自动挑选的结果，通过现有流程到不了「显式模型」分支，且已保存的服务商配置默认模型也被当成自动挑选的一部分，草稿档会覆盖它（仅限表里有取值的形态）。
+- 「按成片质量重跑草稿产物」只重跑当前采用版本是草稿档、且 cacheKey 仍新鲜的 image / video 节点；用**同一个 cacheKey** 再出一个成片版本并采用，草稿版本留在版本历史里。额度不够整批 402 `SPEND_LIMIT`；估价与入队用同一套 `planGraph`，测试断言估价等于入队任务的 `spend.checkBatch` 合计。
+- 重跑进行中该节点在 `generation/status` 里仍显示 `fresh`；重跑首帧后已有的成片视频不会跟着重做（cacheKey 不变），它仍是用旧草稿首帧生成的。
+- 导出成片时若还有草稿档产物，导出对话框给提示（不阻止）。
+
+### 资产（角色 / 场景 / 道具）图片生成路径
+
+- 生成队列（`/episodes/:id/generate`）只支持分镜的首帧图 / 视频，所以资产图片生成**保留旧同步路由**：`/characters/:id/generate-image`、`/scenes/generate-image`、`/props/:id/generate`，候选图用 `/images`。第 2 行的结论不变：不进任务中心、不写进内核，仍受 `legacySpendGuard` 约束。
+- 这些按钮全部由 `GET /episodes/:id/generation/status` 返回的 `generation.legacy_enabled` 控制：只有明确为 `true` 才可点，`false` 或未知时禁用并在界面说明原因。**默认配置（`legacy_enabled` 关）下资产出图按钮是禁用的**，只能上传参考图。遇到 402（花费上限）就地提示，不弹窗。
+- 不受开关限制的资产功能是文本模型类：润色 / 生成提示词、从图片提取外观、提取身份锚点、从剧本提取角色 / 场景 / 道具、自动挑选参考图。
+- 「重新生成相关镜头」走队列（`approveBatch` + `queueShot`，`regenerate: true`）。
+- 资产出图时没有把画风传给后端（外壳里的 `style` 格式不明确，后端回退到项目画风）。
+- 道具不能锁定参考图（后端锁定接口只支持角色和场景）。
+
+### 其它触及服务商流程的变更
+
+| 项 | 变化 | 状态 |
+|---|---|---|
+| 重新生成分镜（文本模型，流式） | 流式解析结果只在内存里收集，拿到完整结果后一次性替换（一个可撤销事务）；生成期间旧分镜可见，生成失败不再丢旧分镜；连接中断但已流出部分镜头时按「部分成功」提交（`truncated: true`） | 假文本模型测试；真模型未跑 |
+| 提取角色 `POST /episodes/:id/characters/extract` | 不再是空桩，委托 `characterGenerationService.generateCharacters`，大纲用本集剧本 | 假文本模型测试 |
+| AI 写剧本（`POST /generation/story`） | 同步请求，不进任务中心，可在对话框内停止；不带 `drama_id`（带了是异步且会覆盖） | 请求体和结果转换有单测；成功路径当时因本机没配文本模型没走通，只验证了报错路径 |
+| 一键成片（`usePipeline`） | 固定 10 步：已有 / 已锁定的跳过；出图、出视频走 `/episodes/:id/generate`，配音走 `/episodes/:id/voiceover`（第 4 行队列版）；花钱前必须点「确认并开始（将产生费用）」；取消只停后续步骤，已提交的任务照常跑完并计费 | 费用预估**不含**角色 / 场景 / 道具图和「提取」步骤（这些的数量要等前面步骤跑完才知道，对话框会提示）；假服务商 |
+| 尾帧 | `ShotInspector` 的尾帧槽没有队列生成路径（能力位 `lastFrameGenerate=false`，按钮禁用并说明原因），只能上传、从历史选或用上一镜尾帧 | 与第 6 行「分镜尾帧没有传给任务」一致，缺口未补 |
+| 光线 / 景深 | 后端 `PUT/GET /storyboards` 不持久化 `lighting_style`、`depth_of_field`，「更多镜头参数」对话框里有提示 | 后端缺口 |
+| 多参考图能力判断 | 全能片段模式按当前视频 AI 配置判断是否支持多参考图（方舟 Seedance 2.0），没走内核能力接口 | 方舟未验证 |
+| 快速拼接 / `finalize` | 按 D4 删除，导出菜单没有；没有渲染核心时只有「导出成片」置灰 | — |
 
 ## 本次顺手修的小接线问题（均有测试）
 
