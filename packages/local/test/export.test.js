@@ -201,6 +201,36 @@ describe('export service', () => {
     assert.equal(ctx.core.started.length, 0);
   });
 
+  it('names the shot when a video clip has no asset yet (empty storyboard shot)', async () => {
+    // An empty shot (no generated image/video) is projected onto the timeline as a video clip with asset_ref=null;
+    // the pre-check must say which shot instead of letting lycore fail with missingAssets: [""].
+    const sb = ctx.db.prepare("INSERT INTO storyboards (episode_id, storyboard_number, title) VALUES (5, 3, '')").run().lastInsertRowid;
+    tl.addClip(ctx.db, ctx.timelineId, 'video', { start_ms: 10000, duration_ms: 5000, asset_ref: null, asset_kind: 'video', storyboard_id: Number(sb) });
+    await assert.rejects(ctx.svc.start(REQ(ctx.out)), (e) => {
+      assert.equal(e.code, 'EXPORT_ASSETS');
+      assert.match(e.message, /第 3 镜/);
+      assert.match(e.message, /画面/);
+      assert.equal(e.details.problems.length, 1);
+      assert.equal(e.details.problems[0].error, 'no_asset');
+      assert.equal(e.details.problems[0].storyboard_id, Number(sb));
+      assert.equal(e.details.problems[0].storyboard_number, 3);
+      return true;
+    });
+    assert.equal(ctx.core.started.length, 0);
+  });
+
+  it('falls back to the clip id when an empty video clip has no storyboard', async () => {
+    tl.addClip(ctx.db, ctx.timelineId, 'video', { start_ms: 10000, duration_ms: 5000, asset_ref: null, asset_kind: 'video' });
+    await assert.rejects(ctx.svc.start(REQ(ctx.out)), (e) => e.code === 'EXPORT_ASSETS' && /镜头|片段/.test(e.message) && e.details.problems[0].error === 'no_asset');
+    assert.equal(ctx.core.started.length, 0);
+  });
+
+  it('still lets subtitle / audio clips without asset_ref through', async () => {
+    // subtitle clips are text-only by design; the seeded timeline already has one and must export fine
+    await ctx.svc.start(REQ(ctx.out));
+    assert.equal(ctx.core.started.length, 1);
+  });
+
   it('maps core errors', async () => {
     ctx.core.startError = Object.assign(new Error('missing'), { code: -32031 });
     await assert.rejects(ctx.svc.start(REQ(ctx.out)), (e) => e.code === 'EXPORT_ASSETS');
