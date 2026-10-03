@@ -33,8 +33,8 @@
 ### 5. 云端全部合并后本地独立验证 —— 已完成（2026-10-02，main aa117e1，见 windows-test-results/2026-10-02.md 末节）
 拉取 main 后独立跑全部包的测试、密钥扫描、内核一致性套件；并行跑 packages/local 全量时暴露两处问题（编码器检测 5 秒超时、kernelCompat 测试的 keep-alive 竞争），已在 `win/post-merge-verify` 分支修掉并补测试。
 
-### 6. 旧测试目录的空镜头导出问题 —— 已完成（2026-10-03，分支 win/empty-shot-precheck，见 windows-test-results/2026-10-02.md「空镜头前置检查」）
-分镜页插入后没生成画面的空镜头投影成 `asset_ref=null` 的视频片段，导出只报「部分素材文件不存在」。改法：导出前置检查指名「第 N 镜还没有画面素材」（方案 a），不动内核投影；黑场占位（方案 b）待产品决定。打包版用旧测试目录实测通过。
+### 6. 旧测试目录的空镜头导出问题 —— 已完成（2026-10-03，分支 win/empty-shot-precheck + win/empty-shot-black，见 windows-test-results/2026-10-02.md「空镜头前置检查」「空镜头黑场占位」）
+分镜页插入后没生成画面的空镜头投影成 `asset_ref=null` 的视频片段，导出只报「部分素材文件不存在」。先做了方案 a（导出前置检查指名「第 N 镜还没有画面素材」）；随后用户决定补方案 b：lycore 把没有 `asset_ref` 的视频 clip 当 `gap` 场景渲染成黑场，导出照常进行，`start` / `status` 响应带 `placeholders` + `warning`，导出页任务卡片显示「第 N 镜还没有画面素材，已用黑场占位」。不动内核投影。打包版用旧测试目录实测通过。
 
 ## 复制给本地 Claude Code 的提示词
 

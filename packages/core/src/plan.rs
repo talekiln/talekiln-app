@@ -172,6 +172,14 @@ pub fn plan(params: &Value) -> Result<Value, String> {
         if start > cur {
             segs.push(Seg { start: cur, end: start, v: None });
         }
+        // A video clip without an asset (an empty storyboard shot projected onto the timeline) is a black
+        // placeholder: a gap scene (black + silence, still carrying subtitles and narration), not a missing asset.
+        let has_asset = c.raw.get("asset_ref").and_then(|a| a.as_str()).map(|a| !a.is_empty()).unwrap_or(false);
+        if !has_asset {
+            segs.push(Seg { start, end, v: None });
+            cur = end;
+            continue;
+        }
         let src_in = c.raw.get("src_in_ms").and_then(|x| x.as_i64()).unwrap_or(0) + (start - c.start);
         segs.push(Seg { start, end, v: Some((c, src_in)) });
         cur = end;
@@ -473,6 +481,19 @@ mod tests {
         let tl = json!({ "tracks": [{ "kind": "video", "clips": [{ "start_ms": 0, "duration_ms": 1000, "asset_ref": "/nope/x.mp4" }] }] });
         let r = run(&tl, &out, &d);
         assert_eq!(r["missingAssets"], json!(["/nope/x.mp4"]));
+        // a video clip without an asset (empty storyboard shot) is a black placeholder: gap scene, not a missing asset
+        let tl = json!({ "tracks": [
+            { "kind": "video", "clips": [
+                { "id": "e", "start_ms": 0, "duration_ms": 1000, "asset_ref": null, "asset_kind": "video" },
+                { "id": "f", "start_ms": 1000, "duration_ms": 1000, "asset_ref": "", "asset_kind": "video" } ] },
+            { "kind": "subtitle", "clips": [{ "start_ms": 200, "duration_ms": 500, "text": "still here" }] } ] });
+        let r = run(&tl, &out, &d);
+        assert_eq!(r["durationMs"], 2000);
+        assert_eq!(r["scenes"].as_array().unwrap().len(), 2);
+        assert_eq!(r["scenes"][0]["kind"], "gap");
+        assert_eq!(r["scenes"][1]["kind"], "gap");
+        assert_eq!(r["scenes"][0]["detail"]["subtitles"][0]["text"], "still here");
+        assert_eq!(r["missingAssets"], json!([]));
         // overlapping video clips: the later one is clamped to start at the previous end
         let (tl, o2) = fixture(&d);
         let mut t = tl.clone();
